@@ -1,0 +1,48 @@
+'use client';
+
+import Link from 'next/link';
+import { Lightbulb, Code, PenTool, BarChart3, BookOpen, Search, FlaskConical } from 'lucide-react';
+import { useAppStore } from '@/stores/app-store';
+
+const modules = [
+  { id: 'ideaspark', name: 'IdeaSpark', icon: Lightbulb },
+  { id: 'codelab', name: 'CodeLab', icon: Code },
+  { id: 'writer', name: 'WriterAI', icon: PenTool },
+  { id: 'datalens', name: 'DataLens', icon: BarChart3 },
+  { id: 'litreview', name: 'LitReview', icon: BookOpen },
+  { id: 'reviewer', name: 'Reviewer', icon: Search },
+];
+
+export function Sidebar() {
+  const currentModule = useAppStore((s) => s.currentModule);
+  const setCurrentModule = useAppStore((s) => s.setCurrentModule);
+
+  return (
+    <aside className="flex h-full w-16 flex-col items-center border-r bg-card py-4 lg:w-56">
+      <Link href="/" className="mb-6 flex items-center gap-2 px-3">
+        <FlaskConical className="h-6 w-6" />
+        <span className="hidden text-lg font-bold lg:block">SoloLab</span>
+      </Link>
+
+      <nav className="flex flex-1 flex-col gap-1 px-2 w-full">
+        {modules.map((mod) => {
+          const Icon = mod.icon;
+          const isActive = currentModule === mod.id;
+          return (
+            <Link
+              key={mod.id}
+              href={`/modules/${mod.id}`}
+              onClick={() => setCurrentModule(mod.id)}
+              className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
+                isActive ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent'
+              }`}
+            >
+              <Icon className="h-5 w-5 shrink-0" />
+              <span className="hidden lg:block">{mod.name}</span>
+            </Link>
+          );
+        })}
+      </nav>
+    </aside>
+  );
+}

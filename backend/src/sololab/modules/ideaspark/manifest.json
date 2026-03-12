@@ -1,0 +1,35 @@
+{
+  "id": "ideaspark",
+  "name": "IdeaSpark",
+  "version": "2.0.0",
+  "description": "Multi-agent idea generation with Separate-Together collaboration and Tournament evaluation",
+  "icon": "Lightbulb",
+  "entry_point": "sololab.modules.ideaspark.module:IdeaSparkModule",
+  "required_tools": ["web_search", "arxiv_search", "scholar_search", "doc_parse"],
+  "required_models": ["reasoning", "divergent"],
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "max_rounds": {
+        "type": "integer",
+        "default": 3,
+        "description": "Maximum Separate-Together iteration rounds"
+      },
+      "top_k": {
+        "type": "integer",
+        "default": 5,
+        "description": "Number of top ideas to select per round"
+      },
+      "num_groups": {
+        "type": "integer",
+        "default": 4,
+        "description": "Number of groups for semantic clustering"
+      },
+      "budget_limit_usd": {
+        "type": "number",
+        "default": 2.0,
+        "description": "Budget limit per run in USD"
+      }
+    }
+  }
+}

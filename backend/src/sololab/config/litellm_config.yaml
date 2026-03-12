@@ -1,0 +1,45 @@
+model_list:
+  # === High-quality reasoning ===
+  - model_name: "reasoning"
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+
+  # === Long-context writing ===
+  - model_name: "writer"
+    litellm_params:
+      model: anthropic/claude-sonnet-4-20250514
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # === Low-cost divergent thinking ===
+  - model_name: "divergent"
+    litellm_params:
+      model: deepseek/deepseek-chat
+      api_key: os.environ/DEEPSEEK_API_KEY
+
+  # === Multimodal ===
+  - model_name: "multimodal"
+    litellm_params:
+      model: gemini/gemini-2.0-flash
+      api_key: os.environ/GOOGLE_API_KEY
+
+  # === Local offline ===
+  - model_name: "local"
+    litellm_params:
+      model: ollama/qwen2.5:14b
+      api_base: http://ollama:11434
+
+litellm_settings:
+  fallbacks:
+    - {"reasoning": ["divergent"]}
+    - {"writer": ["reasoning"]}
+
+  max_budget: 50.0  # USD/month
+  budget_duration: "30d"
+
+  cache: true
+  cache_params:
+    type: redis
+    host: redis
+    port: 6379
+    ttl: 3600

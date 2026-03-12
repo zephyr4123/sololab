@@ -1,0 +1,61 @@
+# ============================================
+# SoloLab .gitignore
+# ============================================
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+.venv/
+venv/
+env/
+
+# --- Node.js ---
+node_modules/
+.next/
+out/
+.turbo/
+
+# --- Environment ---
+.env
+.env.local
+.env.*.local
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- Storage & Data ---
+storage/
+*.db
+*.sqlite3
+
+# --- Docker ---
+docker-compose.override.yml
+
+# --- Test ---
+htmlcov/
+.coverage
+.pytest_cache/
+test-results/
+playwright-report/
+
+# --- Claude Code ---
+CLAUDE.md
+
+# --- Misc ---
+*.log
+*.bak
+*.tmp
