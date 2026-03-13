@@ -19,10 +19,16 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = "redis://localhost:6379/0"
 
-    # LiteLLM
-    litellm_config_path: str = "src/sololab/config/litellm_config.yaml"
-    default_model: str = "openai/gpt-4o"
+    # LLM 配置（OpenAI 兼容格式）
+    llm_base_url: str = "https://api.openai.com/v1"
+    llm_api_key: str = "sk-xxx"
+    llm_model: str = "gpt-4o"
     budget_limit_usd: float = 50.0
+
+    # Embedding 配置（OpenAI 兼容格式，可独立于 LLM 提供商）
+    embedding_base_url: str = "https://api.openai.com/v1"
+    embedding_api_key: str = "sk-xxx"
+    embedding_model: str = "text-embedding-3-small"
 
     # 存储
     storage_path: str = "./storage"
@@ -31,11 +37,7 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     backend_url: str = "http://localhost:8000"
 
-    # API 密钥（从 .env 加载）
-    openai_api_key: Optional[str] = None
-    anthropic_api_key: Optional[str] = None
-    deepseek_api_key: Optional[str] = None
-    google_api_key: Optional[str] = None
+    # 外部 API 密钥
     tavily_api_key: Optional[str] = None
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}

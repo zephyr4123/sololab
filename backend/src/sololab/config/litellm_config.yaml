@@ -1,33 +1,31 @@
 model_list:
-  # === 高质量推理 ===
+  # === 高质量推理（默认模型）===
   - model_name: "reasoning"
     litellm_params:
       model: openai/gpt-4o
-      api_key: os.environ/OPENAI_API_KEY
+      api_key: os.environ/LLM_API_KEY
+      api_base: os.environ/LLM_BASE_URL
 
   # === 长上下文写作 ===
   - model_name: "writer"
     litellm_params:
-      model: anthropic/claude-sonnet-4-20250514
-      api_key: os.environ/ANTHROPIC_API_KEY
+      model: openai/claude-sonnet-4-20250514
+      api_key: os.environ/LLM_API_KEY
+      api_base: os.environ/LLM_BASE_URL
 
   # === 低成本发散思维 ===
   - model_name: "divergent"
     litellm_params:
-      model: deepseek/deepseek-chat
-      api_key: os.environ/DEEPSEEK_API_KEY
+      model: openai/deepseek-chat
+      api_key: os.environ/LLM_API_KEY
+      api_base: os.environ/LLM_BASE_URL
 
   # === 多模态 ===
   - model_name: "multimodal"
     litellm_params:
-      model: gemini/gemini-2.0-flash
-      api_key: os.environ/GOOGLE_API_KEY
-
-  # === 本地离线 ===
-  - model_name: "local"
-    litellm_params:
-      model: ollama/qwen2.5:14b
-      api_base: http://ollama:11434
+      model: openai/gemini-2.0-flash
+      api_key: os.environ/LLM_API_KEY
+      api_base: os.environ/LLM_BASE_URL
 
 litellm_settings:
   fallbacks:
