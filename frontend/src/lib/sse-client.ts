@@ -1,5 +1,5 @@
 /**
- * Resilient SSE Client with automatic disconnect recovery.
+ * 弹性 SSE 客户端，支持自动断线恢复。
  */
 
 import type { SSEEvent, StreamHandlers } from '@/types/stream';

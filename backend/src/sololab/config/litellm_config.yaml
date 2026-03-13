@@ -1,29 +1,29 @@
 model_list:
-  # === High-quality reasoning ===
+  # === 高质量推理 ===
   - model_name: "reasoning"
     litellm_params:
       model: openai/gpt-4o
       api_key: os.environ/OPENAI_API_KEY
 
-  # === Long-context writing ===
+  # === 长上下文写作 ===
   - model_name: "writer"
     litellm_params:
       model: anthropic/claude-sonnet-4-20250514
       api_key: os.environ/ANTHROPIC_API_KEY
 
-  # === Low-cost divergent thinking ===
+  # === 低成本发散思维 ===
   - model_name: "divergent"
     litellm_params:
       model: deepseek/deepseek-chat
       api_key: os.environ/DEEPSEEK_API_KEY
 
-  # === Multimodal ===
+  # === 多模态 ===
   - model_name: "multimodal"
     litellm_params:
       model: gemini/gemini-2.0-flash
       api_key: os.environ/GOOGLE_API_KEY
 
-  # === Local offline ===
+  # === 本地离线 ===
   - model_name: "local"
     litellm_params:
       model: ollama/qwen2.5:14b
@@ -34,7 +34,7 @@ litellm_settings:
     - {"reasoning": ["divergent"]}
     - {"writer": ["reasoning"]}
 
-  max_budget: 50.0  # USD/month
+  max_budget: 50.0  # 美元/月
   budget_duration: "30d"
 
   cache: true

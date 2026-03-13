@@ -1,29 +1,29 @@
-"""Prompt Manager - Template loading and rendering for LLM prompts."""
+"""提示词管理器 - LLM 提示词模板的加载与渲染。"""
 
 from typing import Any, Dict, Optional
 
 
 class PromptManager:
-    """Manages prompt templates for modules and agents."""
+    """管理模块和智能体的提示词模板。"""
 
     def __init__(self) -> None:
         self._templates: Dict[str, str] = {}
 
     def register_template(self, name: str, template: str) -> None:
-        """Register a prompt template."""
+        """注册提示词模板。"""
         self._templates[name] = template
 
     def render(self, name: str, variables: Dict[str, Any] = {}) -> str:
-        """Render a template with variables."""
+        """使用变量渲染模板。"""
         template = self._templates.get(name)
         if not template:
             raise ValueError(f"Template '{name}' not found")
         return template.format(**variables)
 
     def get_template(self, name: str) -> Optional[str]:
-        """Get raw template string."""
+        """获取原始模板字符串。"""
         return self._templates.get(name)
 
     def list_templates(self) -> list[str]:
-        """List all registered template names."""
+        """列出所有已注册的模板名称。"""
         return list(self._templates.keys())

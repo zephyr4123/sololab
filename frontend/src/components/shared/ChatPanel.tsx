@@ -31,8 +31,8 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
     setInput('');
     setIsStreaming(true);
 
-    // TODO: Connect to backend SSE via ResilientSSEClient
-    // Placeholder: echo back
+    // TODO: 通过 ResilientSSEClient 连接后端 SSE
+    // 占位：回显
     setMessages((prev) => [...prev, { role: 'assistant', content: 'Processing...' }]);
     setIsStreaming(false);
   };

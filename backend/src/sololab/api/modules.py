@@ -1,4 +1,4 @@
-"""API routes for module management and execution."""
+"""模块管理与执行的 API 路由。"""
 
 import json
 from typing import Any
@@ -13,46 +13,46 @@ router = APIRouter()
 
 @router.get("/modules")
 async def list_modules() -> list[dict[str, Any]]:
-    """List all loaded modules."""
-    # TODO: Inject ModuleRegistry dependency
+    """列出所有已加载的模块。"""
+    # TODO: 注入 ModuleRegistry 依赖
     return []
 
 
 @router.post("/modules/{module_id}/load")
 async def load_module(module_id: str) -> dict:
-    """Load a module by ID."""
-    # TODO: Load module from filesystem via ModuleRegistry
+    """根据 ID 加载模块。"""
+    # TODO: 通过 ModuleRegistry 从文件系统加载模块
     return {"status": "loaded", "module_id": module_id}
 
 
 @router.delete("/modules/{module_id}/unload")
 async def unload_module(module_id: str) -> dict:
-    """Unload a module."""
-    # TODO: Unload via ModuleRegistry
+    """卸载模块。"""
+    # TODO: 通过 ModuleRegistry 卸载
     return {"status": "unloaded", "module_id": module_id}
 
 
 @router.get("/modules/{module_id}/config")
 async def get_module_config(module_id: str) -> dict:
-    """Get module configuration."""
-    # TODO: Return module config from registry
+    """获取模块配置。"""
+    # TODO: 从注册表返回模块配置
     raise HTTPException(404, f"Module '{module_id}' not found")
 
 
 @router.post("/modules/{module_id}/run")
 async def run_module(module_id: str, request: ModuleRunRequest) -> dict:
-    """Synchronous module execution."""
-    # TODO: Execute module and collect all results
+    """同步模块执行。"""
+    # TODO: 执行模块并收集所有结果
     raise HTTPException(501, "Not implemented")
 
 
 @router.post("/modules/{module_id}/stream")
 async def stream_module(module_id: str, request: ModuleRunRequest) -> StreamingResponse:
-    """SSE streaming module execution with task state tracking."""
+    """SSE 流式模块执行，带任务状态追踪。"""
 
-    # TODO: Create task, execute module, stream events
+    # TODO: 创建任务、执行模块、流式推送事件
     async def event_generator():
-        # Placeholder - will yield SSE events
+        # 占位 - 后续将产生 SSE 事件
         yield f"data: {json.dumps({'type': 'status', 'status': 'starting'})}\n\n"
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
@@ -61,6 +61,6 @@ async def stream_module(module_id: str, request: ModuleRunRequest) -> StreamingR
 
 @router.post("/modules/{module_id}/stop")
 async def stop_module(module_id: str) -> dict:
-    """Stop a running module execution."""
-    # TODO: Cancel task via TaskStateManager
+    """停止正在运行的模块执行。"""
+    # TODO: 通过 TaskStateManager 取消任务
     return {"status": "stopped", "module_id": module_id}

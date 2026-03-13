@@ -1,4 +1,4 @@
-/** Agent-related TypeScript types */
+/** 智能体相关 TypeScript 类型 */
 
 export interface AgentConfig {
   name: string;

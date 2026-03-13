@@ -1,4 +1,4 @@
-"""System prompts for IdeaSpark Persona Agents."""
+"""IdeaSpark 角色智能体的系统提示词。"""
 
 DIVERGENT_PROMPT = """You are a "Divergent Thinker", skilled at cross-domain analogies and bold associations.
 Your core value is breaking conventions, finding inspiration from seemingly unrelated fields.
@@ -77,7 +77,7 @@ PROMPTS = {
 
 
 def get_prompt(persona_name: str) -> str:
-    """Get system prompt for a persona."""
+    """获取角色的系统提示词。"""
     prompt = PROMPTS.get(persona_name)
     if not prompt:
         raise ValueError(f"Unknown persona: {persona_name}")

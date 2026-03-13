@@ -11,7 +11,7 @@ interface TimelineEvent {
 }
 
 export function AgentTimeline({ moduleId }: AgentTimelineProps) {
-  // TODO: Subscribe to agent events from task store
+  // TODO: 从任务 store 订阅智能体事件
   const events: TimelineEvent[] = [];
 
   if (events.length === 0) {

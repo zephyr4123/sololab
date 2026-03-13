@@ -15,7 +15,7 @@ export function StreamRenderer({ moduleId, taskId, onEvent }: StreamRendererProp
 
   useEffect(() => {
     if (!taskId) return;
-    // TODO: Connect to SSE stream via ResilientSSEClient
+    // TODO: 通过 ResilientSSEClient 连接 SSE 流
     setStatus('streaming');
     return () => setStatus('idle');
   }, [taskId, moduleId]);

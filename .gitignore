@@ -21,7 +21,7 @@ node_modules/
 out/
 .turbo/
 
-# --- Environment ---
+# --- 环境变量 ---
 .env
 .env.local
 .env.*.local
@@ -33,11 +33,11 @@ out/
 *.swo
 *~
 
-# --- OS ---
+# --- 操作系统 ---
 .DS_Store
 Thumbs.db
 
-# --- Storage & Data ---
+# --- 存储和数据 ---
 storage/
 *.db
 *.sqlite3
@@ -45,7 +45,7 @@ storage/
 # --- Docker ---
 docker-compose.override.yml
 
-# --- Test ---
+# --- 测试 ---
 htmlcov/
 .coverage
 .pytest_cache/
@@ -55,7 +55,7 @@ playwright-report/
 # --- Claude Code ---
 CLAUDE.md
 
-# --- Misc ---
+# --- 杂项 ---
 *.log
 *.bak
 *.tmp

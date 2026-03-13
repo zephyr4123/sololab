@@ -1,4 +1,4 @@
-"""Document Pipeline - Academic PDF parsing via MinerU."""
+"""文档处理管道 - 通过 MinerU 解析学术 PDF。"""
 
 import glob
 import json
@@ -18,18 +18,18 @@ class DocType(str, Enum):
 
 @dataclass
 class ParsedChunk:
-    """A parsed document chunk."""
+    """解析后的文档块。"""
 
     content: str
     chunk_index: int
     page_numbers: List[int]
-    content_type: str  # text | table | formula | figure_caption
+    content_type: str  # 文本 | 表格 | 公式 | 图注
     metadata: dict
 
 
 @dataclass
 class ParsedDocument:
-    """Complete parsed document result."""
+    """完整的文档解析结果。"""
 
     doc_id: str
     filename: str
@@ -41,14 +41,13 @@ class ParsedDocument:
 
 
 class DocumentPipeline:
-    """
-    Document processing pipeline: Upload -> Parse -> Chunk -> Embed -> Store
+    """文档处理管道：上传 -> 解析 -> 分块 -> 嵌入 -> 存储
 
-    Core parser: MinerU (opendatalab/MinerU)
-    - Dual-column layout recognition
-    - LaTeX formula extraction
-    - Table structure extraction
-    - Figure caption association
+    核心解析器：MinerU (opendatalab/MinerU)
+    - 双栏版面识别
+    - LaTeX 公式提取
+    - 表格结构提取
+    - 图注关联
     """
 
     def __init__(self, llm_gateway: Any, memory_manager: Any, storage_path: str) -> None:
@@ -57,14 +56,14 @@ class DocumentPipeline:
         self.storage_path = storage_path
 
     async def process(self, file_path: str, project_id: str) -> ParsedDocument:
-        """Full processing pipeline."""
+        """完整处理管道。"""
         raw_markdown = await self._parse_with_mineru(file_path)
         chunks = self._semantic_chunking(raw_markdown)
         metadata = await self._extract_metadata(raw_markdown)
 
-        # TODO: Embed and store chunks to vector database
+        # TODO: 嵌入并存储分块到向量数据库
         for chunk in chunks:
-            _ = chunk  # Will store via memory_manager
+            _ = chunk  # 将通过 memory_manager 存储
 
         return ParsedDocument(
             doc_id=self._generate_id(),
@@ -77,7 +76,7 @@ class DocumentPipeline:
         )
 
     async def _parse_with_mineru(self, file_path: str) -> str:
-        """Parse PDF using MinerU CLI."""
+        """使用 MinerU CLI 解析 PDF。"""
         output_dir = os.path.join(self.storage_path, "parsed", self._generate_id())
         os.makedirs(output_dir, exist_ok=True)
 
@@ -99,7 +98,7 @@ class DocumentPipeline:
             return f.read()
 
     def _semantic_chunking(self, markdown: str) -> List[ParsedChunk]:
-        """Split markdown by semantic boundaries (headers, preserving tables/formulas)."""
+        """按语义边界（标题）拆分 markdown，保留表格/公式完整性。"""
         import re
 
         sections = re.split(r"\n(?=#{1,3}\s)", markdown)
@@ -123,7 +122,7 @@ class DocumentPipeline:
         return chunks
 
     async def _extract_metadata(self, markdown: str) -> dict:
-        """Extract structured metadata from markdown via LLM."""
+        """通过 LLM 从 markdown 中提取结构化元数据。"""
         response = await self.llm_gateway.generate(
             messages=[
                 {

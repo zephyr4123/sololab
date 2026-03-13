@@ -1,8 +1,8 @@
-"""Persona Agent configurations for IdeaSpark."""
+"""IdeaSpark 角色智能体配置。"""
 
 from sololab.models.agent import AgentConfig
 
-# 5 differentiated Persona Agents
+# 5 个差异化角色智能体
 PERSONAS: list[AgentConfig] = [
     AgentConfig(
         name="divergent",
@@ -43,5 +43,5 @@ PERSONAS: list[AgentConfig] = [
 
 
 def get_persona(name: str) -> AgentConfig | None:
-    """Get a persona configuration by name."""
+    """根据名称获取角色配置。"""
     return next((p for p in PERSONAS if p.name == name), None)

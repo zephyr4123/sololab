@@ -1,4 +1,4 @@
-"""Module Registry - Hot-pluggable module loading and management."""
+"""模块注册表 - 热插拔模块加载与管理。"""
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -7,7 +7,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 
 @dataclass
 class ModuleManifest:
-    """Module metadata declaration."""
+    """模块元数据声明。"""
 
     id: str
     name: str
@@ -22,7 +22,7 @@ class ModuleManifest:
 
 @dataclass
 class ModuleRequest:
-    """Request to execute a module."""
+    """模块执行请求。"""
 
     input: str
     params: Dict[str, Any] = field(default_factory=dict)
@@ -31,7 +31,7 @@ class ModuleRequest:
 
 @dataclass
 class ModuleContext:
-    """Runtime context passed to modules."""
+    """传递给模块的运行时上下文。"""
 
     llm_gateway: Any  # LLMGateway
     tool_registry: Any  # ToolRegistry
@@ -41,57 +41,57 @@ class ModuleContext:
 
 
 class ModuleBase(ABC):
-    """Base class for all feature modules."""
+    """所有功能模块的基类。"""
 
     @abstractmethod
     def manifest(self) -> ModuleManifest:
-        """Return module metadata."""
+        """返回模块元数据。"""
         ...
 
     @abstractmethod
     async def execute(
         self, request: ModuleRequest, ctx: ModuleContext
     ) -> AsyncGenerator[Any, None]:
-        """Core execution method, streams results."""
+        """核心执行方法，流式返回结果。"""
         yield  # pragma: no cover
 
     async def on_load(self, ctx: ModuleContext) -> None:
-        """Hook called when module is loaded."""
+        """模块加载时调用的钩子。"""
 
     async def on_unload(self) -> None:
-        """Hook called when module is unloaded."""
+        """模块卸载时调用的钩子。"""
 
 
 class ModuleRegistry:
-    """Module registry supporting dynamic load/unload."""
+    """支持动态加载/卸载的模块注册表。"""
 
     def __init__(self) -> None:
         self._modules: Dict[str, ModuleBase] = {}
 
     async def load_module(self, module: ModuleBase, ctx: ModuleContext) -> None:
-        """Load and initialize a module."""
+        """加载并初始化模块。"""
         manifest = module.manifest()
         await module.on_load(ctx)
         self._modules[manifest.id] = module
 
     async def unload_module(self, module_id: str) -> None:
-        """Unload a module and run cleanup."""
+        """卸载模块并执行清理。"""
         if module_id in self._modules:
             await self._modules[module_id].on_unload()
             del self._modules[module_id]
 
     def get_module(self, module_id: str) -> Optional[ModuleBase]:
-        """Get a loaded module by ID."""
+        """根据 ID 获取已加载的模块。"""
         return self._modules.get(module_id)
 
     def list_modules(self) -> List[ModuleManifest]:
-        """List all loaded module manifests."""
+        """列出所有已加载模块的清单。"""
         return [m.manifest() for m in self._modules.values()]
 
     async def run(
         self, module_id: str, request: ModuleRequest, ctx: ModuleContext
     ) -> AsyncGenerator[Any, None]:
-        """Execute a module and stream results."""
+        """执行模块并流式返回结果。"""
         module = self._modules.get(module_id)
         if not module:
             raise ValueError(f"Module '{module_id}' not loaded")

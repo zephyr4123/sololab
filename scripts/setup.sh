@@ -3,20 +3,20 @@ set -e
 
 echo "=== SoloLab Setup ==="
 
-# Check prerequisites
-command -v docker >/dev/null 2>&1 || { echo "Docker is required but not installed."; exit 1; }
-command -v docker compose >/dev/null 2>&1 || { echo "Docker Compose is required but not installed."; exit 1; }
+# 检查前置条件
+command -v docker >/dev/null 2>&1 || { echo "需要 Docker，但未安装。"; exit 1; }
+command -v docker compose >/dev/null 2>&1 || { echo "需要 Docker Compose，但未安装。"; exit 1; }
 
-# Copy env file
+# 复制环境变量文件
 if [ ! -f .env ]; then
     cp .env.example .env
-    echo "Created .env from .env.example. Please fill in your API keys."
-    echo "Then run: docker compose up -d"
+    echo "已从 .env.example 创建 .env。请填入你的 API 密钥。"
+    echo "然后运行：docker compose up -d"
     exit 0
 fi
 
-# Start services
-echo "Starting SoloLab services..."
+# 启动服务
+echo "正在启动 SoloLab 服务..."
 docker compose up -d
 
 echo ""
@@ -25,4 +25,4 @@ echo "Frontend: http://localhost:3000"
 echo "Backend:  http://localhost:8000"
 echo "API Docs: http://localhost:8000/docs"
 echo ""
-echo "Run 'docker compose logs -f' to view logs."
+echo "运行 'docker compose logs -f' 查看日志。"

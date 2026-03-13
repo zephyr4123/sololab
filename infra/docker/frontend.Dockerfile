@@ -1,17 +1,17 @@
-# Stage 1: Dependencies
+# 阶段 1：依赖安装
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY frontend/package.json frontend/pnpm-lock.yaml* ./
 RUN corepack enable && pnpm install --frozen-lockfile 2>/dev/null || npm ci
 
-# Stage 2: Build
+# 阶段 2：构建
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY frontend/ .
 RUN npm run build
 
-# Stage 3: Production
+# 阶段 3：生产环境
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production

@@ -1,4 +1,4 @@
-/** SSE stream event types */
+/** SSE 流式事件类型 */
 
 export type SSEEvent =
   | { type: 'text'; content: string }

@@ -1,5 +1,5 @@
 /**
- * Frontend module dynamic loader.
+ * 前端模块动态加载器。
  */
 
 export interface ModuleDefinition {

@@ -1,4 +1,4 @@
-"""SoloLab FastAPI application entry point."""
+"""SoloLab FastAPI 应用入口。"""
 
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
@@ -12,27 +12,27 @@ from sololab.config.settings import get_settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Application lifespan: startup and shutdown."""
+    """应用生命周期：启动与关闭。"""
     settings = get_settings()
 
-    # TODO: Initialize core services
-    # - Redis connection pool
-    # - PostgreSQL connection pool
-    # - LLM Gateway
-    # - Module Registry (load modules from filesystem)
-    # - Tool Registry (register built-in tools)
-    # - Task State Manager
-    # - Document Pipeline
+    # TODO: 初始化核心服务
+    # - Redis 连接池
+    # - PostgreSQL 连接池
+    # - LLM 网关
+    # - 模块注册表（从文件系统加载模块）
+    # - 工具注册表（注册内置工具）
+    # - 任务状态管理器
+    # - 文档处理管道
 
     yield
 
-    # TODO: Cleanup
-    # - Close DB connections
-    # - Close Redis connections
+    # TODO: 清理资源
+    # - 关闭数据库连接
+    # - 关闭 Redis 连接
 
 
 def create_app() -> FastAPI:
-    """Create and configure the FastAPI application."""
+    """创建并配置 FastAPI 应用。"""
     settings = get_settings()
 
     app = FastAPI(
@@ -42,7 +42,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS
+    # 跨域配置
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[settings.frontend_url],
@@ -51,7 +51,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Register routers
+    # 注册路由
     app.include_router(modules.router, prefix="/api", tags=["modules"])
     app.include_router(tasks.router, prefix="/api", tags=["tasks"])
     app.include_router(documents.router, prefix="/api", tags=["documents"])

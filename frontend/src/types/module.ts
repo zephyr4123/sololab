@@ -1,4 +1,4 @@
-/** Module-related TypeScript types */
+/** 模块相关 TypeScript 类型 */
 
 export interface ModuleManifest {
   id: string;

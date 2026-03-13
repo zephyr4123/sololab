@@ -1,10 +1,10 @@
-"""Tavily web search tool."""
+"""Tavily 网络搜索工具。"""
 
 from sololab.core.tool_registry import ToolBase, ToolResult
 
 
 class TavilySearchTool(ToolBase):
-    """Search the web for latest information and industry trends."""
+    """搜索网络获取最新信息和行业趋势。"""
 
     @property
     def name(self) -> str:
@@ -15,12 +15,12 @@ class TavilySearchTool(ToolBase):
         return "Search the web for latest information and industry trends (within 1 year)"
 
     async def execute(self, params: dict) -> ToolResult:
-        """Execute Tavily search."""
+        """执行 Tavily 搜索。"""
         query = params.get("query", "")
         if not query:
             return ToolResult(success=False, data={}, error="Query is required")
 
-        # TODO: Implement Tavily API call
+        # TODO: 实现 Tavily API 调用
         # from tavily import TavilyClient
         # client = TavilyClient(api_key=settings.tavily_api_key)
         # response = client.search(query=query, search_depth="advanced", max_results=5)

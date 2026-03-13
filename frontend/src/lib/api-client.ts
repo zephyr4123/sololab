@@ -1,5 +1,5 @@
 /**
- * Backend API client with typed methods.
+ * 带类型的后端 API 客户端。
  */
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';

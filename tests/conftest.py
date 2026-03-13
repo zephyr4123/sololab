@@ -1,17 +1,17 @@
-"""Shared pytest fixtures."""
+"""共享的 pytest 测试夹具。"""
 
 import sys
 from pathlib import Path
 
 import pytest
 
-# Add backend src to path
+# 将后端 src 添加到路径
 sys.path.insert(0, str(Path(__file__).parent.parent / "backend" / "src"))
 
 
 @pytest.fixture
 def mock_llm_gateway():
-    """Mock LLM Gateway that returns predetermined responses."""
+    """返回预设响应的模拟 LLM 网关。"""
 
     class MockLLMGateway:
         async def generate(self, messages, **kwargs):
@@ -34,7 +34,7 @@ def mock_llm_gateway():
 
 @pytest.fixture
 def mock_redis():
-    """Mock Redis client for testing."""
+    """用于测试的模拟 Redis 客户端。"""
     try:
         import fakeredis.aioredis
 

@@ -1,4 +1,4 @@
-"""IdeaSpark Module - Multi-agent idea generation."""
+"""IdeaSpark 模块 - 多智能体创意生成。"""
 
 from typing import Any, AsyncGenerator
 
@@ -7,9 +7,8 @@ from sololab.modules.ideaspark.orchestrator import Orchestrator
 
 
 class IdeaSparkModule(ModuleBase):
-    """
-    IdeaSpark: Multi-agent brainstorming with Separate-Together collaboration.
-    Uses diverse Persona Agents to generate, debate, and refine research ideas.
+    """IdeaSpark：基于分离-汇聚协作的多智能体头脑风暴。
+    使用多元化的角色智能体来生成、辩论和优化研究创意。
     """
 
     def __init__(self) -> None:
@@ -28,7 +27,7 @@ class IdeaSparkModule(ModuleBase):
         )
 
     async def on_load(self, ctx: ModuleContext) -> None:
-        """Initialize orchestrator with persona agents."""
+        """使用角色智能体初始化编排器。"""
         self._orchestrator = Orchestrator(
             llm_gateway=ctx.llm_gateway,
             tool_registry=ctx.tool_registry,
@@ -37,7 +36,7 @@ class IdeaSparkModule(ModuleBase):
     async def execute(
         self, request: ModuleRequest, ctx: ModuleContext
     ) -> AsyncGenerator[Any, None]:
-        """Run the Separate-Together idea generation flow."""
+        """运行分离-汇聚创意生成流程。"""
         if not self._orchestrator:
             raise RuntimeError("Module not loaded")
 

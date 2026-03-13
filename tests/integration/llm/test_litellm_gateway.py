@@ -1,25 +1,25 @@
-"""Integration tests for LiteLLM Gateway."""
+"""LiteLLM 网关的集成测试。"""
 
 import pytest
 
 
 class TestLiteLLMGateway:
-    """Tests requiring a running LiteLLM proxy or direct API access."""
+    """需要运行 LiteLLM 代理或直接 API 访问的测试。"""
 
     @pytest.mark.integration
     async def test_generate_with_real_model(self):
-        """Test actual LLM API call via LiteLLM."""
-        # TODO: Requires API key configured
-        # 1. Create LLMGateway with real config
-        # 2. Call generate() with a simple prompt
-        # 3. Verify response format
+        """测试通过 LiteLLM 的实际 LLM API 调用。"""
+        # TODO: 需要配置 API 密钥
+        # 1. 使用真实配置创建 LLMGateway
+        # 2. 使用简单提示词调用 generate()
+        # 3. 验证响应格式
         pass
 
     @pytest.mark.integration
     async def test_fallback_chain(self):
-        """Test fallback when primary model fails."""
-        # TODO: Configure an invalid primary and valid fallback
-        # 1. Set primary to a non-existent model
-        # 2. Set fallback to a working model
-        # 3. Verify generation succeeds via fallback
+        """测试主模型失败时的降级。"""
+        # TODO: 配置无效的主模型和有效的降级模型
+        # 1. 将主模型设为不存在的模型
+        # 2. 将降级模型设为可用模型
+        # 3. 验证通过降级模型成功生成
         pass

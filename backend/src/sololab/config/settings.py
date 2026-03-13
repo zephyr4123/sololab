@@ -1,4 +1,4 @@
-"""Application settings loaded from environment variables."""
+"""从环境变量加载的应用配置。"""
 
 from functools import lru_cache
 from typing import Optional
@@ -7,13 +7,13 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    """SoloLab application settings."""
+    """SoloLab 应用配置。"""
 
-    # Application
+    # 应用
     app_name: str = "SoloLab"
     debug: bool = False
 
-    # Database
+    # 数据库
     database_url: str = "postgresql+asyncpg://sololab:sololab@localhost:5432/sololab"
 
     # Redis
@@ -24,14 +24,14 @@ class Settings(BaseSettings):
     default_model: str = "openai/gpt-4o"
     budget_limit_usd: float = 50.0
 
-    # Storage
+    # 存储
     storage_path: str = "./storage"
 
-    # URLs
+    # 地址
     frontend_url: str = "http://localhost:3000"
     backend_url: str = "http://localhost:8000"
 
-    # API Keys (loaded from .env)
+    # API 密钥（从 .env 加载）
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
     deepseek_api_key: Optional[str] = None
@@ -43,5 +43,5 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """Cached settings singleton."""
+    """缓存的配置单例。"""
     return Settings()

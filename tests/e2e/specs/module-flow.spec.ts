@@ -16,6 +16,6 @@ test.describe('Module Flow', () => {
     await page.goto('/modules/ideaspark');
     const input = page.getByPlaceholder(/research topic/i);
     await input.fill('Multi-agent systems in drug discovery');
-    // TODO: Verify send button becomes enabled
+    // TODO: 验证发送按钮变为可用状态
   });
 });

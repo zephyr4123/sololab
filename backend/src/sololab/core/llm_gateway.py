@@ -1,4 +1,4 @@
-"""LLM Gateway - Thin wrapper around LiteLLM for unified model access."""
+"""LLM 网关 - 基于 LiteLLM 的轻量封装，提供统一模型访问。"""
 
 from typing import AsyncGenerator, Dict, List, Optional
 
@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 
 class LLMConfig(BaseModel):
-    """Global LLM configuration."""
+    """全局 LLM 配置。"""
 
     fallback_chain: List[str] = ["deepseek/deepseek-chat", "openai/gpt-4o-mini"]
     default_model: str = "openai/gpt-4o"
@@ -17,10 +17,9 @@ class LLMConfig(BaseModel):
 
 
 class LLMGateway:
-    """
-    LiteLLM thin wrapper layer.
-    - Unified 100+ model calls to OpenAI format
-    - Built-in fallback / retry / cost tracking
+    """LiteLLM 轻量封装层。
+    - 统一 100+ 模型调用为 OpenAI 格式
+    - 内置降级 / 重试 / 费用追踪
     """
 
     def __init__(self, config: LLMConfig) -> None:
@@ -40,7 +39,7 @@ class LLMGateway:
         response_format: Optional[dict] = None,
         **kwargs,
     ) -> dict:
-        """Unified generation interface with automatic fallback."""
+        """统一生成接口，支持自动降级。"""
         model = model or self.config.default_model
         try:
             response = await acompletion(
@@ -71,7 +70,7 @@ class LLMGateway:
         temperature: float = 0.7,
         **kwargs,
     ) -> AsyncGenerator[str, None]:
-        """Streaming generation."""
+        """流式生成。"""
         model = model or self.config.default_model
         response = await acompletion(
             model=model,
@@ -89,6 +88,6 @@ class LLMGateway:
     async def embed(
         self, texts: List[str], model: str = "openai/text-embedding-3-small"
     ) -> List[List[float]]:
-        """Unified embedding interface."""
+        """统一向量嵌入接口。"""
         response = await aembedding(model=model, input=texts)
         return [item["embedding"] for item in response.data]

@@ -2,14 +2,14 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies for MinerU
+# 安装 MinerU 系统依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libgl1-mesa-glx \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install MinerU
+# 安装 MinerU
 RUN pip install --no-cache-dir magic-pdf[full]
 
 EXPOSE 8001

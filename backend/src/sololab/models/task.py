@@ -1,4 +1,4 @@
-"""Task-related data models."""
+"""任务相关数据模型。"""
 
 from enum import Enum
 from typing import List, Optional
@@ -15,16 +15,16 @@ class TaskStatus(str, Enum):
 
 
 class TaskEvent(BaseModel):
-    """A single task event with sequence number."""
+    """带序列号的单个任务事件。"""
 
     event_id: int
-    type: str  # text | agent | tool | status | done | error
+    type: str  # 文本 | 智能体 | 工具 | 状态 | 完成 | 错误
     data: dict
     timestamp: float
 
 
 class TaskState(BaseModel):
-    """Task state snapshot."""
+    """任务状态快照。"""
 
     task_id: str
     module_id: str

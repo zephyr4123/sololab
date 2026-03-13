@@ -1,11 +1,11 @@
-"""Database seed script for initial data."""
+"""数据库初始数据填充脚本。"""
 
 
 async def seed():
-    """Seed the database with initial data."""
-    # TODO: Create initial module registrations
-    # TODO: Create default session
-    # TODO: Register built-in tools
+    """填充数据库初始数据。"""
+    # TODO: 创建初始模块注册
+    # TODO: 创建默认会话
+    # TODO: 注册内置工具
     print("Seeding database...")
     print("Done.")
 

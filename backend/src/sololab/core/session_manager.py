@@ -1,35 +1,35 @@
-"""Session Manager - User session lifecycle management."""
+"""会话管理器 - 用户会话生命周期管理。"""
 
 from typing import Any, Dict, List, Optional
 
 
 class SessionManager:
-    """Manages user sessions and cross-module context."""
+    """管理用户会话和跨模块上下文。"""
 
     def __init__(self, db: Any) -> None:
         self.db = db
 
     async def create_session(self, metadata: Dict[str, Any] = {}) -> str:
-        """Create a new session, return session_id."""
-        # TODO: Implement with PostgreSQL
+        """创建新会话，返回 session_id。"""
+        # TODO: 使用 PostgreSQL 实现
         raise NotImplementedError
 
     async def get_session(self, session_id: str) -> Optional[dict]:
-        """Get session state."""
-        # TODO: Implement with PostgreSQL
+        """获取会话状态。"""
+        # TODO: 使用 PostgreSQL 实现
         raise NotImplementedError
 
     async def list_sessions(self, limit: int = 20) -> List[dict]:
-        """List recent sessions."""
-        # TODO: Implement with PostgreSQL
+        """列出最近的会话。"""
+        # TODO: 使用 PostgreSQL 实现
         raise NotImplementedError
 
     async def get_history(self, session_id: str) -> List[dict]:
-        """Get session message history."""
-        # TODO: Implement with PostgreSQL
+        """获取会话消息历史。"""
+        # TODO: 使用 PostgreSQL 实现
         raise NotImplementedError
 
     async def delete_session(self, session_id: str) -> bool:
-        """Delete a session."""
-        # TODO: Implement with PostgreSQL
+        """删除会话。"""
+        # TODO: 使用 PostgreSQL 实现
         raise NotImplementedError

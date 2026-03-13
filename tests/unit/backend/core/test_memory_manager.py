@@ -1,26 +1,26 @@
-"""Unit tests for Memory Manager."""
+"""记忆管理器的单元测试。"""
 
 import pytest
 
 
 class TestMemoryManager:
-    """Tests for pgvector-based memory management."""
+    """基于 pgvector 的记忆管理测试。"""
 
     @pytest.mark.unit
     async def test_store_returns_id(self, mock_llm_gateway):
-        """Storing content should return a memory ID."""
-        # TODO: Implement once MemoryManager has DB integration
+        """存储内容应返回记忆 ID。"""
+        # TODO: MemoryManager 集成数据库后实现
         pass
 
     @pytest.mark.unit
     async def test_retrieve_returns_relevant_results(self, mock_llm_gateway):
-        """Retrieving should return semantically relevant results."""
-        # TODO: Implement once MemoryManager has DB integration
+        """检索应返回语义相关的结果。"""
+        # TODO: MemoryManager 集成数据库后实现
         pass
 
     @pytest.mark.unit
     def test_scope_hierarchy():
-        """Memory scopes should follow GLOBAL > PROJECT > SESSION > MODULE."""
+        """记忆作用域应遵循 GLOBAL > PROJECT > SESSION > MODULE 层级。"""
         from sololab.core.memory_manager import MemoryScope
 
         scopes = list(MemoryScope)

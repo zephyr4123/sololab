@@ -1,4 +1,4 @@
-"""Memory Manager - pgvector-based multi-level memory system."""
+"""记忆管理器 - 基于 pgvector 的多级记忆系统。"""
 
 from datetime import datetime
 from enum import Enum
@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 
 class MemoryScope(str, Enum):
-    """Memory scope hierarchy."""
+    """记忆作用域层级。"""
 
     MODULE = "module"
     SESSION = "session"
@@ -17,7 +17,7 @@ class MemoryScope(str, Enum):
 
 
 class MemoryChunk(BaseModel):
-    """A unit of stored memory."""
+    """存储的记忆单元。"""
 
     id: Optional[str] = None
     content: str
@@ -28,12 +28,11 @@ class MemoryChunk(BaseModel):
 
 
 class MemoryManager:
-    """
-    Multi-level memory management based on pgvector.
+    """基于 pgvector 的多级记忆管理。
 
-    Scope hierarchy:
+    作用域层级：
     GLOBAL → PROJECT → SESSION → MODULE
-    Each module can read all upper scopes but only write to its own and below.
+    每个模块可以读取所有上级作用域，但只能写入自身及下级作用域。
     """
 
     def __init__(self, llm_gateway: Any, db: Any) -> None:
@@ -43,7 +42,7 @@ class MemoryManager:
     async def store(
         self, content: str, scope: MemoryScope, metadata: Dict[str, Any] = {}
     ) -> str:
-        """Store content with embedding into vector database."""
+        """将内容及其向量嵌入存储到向量数据库。"""
         embedding = await self.llm_gateway.embed([content])
         chunk = MemoryChunk(
             content=content,
@@ -52,19 +51,19 @@ class MemoryManager:
             metadata=metadata,
             timestamp=datetime.utcnow(),
         )
-        # TODO: Save to PostgreSQL with pgvector
+        # TODO: 保存到 PostgreSQL（pgvector）
         _ = chunk
         return chunk.id or ""
 
     async def retrieve(
         self, query: str, scope: MemoryScope, top_k: int = 5
     ) -> List[MemoryChunk]:
-        """Retrieve relevant memories via vector similarity search."""
+        """通过向量相似度搜索检索相关记忆。"""
         _query_embedding = await self.llm_gateway.embed([query])
-        # TODO: Vector search in PostgreSQL with pgvector
+        # TODO: 在 PostgreSQL 中执行 pgvector 向量搜索
         return []
 
     async def delete(self, memory_id: str) -> bool:
-        """Delete a specific memory entry."""
-        # TODO: Delete from PostgreSQL
+        """删除指定的记忆条目。"""
+        # TODO: 从 PostgreSQL 删除
         return True
