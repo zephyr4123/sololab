@@ -43,8 +43,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # 任务状态管理器
     app.state.task_state_manager = TaskStateManager(redis)
 
-    # 工具注册表
-    app.state.tool_registry = ToolRegistry()
+    # 工具注册表 + 注册内置工具
+    tool_registry = ToolRegistry()
+    app.state.tool_registry = tool_registry
+
+    from sololab.tools.tavily_search import TavilySearchTool
+    from sololab.tools.arxiv_search import ArxivTool
+    from sololab.tools.scholar_search import SemanticScholarTool
+    from sololab.tools.doc_parse import DocParseTool
+
+    for tool_cls in [TavilySearchTool, ArxivTool, SemanticScholarTool, DocParseTool]:
+        tool_registry.register(tool_cls())
 
     # 提示词管理器
     app.state.prompt_manager = PromptManager()

@@ -3,6 +3,9 @@
 import { useState } from 'react';
 import { ChatPanel } from '@/components/shared/ChatPanel';
 import { AgentTimeline } from '@/components/shared/AgentTimeline';
+import { AgentPanel } from '@/components/modules/ideaspark/AgentPanel';
+import { IdeaBoard } from '@/components/modules/ideaspark/IdeaBoard';
+import { VoteResult } from '@/components/modules/ideaspark/VoteResult';
 
 interface ModuleContainerProps {
   moduleId: string;
@@ -15,8 +18,8 @@ export function ModuleContainer({ moduleId }: ModuleContainerProps) {
 
   const tabs: { id: TabId; label: string }[] = [
     { id: 'chat', label: 'Chat' },
-    { id: 'board', label: 'Board' },
-    { id: 'detail', label: 'Detail' },
+    { id: 'board', label: 'Ideas' },
+    { id: 'detail', label: 'Results' },
   ];
 
   return (
@@ -39,17 +42,16 @@ export function ModuleContainer({ moduleId }: ModuleContainerProps) {
         </div>
 
         {activeTab === 'chat' && <ChatPanel moduleId={moduleId} />}
-        {activeTab === 'board' && (
-          <div className="flex-1 p-4 text-muted-foreground">Board view coming soon</div>
-        )}
-        {activeTab === 'detail' && (
-          <div className="flex-1 p-4 text-muted-foreground">Detail view coming soon</div>
-        )}
+        {activeTab === 'board' && <IdeaBoard />}
+        {activeTab === 'detail' && <VoteResult />}
       </div>
 
-      <aside className="hidden w-80 border-l pl-4 xl:block">
-        <h3 className="mb-3 text-sm font-semibold">Agent Activity</h3>
-        <AgentTimeline moduleId={moduleId} />
+      <aside className="hidden w-80 space-y-6 border-l pl-4 xl:block">
+        <AgentPanel />
+        <div>
+          <h3 className="mb-3 text-sm font-semibold text-muted-foreground">Activity</h3>
+          <AgentTimeline />
+        </div>
       </aside>
     </div>
   );

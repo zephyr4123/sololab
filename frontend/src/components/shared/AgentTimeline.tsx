@@ -1,35 +1,45 @@
 'use client';
 
-interface AgentTimelineProps {
-  moduleId: string;
-}
+import { useIdeaSparkStore } from '@/stores/module-stores/ideaspark-store';
 
-interface TimelineEvent {
-  agent: string;
-  action: string;
-  timestamp: string;
-}
+const AGENT_COLORS: Record<string, string> = {
+  divergent: 'bg-purple-500',
+  expert: 'bg-blue-500',
+  critic: 'bg-red-500',
+  connector: 'bg-green-500',
+  evaluator: 'bg-yellow-500',
+};
 
-export function AgentTimeline({ moduleId }: AgentTimelineProps) {
-  // TODO: 从任务 store 订阅智能体事件
-  const events: TimelineEvent[] = [];
+export function AgentTimeline() {
+  const { agentEvents } = useIdeaSparkStore();
 
-  if (events.length === 0) {
-    return <p className="text-sm text-muted-foreground">No agent activity yet. Start a task to see agents in action.</p>;
+  if (agentEvents.length === 0) {
+    return (
+      <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">
+        Agent activity will appear here
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-3">
-      {events.map((event, i) => (
-        <div key={i} className="flex gap-3 text-sm">
-          <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" />
-          <div>
-            <span className="font-medium">{event.agent}</span>
-            <p className="text-muted-foreground">{event.action}</p>
-            <time className="text-xs text-muted-foreground">{event.timestamp}</time>
+    <div className="space-y-1 p-2 max-h-64 overflow-auto">
+      {agentEvents.map((event, idx) => {
+        const color = AGENT_COLORS[event.agent] || 'bg-gray-500';
+        const time = new Date(event.timestamp).toLocaleTimeString();
+        return (
+          <div key={idx} className="flex items-start gap-2 text-xs">
+            <div className={`mt-1 h-2 w-2 rounded-full ${color} shrink-0`} />
+            <div className="flex-1 min-w-0">
+              <span className="font-medium capitalize">{event.agent}</span>
+              <span className="text-muted-foreground"> {event.action}</span>
+              {event.content && (
+                <p className="text-muted-foreground truncate">{event.content}</p>
+              )}
+            </div>
+            <span className="text-muted-foreground shrink-0">{time}</span>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

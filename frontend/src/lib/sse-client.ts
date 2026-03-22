@@ -93,11 +93,13 @@ export class ResilientSSEClient {
   private dispatchEvent(event: SSEEvent, handlers: StreamHandlers) {
     switch (event.type) {
       case 'text': handlers.onText?.(event.content); break;
-      case 'agent': handlers.onAgent?.(event.agent, event.action); break;
+      case 'agent': handlers.onAgent?.(event.agent, event.action, event.content); break;
       case 'tool': handlers.onTool?.(event.tool, event.result); break;
-      case 'status': handlers.onStatus?.(event.status); break;
-      case 'done': handlers.onDone?.(); break;
-      case 'error': handlers.onError?.(event.message); break;
+      case 'status': handlers.onStatus?.(event.phase || event.status || '', event.round); break;
+      case 'idea': handlers.onIdea?.(event.id, event.content, event.author); break;
+      case 'vote': handlers.onVote?.(event.idea_id, event.content, event.author, event.elo_score, event.rank); break;
+      case 'done': handlers.onDone?.(event.top_ideas, event.cost_usd); break;
+      case 'error': handlers.onError?.(event.message || event.error || 'Unknown error'); break;
     }
   }
 
