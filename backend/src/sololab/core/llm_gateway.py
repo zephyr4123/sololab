@@ -72,13 +72,19 @@ class LLMGateway:
                 **self._api_params(),
                 **kwargs,
             )
+            # 费用计算：代理转发的模型名可能不在 LiteLLM 价格表中，容错处理
+            try:
+                cost_usd = litellm.completion_cost(response)
+            except Exception:
+                cost_usd = 0.0
+
             return {
                 "content": response.choices[0].message.content,
                 "model": response.model,
                 "usage": {
                     "prompt_tokens": response.usage.prompt_tokens,
                     "completion_tokens": response.usage.completion_tokens,
-                    "cost_usd": litellm.completion_cost(response),
+                    "cost_usd": cost_usd,
                 },
             }
         except Exception as e:
@@ -116,5 +122,6 @@ class LLMGateway:
             input=texts,
             api_key=self.config.embedding_api_key,
             api_base=self.config.embedding_base_url,
+            encoding_format="float",
         )
         return [item["embedding"] for item in response.data]

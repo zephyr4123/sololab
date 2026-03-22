@@ -1,9 +1,13 @@
 """从环境变量加载的应用配置。"""
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Optional
 
 from pydantic_settings import BaseSettings
+
+# 项目根目录（backend/src/sololab/config/settings.py → 向上 4 级到项目根）
+_PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
 
 class Settings(BaseSettings):
@@ -40,7 +44,7 @@ class Settings(BaseSettings):
     # 外部 API 密钥
     tavily_api_key: Optional[str] = None
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": str(_PROJECT_ROOT / ".env"), "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 @lru_cache
