@@ -1,5 +1,6 @@
 """SoloLab FastAPI 应用入口。"""
 
+import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -14,7 +15,8 @@ from sololab.core.module_registry import ModuleContext, ModuleRegistry
 from sololab.core.prompt_manager import PromptManager
 from sololab.core.task_state_manager import TaskStateManager
 from sololab.core.tool_registry import ToolRegistry
-from sololab.modules.ideaspark.module import IdeaSparkModule
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -47,10 +49,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # 提示词管理器
     app.state.prompt_manager = PromptManager()
 
-    # 模块注册表 + 自动加载内置模块
-    app.state.module_registry = ModuleRegistry()
+    # 模块注册表 + 自动发现并加载内置模块
+    registry = ModuleRegistry()
+    app.state.module_registry = registry
     module_ctx = _build_module_context(app)
-    await app.state.module_registry.load_module(IdeaSparkModule(), module_ctx)
+    available = registry.discover_modules()
+    for module_id, info in available.items():
+        try:
+            cls = registry.load_module_class(info["entry_point"])
+            await registry.load_module(cls(), module_ctx)
+            logger.info("已加载模块: %s", module_id)
+        except Exception as e:
+            logger.warning("加载模块 %s 失败: %s", module_id, e)
 
     yield
 

@@ -22,13 +22,26 @@ async def list_modules(request: Request) -> list[dict[str, Any]]:
 
 @router.post("/modules/{module_id}/load")
 async def load_module(module_id: str, request: Request) -> dict:
-    """根据 ID 加载模块。"""
+    """根据 ID 加载模块（从文件系统发现）。"""
+    from sololab.main import _build_module_context
+
     registry = request.app.state.module_registry
     existing = registry.get_module(module_id)
     if existing:
         return {"status": "already_loaded", "module_id": module_id}
-    # TODO: 从文件系统动态发现并加载模块
-    raise HTTPException(404, f"Module '{module_id}' not found in available modules")
+
+    available = registry.discover_modules()
+    if module_id not in available:
+        raise HTTPException(404, f"Module '{module_id}' not found in available modules")
+
+    info = available[module_id]
+    try:
+        cls = registry.load_module_class(info["entry_point"])
+        ctx = _build_module_context(request.app)
+        await registry.load_module(cls(), ctx)
+        return {"status": "loaded", "module_id": module_id}
+    except Exception as e:
+        raise HTTPException(500, f"Failed to load module '{module_id}': {e}")
 
 
 @router.delete("/modules/{module_id}/unload")

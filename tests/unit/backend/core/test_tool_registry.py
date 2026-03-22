@@ -1,4 +1,4 @@
-"""Unit tests for Tool Registry."""
+"""Tool Registry 单元测试。"""
 
 import pytest
 
@@ -22,7 +22,7 @@ class TestToolRegistry:
 
     @pytest.mark.unit
     def test_register_and_list(self):
-        """Registering a tool should make it available in list."""
+        """注册工具后应出现在列表中。"""
         registry = ToolRegistry()
         registry.register(DummyTool())
         tools = registry.list_tools()
@@ -31,7 +31,7 @@ class TestToolRegistry:
 
     @pytest.mark.unit
     def test_get_tool(self):
-        """Getting a tool by name should return it."""
+        """按名称获取工具应返回正确实例。"""
         registry = ToolRegistry()
         registry.register(DummyTool())
         tool = registry.get_tool("dummy")
@@ -39,9 +39,34 @@ class TestToolRegistry:
         assert tool.name == "dummy"
 
     @pytest.mark.unit
+    def test_get_tool_returns_none_for_missing(self):
+        """获取不存在的工具应返回 None。"""
+        registry = ToolRegistry()
+        assert registry.get_tool("nonexistent") is None
+
+    @pytest.mark.unit
     def test_get_tools_for_module(self):
-        """Getting tools by name list should return matching tools."""
+        """按名称列表获取工具应过滤不存在的。"""
         registry = ToolRegistry()
         registry.register(DummyTool())
         tools = registry.get_tools_for_module(["dummy", "nonexistent"])
         assert len(tools) == 1
+
+    @pytest.mark.unit
+    async def test_execute_tool(self):
+        """执行工具应返回正确结果。"""
+        registry = ToolRegistry()
+        registry.register(DummyTool())
+        tool = registry.get_tool("dummy")
+        result = await tool.execute({"q": "test"})
+        assert result.success is True
+        assert result.data["echo"] == {"q": "test"}
+
+    @pytest.mark.unit
+    def test_unregister_tool(self):
+        """注销工具后不应再出现在列表中。"""
+        registry = ToolRegistry()
+        registry.register(DummyTool())
+        registry.unregister("dummy")
+        assert registry.list_tools() == []
+        assert registry.get_tool("dummy") is None

@@ -1,25 +1,51 @@
-"""LiteLLM 网关的集成测试。"""
+"""LLM Gateway 集成测试 —— 使用真实 Qwen API。"""
 
 import pytest
 
+from sololab.core.llm_gateway import LLMGateway
+
 
 class TestLiteLLMGateway:
-    """需要运行 LiteLLM 代理或直接 API 访问的测试。"""
+    """需要真实 API 密钥和网络的集成测试。"""
 
     @pytest.mark.integration
-    async def test_generate_with_real_model(self):
-        """测试通过 LiteLLM 的实际 LLM API 调用。"""
-        # TODO: 需要配置 API 密钥
-        # 1. 使用真实配置创建 LLMGateway
-        # 2. 使用简单提示词调用 generate()
-        # 3. 验证响应格式
-        pass
+    async def test_generate_with_real_model(self, real_llm_config):
+        """使用真实 Qwen API 测试 generate。"""
+        gw = LLMGateway(real_llm_config)
+        result = await gw.generate(
+            messages=[{"role": "user", "content": "说你好"}],
+            max_tokens=20,
+        )
+        assert isinstance(result["content"], str)
+        assert len(result["content"]) > 0
+        assert result["usage"]["prompt_tokens"] > 0
+        assert result["usage"]["completion_tokens"] > 0
 
     @pytest.mark.integration
-    async def test_fallback_chain(self):
-        """测试主模型失败时的降级。"""
-        # TODO: 配置无效的主模型和有效的降级模型
-        # 1. 将主模型设为不存在的模型
-        # 2. 将降级模型设为可用模型
-        # 3. 验证通过降级模型成功生成
-        pass
+    async def test_stream_with_real_model(self, real_llm_config):
+        """使用真实 Qwen API 测试 stream。"""
+        gw = LLMGateway(real_llm_config)
+        chunks = []
+        async for chunk in gw.stream(
+            messages=[{"role": "user", "content": "说一个字：好"}],
+        ):
+            chunks.append(chunk)
+        full = "".join(chunks)
+        assert len(full) > 0
+
+    @pytest.mark.integration
+    async def test_embed_with_real_model(self, real_llm_config):
+        """使用真实 Embedding API 测试 embed。"""
+        gw = LLMGateway(real_llm_config)
+        vectors = await gw.embed(["集成测试文本"])
+        assert len(vectors) == 1
+        assert len(vectors[0]) == 1024
+
+    @pytest.mark.integration
+    async def test_embed_batch_with_real_model(self, real_llm_config):
+        """批量嵌入测试。"""
+        gw = LLMGateway(real_llm_config)
+        texts = ["文本一", "文本二", "文本三", "文本四", "文本五"]
+        vectors = await gw.embed(texts)
+        assert len(vectors) == 5
+        assert all(len(v) == 1024 for v in vectors)

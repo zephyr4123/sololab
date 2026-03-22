@@ -1,8 +1,17 @@
 """模块注册表 - 热插拔模块加载与管理。"""
 
+import importlib
+import json
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+# 必填字段列表
+_REQUIRED_MANIFEST_FIELDS = ("id", "name", "version", "description", "icon", "entry_point")
 
 
 @dataclass
@@ -40,6 +49,14 @@ class ModuleContext:
     manifest: ModuleManifest = field(default_factory=lambda: ModuleManifest("", "", "", "", "", ""))
 
 
+def validate_manifest(manifest: ModuleManifest) -> None:
+    """校验模块清单必填字段。"""
+    for field_name in _REQUIRED_MANIFEST_FIELDS:
+        value = getattr(manifest, field_name, None)
+        if not value or not str(value).strip():
+            raise ValueError(f"Module manifest missing required field: '{field_name}'")
+
+
 class ModuleBase(ABC):
     """所有功能模块的基类。"""
 
@@ -69,8 +86,9 @@ class ModuleRegistry:
         self._modules: Dict[str, ModuleBase] = {}
 
     async def load_module(self, module: ModuleBase, ctx: ModuleContext) -> None:
-        """加载并初始化模块。"""
+        """加载并初始化模块（含 manifest 校验）。"""
         manifest = module.manifest()
+        validate_manifest(manifest)
         await module.on_load(ctx)
         self._modules[manifest.id] = module
 
@@ -97,3 +115,29 @@ class ModuleRegistry:
             raise ValueError(f"Module '{module_id}' not loaded")
         async for chunk in module.execute(request, ctx):
             yield chunk
+
+    @staticmethod
+    def discover_modules() -> Dict[str, dict]:
+        """扫描 sololab/modules/*/manifest.json，返回可用模块信息。"""
+        modules_dir = Path(__file__).parent.parent / "modules"
+        available = {}
+        if not modules_dir.exists():
+            return available
+        for manifest_path in modules_dir.glob("*/manifest.json"):
+            try:
+                with open(manifest_path) as f:
+                    data = json.load(f)
+                module_id = data.get("id")
+                if module_id:
+                    data["_manifest_path"] = str(manifest_path)
+                    available[module_id] = data
+            except (json.JSONDecodeError, KeyError) as e:
+                logger.warning("跳过无效 manifest: %s (%s)", manifest_path, e)
+        return available
+
+    @staticmethod
+    def load_module_class(entry_point: str) -> type:
+        """从 entry_point（如 'sololab.modules.ideaspark.module:IdeaSparkModule'）动态导入模块类。"""
+        module_path, class_name = entry_point.rsplit(":", 1)
+        mod = importlib.import_module(module_path)
+        return getattr(mod, class_name)
