@@ -1,51 +1,69 @@
-"""LLM 提供商管理的 API 路由。"""
+"""提供商与费用的 API 路由。"""
+
+import logging
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 @router.get("/providers")
-async def list_providers(request: Request) -> list:
-    """列出当前配置的 LLM 提供商信息。"""
-    gw = request.app.state.llm_gateway
-    config = gw.config
-    return [
-        {
-            "name": "llm",
-            "base_url": config.base_url,
-            "model": config.default_model,
-            "status": "configured",
-        },
-        {
-            "name": "embedding",
-            "base_url": config.embedding_base_url,
-            "model": config.embedding_model,
-            "status": "configured",
-        },
-    ]
+async def list_providers(request: Request) -> dict:
+    """列出可用的 LLM 提供商。"""
+    llm = request.app.state.llm_gateway
+    config = llm.config
+    return {
+        "default_model": config.default_model,
+        "fallback_chain": config.fallback_chain,
+        "embedding_model": config.embedding_model,
+        "budget_limit_usd": config.budget_limit_usd,
+    }
 
 
-@router.post("/providers/{provider_name}/test")
-async def test_provider(provider_name: str, request: Request) -> dict:
+@router.post("/providers/{name}/test")
+async def test_provider(request: Request, name: str) -> dict:
     """测试提供商连通性。"""
-    gw = request.app.state.llm_gateway
+    llm = request.app.state.llm_gateway
     try:
-        if provider_name == "embedding":
-            vectors = await gw.embed(["connectivity test"])
-            return {"provider": provider_name, "status": "ok", "dim": len(vectors[0])}
-        else:
-            result = await gw.generate(
-                messages=[{"role": "user", "content": "ping"}],
-                max_tokens=5,
-            )
-            return {"provider": provider_name, "status": "ok", "model": result["model"]}
+        result = await llm.generate(
+            messages=[{"role": "user", "content": "Say hello in one word."}],
+            model=name,
+            max_tokens=10,
+        )
+        return {
+            "provider": name,
+            "status": "ok",
+            "model": result.get("model"),
+            "response": result.get("content", "")[:100],
+        }
     except Exception as e:
-        raise HTTPException(502, f"Provider test failed: {e}")
+        return {"provider": name, "status": "error", "error": str(e)[:200]}
 
 
 @router.get("/providers/cost")
-async def get_cost_stats() -> dict:
-    """获取 API 费用统计。"""
-    # TODO: 从 LiteLLM 查询费用数据
-    return {"total_cost_usd": 0.0, "breakdown": {}}
+async def get_cost(request: Request, days: int = 30) -> dict:
+    """获取费用统计。"""
+    cost_tracker = request.app.state.cost_tracker
+    if not cost_tracker:
+        raise HTTPException(503, "Cost tracker not initialized")
+    return await cost_tracker.get_total_cost(days=days)
+
+
+@router.get("/providers/cost/module/{module_id}")
+async def get_module_cost(request: Request, module_id: str, days: int = 30) -> dict:
+    """获取模块费用统计。"""
+    cost_tracker = request.app.state.cost_tracker
+    if not cost_tracker:
+        raise HTTPException(503, "Cost tracker not initialized")
+    return await cost_tracker.get_module_cost(module_id, days=days)
+
+
+@router.get("/providers/cost/task/{task_id}")
+async def get_task_cost(request: Request, task_id: str) -> dict:
+    """获取任务费用统计。"""
+    cost_tracker = request.app.state.cost_tracker
+    if not cost_tracker:
+        raise HTTPException(503, "Cost tracker not initialized")
+    return await cost_tracker.get_task_cost(task_id)

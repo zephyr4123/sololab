@@ -42,3 +42,105 @@ export const api = {
     cost: () => fetchAPI('/api/providers/cost'),
   },
 };
+
+// === Document API ===
+export const documentApi = {
+  upload: async (file: File, projectId = "default") => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${API_BASE}/api/documents/upload?project_id=${projectId}`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok) throw new Error(`Upload failed: ${res.statusText}`);
+    return res.json() as Promise<{ doc_id: string; filename: string; status: string }>;
+  },
+
+  getStatus: async (docId: string) => {
+    const res = await fetch(`${API_BASE}/api/documents/${docId}/status`);
+    if (!res.ok) throw new Error(`Status fetch failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  getChunks: async (docId: string) => {
+    const res = await fetch(`${API_BASE}/api/documents/${docId}/chunks`);
+    if (!res.ok) throw new Error(`Chunks fetch failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  search: async (query: string, topK = 5) => {
+    const res = await fetch(`${API_BASE}/api/documents/search?query=${encodeURIComponent(query)}&top_k=${topK}`, {
+      method: "POST",
+    });
+    if (!res.ok) throw new Error(`Search failed: ${res.statusText}`);
+    return res.json();
+  },
+};
+
+// === Session API ===
+export const sessionApi = {
+  list: async (limit = 20, moduleId?: string) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (moduleId) params.append("module_id", moduleId);
+    const res = await fetch(`${API_BASE}/api/sessions?${params}`);
+    if (!res.ok) throw new Error(`Sessions fetch failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  create: async (title?: string, moduleId?: string) => {
+    const res = await fetch(`${API_BASE}/api/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, module_id: moduleId }),
+    });
+    if (!res.ok) throw new Error(`Session create failed: ${res.statusText}`);
+    return res.json() as Promise<{ session_id: string; status: string }>;
+  },
+
+  getHistory: async (sessionId: string, limit = 100) => {
+    const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/history?limit=${limit}`);
+    if (!res.ok) throw new Error(`History fetch failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  delete: async (sessionId: string) => {
+    const res = await fetch(`${API_BASE}/api/sessions/${sessionId}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(`Session delete failed: ${res.statusText}`);
+    return res.json();
+  },
+};
+
+// === Cost API ===
+export const costApi = {
+  getTotal: async (days = 30) => {
+    const res = await fetch(`${API_BASE}/api/providers/cost?days=${days}`);
+    if (!res.ok) throw new Error(`Cost fetch failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  getModuleCost: async (moduleId: string, days = 30) => {
+    const res = await fetch(`${API_BASE}/api/providers/cost/module/${moduleId}?days=${days}`);
+    if (!res.ok) throw new Error(`Module cost fetch failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  getTaskCost: async (taskId: string) => {
+    const res = await fetch(`${API_BASE}/api/providers/cost/task/${taskId}`);
+    if (!res.ok) throw new Error(`Task cost fetch failed: ${res.statusText}`);
+    return res.json();
+  },
+};
+
+// === Memory API ===
+export const memoryApi = {
+  search: async (query: string, scope = "project", topK = 5) => {
+    const params = new URLSearchParams({
+      query,
+      scope,
+      top_k: String(topK),
+    });
+    const res = await fetch(`${API_BASE}/api/memory/search?${params}`, { method: "POST" });
+    if (!res.ok) throw new Error(`Memory search failed: ${res.statusText}`);
+    return res.json();
+  },
+};

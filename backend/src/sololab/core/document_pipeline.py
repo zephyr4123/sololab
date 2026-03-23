@@ -1,12 +1,20 @@
 """文档处理管道 - 通过 MinerU 解析学术 PDF。"""
 
-import glob
+import glob as glob_module
 import json
+import logging
 import os
 import subprocess
+import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 from typing import Any, List, Optional
+
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import async_sessionmaker
+
+logger = logging.getLogger(__name__)
 
 
 class DocType(str, Enum):
@@ -50,30 +58,179 @@ class DocumentPipeline:
     - 图注关联
     """
 
-    def __init__(self, llm_gateway: Any, memory_manager: Any, storage_path: str) -> None:
+    # 分块最大字符数（超过则拆分）
+    MAX_CHUNK_CHARS = 2000
+
+    def __init__(
+        self,
+        llm_gateway: Any,
+        db: async_sessionmaker,
+        storage_path: str,
+    ) -> None:
         self.llm_gateway = llm_gateway
-        self.memory_manager = memory_manager
+        self.db = db
         self.storage_path = storage_path
 
-    async def process(self, file_path: str, project_id: str) -> ParsedDocument:
-        """完整处理管道。"""
-        raw_markdown = await self._parse_with_mineru(file_path)
-        chunks = self._semantic_chunking(raw_markdown)
-        metadata = await self._extract_metadata(raw_markdown)
+    async def process(self, file_path: str, project_id: str, doc_id: Optional[str] = None) -> ParsedDocument:
+        """完整处理管道：解析 -> 分块 -> 元数据提取 -> 嵌入存储。"""
+        doc_id = doc_id or str(uuid.uuid4())[:8]
 
-        # TODO: 嵌入并存储分块到向量数据库
-        for chunk in chunks:
-            _ = chunk  # 将通过 memory_manager 存储
+        # 更新状态：processing
+        await self._update_status(doc_id, "processing")
 
-        return ParsedDocument(
-            doc_id=self._generate_id(),
-            filename=os.path.basename(file_path),
-            title=metadata.get("title"),
-            authors=metadata.get("authors"),
-            chunks=chunks,
-            raw_markdown=raw_markdown,
-            total_pages=metadata.get("total_pages", 0),
-        )
+        try:
+            # 步骤 1：MinerU 解析
+            raw_markdown = await self._parse_with_mineru(file_path)
+
+            # 步骤 2：语义分块
+            chunks = self._semantic_chunking(raw_markdown)
+
+            # 步骤 3：LLM 提取元数据
+            metadata = await self._extract_metadata(raw_markdown)
+
+            # 步骤 4：嵌入并存储分块到向量数据库
+            await self._embed_and_store_chunks(doc_id, chunks)
+
+            # 步骤 5：更新文档记录
+            parsed = ParsedDocument(
+                doc_id=doc_id,
+                filename=os.path.basename(file_path),
+                title=metadata.get("title"),
+                authors=metadata.get("authors"),
+                chunks=chunks,
+                raw_markdown=raw_markdown,
+                total_pages=metadata.get("total_pages", 0),
+            )
+
+            await self._save_document_record(parsed, metadata, project_id)
+            return parsed
+
+        except Exception as e:
+            logger.error("文档处理失败: doc_id=%s, error=%s", doc_id, e)
+            await self._update_status(doc_id, "failed", error_message=str(e))
+            raise
+
+    async def upload_and_process(
+        self, filename: str, content: bytes, project_id: str = "default"
+    ) -> str:
+        """上传文件并启动处理。返回 doc_id。"""
+        from sololab.models.orm import DocumentRecord
+
+        doc_id = str(uuid.uuid4())[:8]
+
+        # 保存文件
+        upload_dir = os.path.join(self.storage_path, "uploads", doc_id)
+        os.makedirs(upload_dir, exist_ok=True)
+        file_path = os.path.join(upload_dir, filename)
+        with open(file_path, "wb") as f:
+            f.write(content)
+
+        # 创建文档记录
+        doc_type = self._detect_doc_type(filename)
+        async with self.db() as session:
+            record = DocumentRecord(
+                doc_id=doc_id,
+                filename=filename,
+                file_path=file_path,
+                doc_type=doc_type.value,
+                status="pending",
+                project_id=project_id,
+            )
+            session.add(record)
+            await session.commit()
+
+        logger.info("文档已上传: doc_id=%s, filename=%s", doc_id, filename)
+        return doc_id
+
+    async def get_status(self, doc_id: str) -> Optional[dict]:
+        """获取文档处理状态。"""
+        from sololab.models.orm import DocumentRecord
+
+        async with self.db() as session:
+            result = await session.execute(
+                select(DocumentRecord).where(DocumentRecord.doc_id == doc_id)
+            )
+            record = result.scalar_one_or_none()
+            if not record:
+                return None
+            return {
+                "doc_id": record.doc_id,
+                "filename": record.filename,
+                "status": record.status,
+                "title": record.title,
+                "authors": record.authors,
+                "total_pages": record.total_pages,
+                "total_chunks": record.total_chunks,
+                "error_message": record.error_message,
+                "created_at": record.created_at.isoformat() if record.created_at else None,
+                "completed_at": record.completed_at.isoformat() if record.completed_at else None,
+            }
+
+    async def get_chunks(self, doc_id: str) -> List[dict]:
+        """获取文档的所有分块。"""
+        from sololab.models.orm import DocumentChunkRecord
+
+        async with self.db() as session:
+            result = await session.execute(
+                select(DocumentChunkRecord)
+                .where(DocumentChunkRecord.doc_id == doc_id)
+                .order_by(DocumentChunkRecord.chunk_index)
+            )
+            records = result.scalars().all()
+            return [
+                {
+                    "chunk_index": r.chunk_index,
+                    "content": r.content,
+                    "content_type": r.content_type,
+                    "page_numbers": r.page_numbers or [],
+                    "metadata": r.metadata_json or {},
+                }
+                for r in records
+            ]
+
+    async def search(self, query: str, top_k: int = 5, project_id: Optional[str] = None) -> List[dict]:
+        """跨文档语义搜索。"""
+        # 生成查询嵌入
+        query_embeddings = await self.llm_gateway.embed([query])
+        query_embedding = query_embeddings[0]
+        embedding_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
+
+        from sqlalchemy import text as sql_text
+
+        async with self.db() as session:
+            # 使用 pgvector 余弦相似度搜索文档分块
+            sql = sql_text("""
+                SELECT dc.doc_id, dc.chunk_index, dc.content, dc.content_type,
+                       dc.metadata_json, d.title, d.filename,
+                       1 - (dc.embedding <=> :embedding::vector) AS similarity
+                FROM document_chunks dc
+                JOIN documents d ON dc.doc_id = d.doc_id
+                WHERE dc.embedding IS NOT NULL
+                  AND d.status = 'completed'
+                ORDER BY dc.embedding <=> :embedding::vector
+                LIMIT :top_k
+            """)
+
+            result = await session.execute(
+                sql, {"embedding": embedding_str, "top_k": top_k}
+            )
+            rows = result.fetchall()
+
+            return [
+                {
+                    "doc_id": row.doc_id,
+                    "chunk_index": row.chunk_index,
+                    "content": row.content,
+                    "content_type": row.content_type,
+                    "metadata": row.metadata_json or {},
+                    "document_title": row.title,
+                    "document_filename": row.filename,
+                    "similarity": float(row.similarity),
+                }
+                for row in rows
+            ]
+
+    # -- 内部方法 --
 
     async def _parse_with_mineru(self, file_path: str) -> str:
         """使用 MinerU CLI 解析 PDF。"""
@@ -90,7 +247,7 @@ class DocumentPipeline:
         if result.returncode != 0:
             raise RuntimeError(f"MinerU parsing failed: {result.stderr}")
 
-        md_files = glob.glob(os.path.join(output_dir, "**/*.md"), recursive=True)
+        md_files = glob_module.glob(os.path.join(output_dir, "**/*.md"), recursive=True)
         if not md_files:
             raise RuntimeError("MinerU produced no output")
 
@@ -108,14 +265,59 @@ class DocumentPipeline:
             section = section.strip()
             if not section:
                 continue
-            content_type = self._detect_content_type(section)
+            # 如果单个 section 过长，进一步拆分
+            if len(section) > self.MAX_CHUNK_CHARS:
+                sub_chunks = self._split_long_section(section, i)
+                chunks.extend(sub_chunks)
+            else:
+                content_type = self._detect_content_type(section)
+                chunks.append(
+                    ParsedChunk(
+                        content=section,
+                        chunk_index=len(chunks),
+                        page_numbers=[],
+                        content_type=content_type,
+                        metadata={"section_index": i},
+                    )
+                )
+
+        # 重新编号
+        for idx, chunk in enumerate(chunks):
+            chunk.chunk_index = idx
+
+        return chunks
+
+    def _split_long_section(self, section: str, section_index: int) -> List[ParsedChunk]:
+        """拆分过长的段落。"""
+        paragraphs = section.split("\n\n")
+        chunks = []
+        current = ""
+
+        for para in paragraphs:
+            if len(current) + len(para) > self.MAX_CHUNK_CHARS and current:
+                content_type = self._detect_content_type(current)
+                chunks.append(
+                    ParsedChunk(
+                        content=current.strip(),
+                        chunk_index=0,  # 后续重新编号
+                        page_numbers=[],
+                        content_type=content_type,
+                        metadata={"section_index": section_index, "split": True},
+                    )
+                )
+                current = para
+            else:
+                current = current + "\n\n" + para if current else para
+
+        if current.strip():
+            content_type = self._detect_content_type(current)
             chunks.append(
                 ParsedChunk(
-                    content=section,
-                    chunk_index=len(chunks),
+                    content=current.strip(),
+                    chunk_index=0,
                     page_numbers=[],
                     content_type=content_type,
-                    metadata={"section_index": i},
+                    metadata={"section_index": section_index, "split": True},
                 )
             )
 
@@ -123,22 +325,109 @@ class DocumentPipeline:
 
     async def _extract_metadata(self, markdown: str) -> dict:
         """通过 LLM 从 markdown 中提取结构化元数据。"""
-        response = await self.llm_gateway.generate(
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        "Extract metadata from this academic paper. "
-                        "Return JSON with: title, authors, abstract, keywords, year.\n\n"
-                        f"{markdown[:3000]}"
-                    ),
-                }
-            ],
-            model="deepseek/deepseek-chat",
-            response_format={"type": "json_object"},
-            temperature=0.1,
-        )
-        return json.loads(response["content"])
+        try:
+            response = await self.llm_gateway.generate(
+                messages=[
+                    {
+                        "role": "user",
+                        "content": (
+                            "Extract metadata from this academic paper. "
+                            "Return JSON with: title, authors, abstract, keywords, year, total_pages.\n\n"
+                            f"{markdown[:3000]}"
+                        ),
+                    }
+                ],
+                model="deepseek/deepseek-chat",
+                response_format={"type": "json_object"},
+                temperature=0.1,
+            )
+            return json.loads(response["content"])
+        except Exception as e:
+            logger.warning("元数据提取失败: %s", e)
+            return {}
+
+    async def _embed_and_store_chunks(self, doc_id: str, chunks: List[ParsedChunk]) -> None:
+        """批量嵌入并存储分块到向量数据库。"""
+        from sololab.models.orm import DocumentChunkRecord
+
+        if not chunks:
+            return
+
+        # 批量嵌入（每次最多 20 个，避免 token 超限）
+        batch_size = 20
+        all_embeddings = []
+
+        for i in range(0, len(chunks), batch_size):
+            batch_texts = [c.content[:8000] for c in chunks[i:i + batch_size]]
+            try:
+                embeddings = await self.llm_gateway.embed(batch_texts)
+                all_embeddings.extend(embeddings)
+            except Exception as e:
+                logger.warning("批量嵌入失败 (batch %d): %s", i // batch_size, e)
+                # 使用空嵌入填充
+                all_embeddings.extend([None] * len(batch_texts))
+
+        # 存储到数据库
+        async with self.db() as session:
+            for idx, chunk in enumerate(chunks):
+                embedding = all_embeddings[idx] if idx < len(all_embeddings) else None
+                record = DocumentChunkRecord(
+                    doc_id=doc_id,
+                    chunk_index=chunk.chunk_index,
+                    content=chunk.content,
+                    content_type=chunk.content_type,
+                    embedding=embedding,
+                    page_numbers=chunk.page_numbers,
+                    metadata_json=chunk.metadata,
+                )
+                session.add(record)
+            await session.commit()
+
+        logger.info("文档分块已存储: doc_id=%s, chunks=%d", doc_id, len(chunks))
+
+    async def _save_document_record(
+        self, parsed: ParsedDocument, metadata: dict, project_id: str
+    ) -> None:
+        """保存文档记录到数据库。"""
+        from sololab.models.orm import DocumentRecord
+
+        async with self.db() as session:
+            await session.execute(
+                update(DocumentRecord)
+                .where(DocumentRecord.doc_id == parsed.doc_id)
+                .values(
+                    title=parsed.title,
+                    authors=metadata.get("authors"),
+                    abstract=metadata.get("abstract"),
+                    keywords=metadata.get("keywords"),
+                    year=metadata.get("year"),
+                    total_pages=parsed.total_pages,
+                    total_chunks=len(parsed.chunks),
+                    raw_markdown=parsed.raw_markdown,
+                    status="completed",
+                    completed_at=datetime.utcnow(),
+                )
+            )
+            await session.commit()
+
+        logger.info("文档记录已更新: doc_id=%s, title=%s", parsed.doc_id, parsed.title)
+
+    async def _update_status(
+        self, doc_id: str, status: str, error_message: Optional[str] = None
+    ) -> None:
+        """更新文档处理状态。"""
+        from sololab.models.orm import DocumentRecord
+
+        async with self.db() as session:
+            values = {"status": status}
+            if error_message:
+                values["error_message"] = error_message
+            await session.execute(
+                update(DocumentRecord)
+                .where(DocumentRecord.doc_id == doc_id)
+                .values(**values)
+            )
+            await session.commit()
 
     @staticmethod
     def _detect_content_type(text: str) -> str:
@@ -149,7 +438,16 @@ class DocumentPipeline:
         return "text"
 
     @staticmethod
-    def _generate_id() -> str:
-        import uuid
+    def _detect_doc_type(filename: str) -> DocType:
+        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+        return {
+            "pdf": DocType.PDF,
+            "md": DocType.MARKDOWN,
+            "html": DocType.HTML,
+            "htm": DocType.HTML,
+            "docx": DocType.DOCX,
+        }.get(ext, DocType.PDF)
 
+    @staticmethod
+    def _generate_id() -> str:
         return str(uuid.uuid4())[:8]

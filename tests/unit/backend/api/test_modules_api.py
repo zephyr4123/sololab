@@ -69,14 +69,13 @@ class TestModulesAPI:
 
     @pytest.mark.unit
     async def test_list_providers(self, async_client):
-        """GET /api/providers 应返回配置的提供商。"""
+        """GET /api/providers 应返回配置的提供商信息。"""
         response = await async_client.get("/api/providers")
         assert response.status_code == 200
-        providers = response.json()
-        assert len(providers) == 2
-        names = [p["name"] for p in providers]
-        assert "llm" in names
-        assert "embedding" in names
+        data = response.json()
+        assert "default_model" in data
+        assert "fallback_chain" in data
+        assert "embedding_model" in data
 
     @pytest.mark.unit
     async def test_list_tools(self, async_client):

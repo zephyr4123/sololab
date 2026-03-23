@@ -58,6 +58,53 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # 提示词管理器
     app.state.prompt_manager = PromptManager()
 
+    # --- Phase 3: 数据库 + 新服务 ---
+    db_session = None
+    try:
+        from sololab.models.orm import create_db_engine, create_session_factory
+
+        engine = create_db_engine(settings.database_url)
+        db_session = create_session_factory(engine)
+        app.state.db_engine = engine
+        app.state.db_session = db_session
+        logger.info("数据库连接池已初始化")
+    except Exception as e:
+        logger.warning("数据库初始化失败（Phase 3 服务不可用）: %s", e)
+        app.state.db_engine = None
+        app.state.db_session = None
+
+    # 记忆管理器
+    if db_session:
+        from sololab.core.memory_manager import MemoryManager
+        app.state.memory_manager = MemoryManager(app.state.llm_gateway, db_session)
+    else:
+        app.state.memory_manager = None
+
+    # 会话管理器
+    if db_session:
+        from sololab.core.session_manager import SessionManager
+        app.state.session_manager = SessionManager(db_session)
+    else:
+        app.state.session_manager = None
+
+    # 文档处理管道
+    if db_session:
+        from sololab.core.document_pipeline import DocumentPipeline
+        app.state.document_pipeline = DocumentPipeline(
+            app.state.llm_gateway, db_session, settings.storage_path
+        )
+    else:
+        app.state.document_pipeline = None
+
+    # 费用追踪器
+    if db_session:
+        from sololab.core.cost_tracker import CostTracker
+        app.state.cost_tracker = CostTracker(
+            db_session, default_budget=settings.budget_limit_usd
+        )
+    else:
+        app.state.cost_tracker = None
+
     # 模块注册表 + 自动发现并加载内置模块
     registry = ModuleRegistry()
     app.state.module_registry = registry
@@ -73,8 +120,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     yield
 
-    # 关闭 Redis 连接
+    # 关闭资源
     await redis.aclose()
+    if hasattr(app.state, "db_engine") and app.state.db_engine:
+        await app.state.db_engine.dispose()
+        logger.info("数据库连接已关闭")
 
 
 def _build_module_context(app: FastAPI) -> ModuleContext:
@@ -82,7 +132,7 @@ def _build_module_context(app: FastAPI) -> ModuleContext:
     return ModuleContext(
         llm_gateway=app.state.llm_gateway,
         tool_registry=app.state.tool_registry,
-        memory_manager=None,
+        memory_manager=app.state.memory_manager,
         task_state_manager=app.state.task_state_manager,
     )
 
@@ -99,7 +149,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="SoloLab API",
         description="AI-assisted research platform for independent researchers",
-        version="0.1.0",
+        version="0.2.0",
         lifespan=lifespan,
     )
 
@@ -122,7 +172,7 @@ def create_app() -> FastAPI:
 
     @app.get("/health")
     async def health_check() -> dict:
-        return {"status": "ok", "version": "0.1.0"}
+        return {"status": "ok", "version": "0.2.0"}
 
     return app
 
