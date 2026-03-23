@@ -77,4 +77,39 @@ test.describe("Phase 3: Document & Session Management", () => {
     const names = body.map((t: { name: string }) => t.name);
     expect(names).toContain("doc_parse");
   });
+
+  test("enhanced health check returns service status", async ({ request }) => {
+    const response = await request.get("/health");
+    expect(response.ok()).toBeTruthy();
+    const body = await response.json();
+    expect(body.version).toBe("0.3.0");
+    expect(body).toHaveProperty("services");
+    expect(body.services).toHaveProperty("redis");
+    expect(body.services).toHaveProperty("database");
+    expect(body).toHaveProperty("modules_loaded");
+  });
+
+  test("traces API returns data", async ({ request }) => {
+    const response = await request.get("/api/providers/traces");
+    expect(response.ok()).toBeTruthy();
+    const body = await response.json();
+    expect(body).toHaveProperty("traces");
+    expect(body).toHaveProperty("summary");
+  });
+
+  test("responses include rate limit headers", async ({ request }) => {
+    const response = await request.get("/api/modules");
+    expect(response.ok()).toBeTruthy();
+    const remaining = response.headers()["x-ratelimit-remaining"];
+    expect(remaining).toBeDefined();
+  });
+
+  test("model switcher options are visible", async ({ page }) => {
+    await page.goto("/");
+    const select = page.locator("select");
+    await expect(select.first()).toBeVisible();
+    // 应有多个选项
+    const options = select.first().locator("option");
+    expect(await options.count()).toBeGreaterThanOrEqual(3);
+  });
 });

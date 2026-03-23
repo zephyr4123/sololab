@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Optional
 
 from pgvector.sqlalchemy import Vector
+import sqlalchemy as sa
 from sqlalchemy import (
     Column,
     DateTime,
@@ -136,6 +137,33 @@ class CostRecord(Base):
     completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
     cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class BlackboardMessage(Base):
+    """黑板消息持久化表。"""
+    __tablename__ = "blackboard_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    task_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    module_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    sender: Mapped[str] = mapped_column(String(64), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    msg_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    references: Mapped[Optional[str]] = mapped_column(JSONB, nullable=True, default=[])
+    metadata_json: Mapped[Optional[str]] = mapped_column(JSONB, nullable=True, default={})
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class APIKeyRecord(Base):
+    """API Key 表。"""
+    __tablename__ = "api_keys"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    is_active: Mapped[bool] = mapped_column(sa.Boolean, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 # Database engine factory

@@ -1,9 +1,9 @@
-# SoloLab - 反向代理配置
+# SoloLab - 反向代理配置（生产）
 
-:80 {
-	# 前端
-	handle {
-		reverse_proxy frontend:3000
+{$SOLOLAB_DOMAIN:localhost} {
+	# 健康检查
+	handle /health {
+		reverse_proxy backend:8000
 	}
 
 	# 后端 API
@@ -11,8 +11,19 @@
 		reverse_proxy backend:8000
 	}
 
+	# 前端
+	handle {
+		reverse_proxy frontend:3000
+	}
+
 	# LiteLLM 代理（内部）
 	handle /litellm/* {
 		reverse_proxy litellm:4000
+	}
+
+	# 日志
+	log {
+		output stdout
+		format json
 	}
 }

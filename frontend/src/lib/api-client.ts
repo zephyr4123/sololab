@@ -131,6 +131,42 @@ export const costApi = {
   },
 };
 
+// === Traces API ===
+export const tracesApi = {
+  getTraces: async (taskId?: string, limit = 50) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (taskId) params.append("task_id", taskId);
+    const res = await fetch(`${API_BASE}/api/providers/traces?${params}`);
+    if (!res.ok) throw new Error(`Traces fetch failed: ${res.statusText}`);
+    return res.json();
+  },
+};
+
+// === Run History API ===
+export const runHistoryApi = {
+  list: async (moduleId?: string, limit = 20) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (moduleId) params.append("module_id", moduleId);
+    const res = await fetch(`${API_BASE}/api/providers/runs?${params}`);
+    if (!res.ok) throw new Error(`Runs fetch failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  getMessages: async (taskId: string, msgType?: string) => {
+    const params = new URLSearchParams();
+    if (msgType) params.append("msg_type", msgType);
+    const res = await fetch(`${API_BASE}/api/providers/runs/${taskId}/messages?${params}`);
+    if (!res.ok) throw new Error(`Messages fetch failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  exportMarkdown: async (taskId: string) => {
+    const res = await fetch(`${API_BASE}/api/providers/runs/${taskId}/export`);
+    if (!res.ok) throw new Error(`Export failed: ${res.statusText}`);
+    return res.json();
+  },
+};
+
 // === Memory API ===
 export const memoryApi = {
   search: async (query: string, scope = "project", topK = 5) => {

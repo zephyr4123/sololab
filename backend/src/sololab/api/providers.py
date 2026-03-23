@@ -67,3 +67,53 @@ async def get_task_cost(request: Request, task_id: str) -> dict:
     if not cost_tracker:
         raise HTTPException(503, "Cost tracker not initialized")
     return await cost_tracker.get_task_cost(task_id)
+
+
+@router.get("/providers/traces")
+async def get_traces(request: Request, task_id: Optional[str] = None, limit: int = 50) -> dict:
+    """获取 LLM 调用追踪记录。"""
+    tracer = getattr(request.app.state, "llm_tracer", None)
+    if not tracer:
+        return {"traces": [], "summary": {}}
+    traces = tracer.get_traces(task_id=task_id, limit=limit)
+    summary = tracer.get_summary(task_id=task_id)
+    return {"traces": traces, "summary": summary}
+
+
+@router.get("/providers/runs")
+async def get_run_history(request: Request, module_id: Optional[str] = None, limit: int = 20) -> dict:
+    """获取运行历史。"""
+    message_store = getattr(request.app.state, "message_store", None)
+    if not message_store:
+        raise HTTPException(503, "Message store not initialized")
+    try:
+        runs = await message_store.get_run_history(module_id=module_id, limit=limit)
+        return {"runs": runs}
+    except Exception:
+        return {"runs": []}
+
+
+@router.get("/providers/runs/{task_id}/messages")
+async def get_run_messages(request: Request, task_id: str, msg_type: Optional[str] = None) -> dict:
+    """获取运行的黑板消息。"""
+    message_store = getattr(request.app.state, "message_store", None)
+    if not message_store:
+        raise HTTPException(503, "Message store not initialized")
+    try:
+        messages = await message_store.get_messages(task_id, msg_type=msg_type)
+        return {"task_id": task_id, "messages": messages}
+    except Exception:
+        return {"task_id": task_id, "messages": []}
+
+
+@router.get("/providers/runs/{task_id}/export")
+async def export_run(request: Request, task_id: str) -> dict:
+    """导出运行结果为 Markdown。"""
+    message_store = getattr(request.app.state, "message_store", None)
+    if not message_store:
+        raise HTTPException(503, "Message store not initialized")
+    try:
+        markdown = await message_store.export_run_as_markdown(task_id)
+        return {"task_id": task_id, "markdown": markdown}
+    except Exception as e:
+        raise HTTPException(500, f"Export failed: {e}")

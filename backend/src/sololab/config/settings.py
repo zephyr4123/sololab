@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     # 外部 API 密钥
     tavily_api_key: Optional[str] = None
 
+    # API 认证
+    api_keys: Optional[str] = None  # 逗号分隔的 API Keys，为空则禁用认证
+
     model_config = {"env_file": str(_PROJECT_ROOT / ".env"), "env_file_encoding": "utf-8", "extra": "ignore"}
 
 

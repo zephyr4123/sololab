@@ -108,6 +108,33 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     else:
         app.state.cost_tracker = None
 
+    # 消息存储
+    if db_session:
+        from sololab.core.message_store import MessageStore
+        app.state.message_store = MessageStore(db_session)
+    else:
+        app.state.message_store = None
+
+    # 可观测性
+    from sololab.core.observability import LLMCallTracer, MessageTracer, BudgetAlert, setup_logging
+    setup_logging(log_level="INFO", json_output=False)
+    app.state.llm_tracer = LLMCallTracer()
+    app.state.message_tracer = MessageTracer()
+    app.state.budget_alert = BudgetAlert(budget_usd=settings.budget_limit_usd)
+
+    # API Key 认证
+    from sololab.core.auth import APIKeyAuth
+    api_keys = [k.strip() for k in (getattr(settings, 'api_keys', '') or '').split(',') if k.strip()]
+    app.state.api_key_auth = APIKeyAuth(api_keys=api_keys, enabled=bool(api_keys))
+
+    # 限速中间件（在 lifespan 之外配置，此处仅设置 config）
+    from sololab.core.rate_limiter import RateLimitConfig
+    app.state.rate_limit_config = RateLimitConfig(
+        requests_per_minute=60,
+        requests_per_hour=1000,
+        enabled=True,
+    )
+
     # 模块注册表 + 自动发现并加载内置模块
     registry = ModuleRegistry()
     app.state.module_registry = registry
@@ -152,7 +179,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="SoloLab API",
         description="AI-assisted research platform for independent researchers",
-        version="0.2.0",
+        version="0.3.0",
         lifespan=lifespan,
     )
 
@@ -165,6 +192,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # 限速中间件
+    from sololab.core.rate_limiter import RateLimitMiddleware, RateLimitConfig
+    app.add_middleware(RateLimitMiddleware, config=RateLimitConfig(enabled=True))
+
     # 注册路由
     app.include_router(modules.router, prefix="/api", tags=["modules"])
     app.include_router(tasks.router, prefix="/api", tags=["tasks"])
@@ -174,8 +205,21 @@ def create_app() -> FastAPI:
     app.include_router(tools.router, prefix="/api", tags=["tools"])
 
     @app.get("/health")
-    async def health_check() -> dict:
-        return {"status": "ok", "version": "0.2.0"}
+    async def health_check(request: Request) -> dict:
+        """增强的健康检查端点。"""
+        health = {
+            "status": "ok",
+            "version": "0.3.0",
+            "services": {
+                "redis": hasattr(request.app.state, "redis") and request.app.state.redis is not None,
+                "database": hasattr(request.app.state, "db_session") and request.app.state.db_session is not None,
+                "llm_gateway": hasattr(request.app.state, "llm_gateway") and request.app.state.llm_gateway is not None,
+            },
+        }
+        # 模块统计
+        if hasattr(request.app.state, "module_registry"):
+            health["modules_loaded"] = len(request.app.state.module_registry.list_modules())
+        return health
 
     return app
 

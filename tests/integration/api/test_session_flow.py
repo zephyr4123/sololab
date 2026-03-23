@@ -85,4 +85,4 @@ class TestSessionFlow:
         resp = await client.get("/health")
         assert resp.status_code == 200
         assert resp.json()["status"] == "ok"
-        assert resp.json()["version"] == "0.2.0"
+        assert resp.json()["version"] == "0.3.0"
