@@ -8,6 +8,66 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
+# 模型定价表：每百万 token 的美元价格 (prompt, completion)
+# 不在表中的模型按 0 计费（避免报错），日志会提示缺失
+MODEL_PRICING: Dict[str, tuple[float, float]] = {
+    # OpenAI
+    "gpt-4o": (2.5, 10.0),
+    "gpt-4o-2024-11-20": (2.5, 10.0),
+    "gpt-4o-2024-08-06": (2.5, 10.0),
+    "gpt-4o-mini": (0.15, 0.60),
+    "gpt-4o-mini-2024-07-18": (0.15, 0.60),
+    "gpt-4-turbo": (10.0, 30.0),
+    "gpt-4": (30.0, 60.0),
+    "gpt-3.5-turbo": (0.5, 1.5),
+    "o1": (15.0, 60.0),
+    "o1-mini": (3.0, 12.0),
+    "o3-mini": (1.1, 4.4),
+    # Anthropic (通过兼容 API)
+    "claude-sonnet-4-20250514": (3.0, 15.0),
+    "claude-3-5-sonnet-20241022": (3.0, 15.0),
+    "claude-3-5-haiku-20241022": (0.8, 4.0),
+    "claude-3-haiku-20240307": (0.25, 1.25),
+    # DeepSeek
+    "deepseek-chat": (0.27, 1.10),
+    "deepseek-reasoner": (0.55, 2.19),
+    # 阿里通义
+    "qwen-plus": (0.80, 2.0),
+    "qwen-turbo": (0.30, 0.60),
+    "qwen-max": (2.40, 9.60),
+    # Google Gemini (通过兼容 API)
+    "gemini-2.0-flash": (0.10, 0.40),
+    "gemini-2.5-flash-preview-05-20": (0.15, 0.60),
+    "gemini-2.5-pro-preview-05-06": (1.25, 10.0),
+    # OpenRouter 模型（带 provider 前缀）
+    "google/gemini-3-flash-preview": (0.332, 3.0),
+    "google/gemini-2.5-flash-preview": (0.15, 0.60),
+    "google/gemini-2.5-pro-preview": (1.25, 10.0),
+    # 嵌入模型（text-embedding-v4: 0.072 CNY/M ≈ 0.01 USD/M）
+    "text-embedding-v4": (0.01, 0.0),
+}
+
+
+def _estimate_cost(model: str, prompt_tokens: int, completion_tokens: int) -> float:
+    """根据模型定价表估算费用。"""
+    # 精确匹配
+    if model in MODEL_PRICING:
+        prompt_price, completion_price = MODEL_PRICING[model]
+    else:
+        # 模糊匹配：model 名称可能包含版本后缀
+        matched = None
+        for key in MODEL_PRICING:
+            if model.startswith(key) or key.startswith(model):
+                matched = key
+                break
+        if matched:
+            prompt_price, completion_price = MODEL_PRICING[matched]
+        else:
+            logger.warning("模型 %s 不在定价表中，费用按 0 计算", model)
+            return 0.0
+
+    return (prompt_tokens * prompt_price + completion_tokens * completion_price) / 1_000_000
+
 
 class LLMConfig(BaseModel):
     """LLM 配置（OpenAI 兼容格式）。"""
@@ -53,9 +113,15 @@ class LLMGateway:
         temperature: float = 0.7,
         max_tokens: int = 4096,
         response_format: Optional[dict] = None,
+        tools: Optional[List[Dict]] = None,
         **kwargs,
     ) -> dict:
-        """生成接口，支持手动降级。"""
+        """生成接口，支持手动降级和原生 function calling。
+
+        Args:
+            tools: OpenAI function calling 格式的工具定义列表。
+                   当 LLM 决定调用工具时，返回值中 tool_calls 非空。
+        """
         use_model = model or self.config.default_model
 
         # 尝试主模型 + fallback chain
@@ -74,16 +140,39 @@ class LLMGateway:
                 }
                 if response_format:
                     params["response_format"] = response_format
+                if tools:
+                    params["tools"] = tools
 
                 response = await self._client.chat.completions.create(**params)
 
+                prompt_tok = response.usage.prompt_tokens if response.usage else 0
+                completion_tok = response.usage.completion_tokens if response.usage else 0
+                cost = _estimate_cost(response.model or m, prompt_tok, completion_tok)
+
+                message = response.choices[0].message
+
+                # 提取 tool_calls（如果有）
+                tool_calls = None
+                if message.tool_calls:
+                    tool_calls = [
+                        {
+                            "id": tc.id,
+                            "function": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments,
+                            },
+                        }
+                        for tc in message.tool_calls
+                    ]
+
                 return {
-                    "content": response.choices[0].message.content,
+                    "content": message.content or "",
                     "model": response.model,
+                    "tool_calls": tool_calls,
                     "usage": {
-                        "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
-                        "completion_tokens": response.usage.completion_tokens if response.usage else 0,
-                        "cost_usd": 0.0,  # OpenAI SDK 不提供费用，由 CostTracker 单独追踪
+                        "prompt_tokens": prompt_tok,
+                        "completion_tokens": completion_tok,
+                        "cost_usd": cost,
                     },
                 }
             except Exception as e:

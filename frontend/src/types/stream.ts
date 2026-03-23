@@ -13,7 +13,7 @@ export type SSEEvent =
 
 export interface StreamHandlers {
   onText?: (text: string) => void;
-  onAgent?: (agent: string, action: string, content?: string) => void;
+  onAgent?: (agent: string, action: string, content?: string, messageCount?: number) => void;
   onTool?: (tool: string, result: unknown) => void;
   onStatus?: (phase: string, round?: number) => void;
   onIdea?: (id: string, content: string, author: string) => void;

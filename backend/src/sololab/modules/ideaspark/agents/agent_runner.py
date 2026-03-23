@@ -1,7 +1,7 @@
-"""智能体执行引擎 —— 单个角色智能体的 LLM 调用 + 工具调用。"""
+"""智能体执行引擎 —— 单个角色智能体的 LLM 调用 + 原生 function calling。"""
 
 import json
-import re
+import logging
 import uuid
 from typing import Any, Dict, List, Optional
 
@@ -10,14 +10,20 @@ from sololab.core.tool_registry import ToolRegistry
 from sololab.models.agent import AgentConfig, AgentState, Message, MessageType
 from sololab.modules.ideaspark.prompts.system_prompts import get_prompt
 
+logger = logging.getLogger(__name__)
+
+# 最大工具调用轮次，防止死循环
+MAX_TOOL_ROUNDS = 3
+
 
 class AgentRunner:
     """执行单个角色智能体的完整生命周期。
 
     1. 构建 system prompt + context messages
-    2. 调用 LLM generate
-    3. 解析工具调用指令并执行
-    4. 解析输出为 Message 对象
+    2. 调用 LLM generate（带 tools 参数）
+    3. 如果 LLM 返回 tool_calls，执行工具并将结果注入上下文
+    4. 循环直到 LLM 给出最终文本回复
+    5. 解析输出为 Message 对象
     """
 
     def __init__(
@@ -41,36 +47,64 @@ class AgentRunner:
         self.state.status = "thinking"
 
         system_prompt = get_prompt(self.config.name)
-        messages = self._build_messages(topic, context_messages or [], task_prompt)
+        messages: List[Dict[str, Any]] = [{"role": "system", "content": system_prompt}]
+        messages.extend(self._build_messages(topic, context_messages or [], task_prompt))
 
-        # 调用 LLM
-        result = await self.llm.generate(
-            messages=[{"role": "system", "content": system_prompt}] + messages,
-            temperature=self.config.temperature,
-            max_tokens=self.config.max_tokens,
-        )
+        # 获取 OpenAI function calling 格式的工具定义
+        openai_tools = None
+        if self.tools and self.config.tools:
+            openai_tools = self.tools.get_openai_tools(self.config.tools)
+            if not openai_tools:
+                openai_tools = None
 
-        content = result["content"]
-        self.state.tokens_used += result["usage"]["prompt_tokens"] + result["usage"]["completion_tokens"]
-        self.state.cost_usd += result["usage"]["cost_usd"]
-
-        # 检查是否有工具调用请求
-        tool_results = await self._handle_tool_calls(content)
-        if tool_results:
-            # 将工具结果注入上下文，再次调用 LLM
-            messages.append({"role": "assistant", "content": content})
-            messages.append({
-                "role": "user",
-                "content": f"Tool results:\n{json.dumps(tool_results, ensure_ascii=False, indent=2)}\n\nBased on these results, provide your final response.",
-            })
+        # 多轮工具调用循环
+        content = ""
+        for round_num in range(MAX_TOOL_ROUNDS + 1):
             result = await self.llm.generate(
-                messages=[{"role": "system", "content": system_prompt}] + messages,
+                messages=messages,
                 temperature=self.config.temperature,
                 max_tokens=self.config.max_tokens,
+                tools=openai_tools,
             )
-            content = result["content"]
+
             self.state.tokens_used += result["usage"]["prompt_tokens"] + result["usage"]["completion_tokens"]
             self.state.cost_usd += result["usage"]["cost_usd"]
+
+            tool_calls = result.get("tool_calls")
+            if not tool_calls:
+                # LLM 给出了最终文本回复
+                content = result["content"]
+                break
+
+            # LLM 请求调用工具 —— 执行并注入结果
+            # 先把 assistant 的 tool_calls 消息加入上下文
+            messages.append({
+                "role": "assistant",
+                "content": result["content"] or None,
+                "tool_calls": [
+                    {
+                        "id": tc["id"],
+                        "type": "function",
+                        "function": tc["function"],
+                    }
+                    for tc in tool_calls
+                ],
+            })
+
+            for tc in tool_calls:
+                tool_result = await self._execute_tool_call(tc)
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc["id"],
+                    "content": json.dumps(tool_result, ensure_ascii=False),
+                })
+
+            # 工具结果已注入，下一轮不再传 tools 参数，强制 LLM 给出最终回复
+            if round_num >= MAX_TOOL_ROUNDS - 1:
+                openai_tools = None
+        else:
+            # 超过最大轮次，用最后一次的 content
+            content = result.get("content", "")
 
         # 解析输出为 Message
         parsed = self._parse_output(content)
@@ -78,6 +112,35 @@ class AgentRunner:
         self.state.messages_sent += len(parsed)
         self.state.last_action = f"generated {len(parsed)} message(s)"
         return parsed
+
+    async def _execute_tool_call(self, tool_call: Dict[str, Any]) -> Dict[str, Any]:
+        """执行单个工具调用并返回结果。"""
+        func = tool_call["function"]
+        tool_name = func["name"]
+        try:
+            arguments = json.loads(func["arguments"])
+        except json.JSONDecodeError:
+            return {"error": f"Invalid arguments JSON: {func['arguments']}"}
+
+        if tool_name not in self.config.tools:
+            return {"error": f"Tool {tool_name} not allowed for this agent"}
+
+        tool = self.tools.get_tool(tool_name) if self.tools else None
+        if not tool:
+            return {"error": f"Tool {tool_name} not found in registry"}
+
+        self.state.status = "executing"
+        self.state.last_action = f"calling {tool_name}"
+        logger.info("智能体 %s 调用工具 %s: %s", self.config.name, tool_name, arguments.get("query", ""))
+
+        tool_result = await tool.execute(arguments)
+        return {
+            "tool": tool_name,
+            "query": arguments.get("query", ""),
+            "success": tool_result.success,
+            "data": tool_result.data,
+            "error": tool_result.error,
+        }
 
     def _build_messages(
         self, topic: str, context: List[Message], task_prompt: str
@@ -95,46 +158,15 @@ class AgentRunner:
                 "content": f"Previous discussion:\n{context_text}",
             })
 
-        # 当前任务
+        # 当前任务（不再追加 inline 工具指令，由 API tools 参数处理）
         prompt = task_prompt or f"Research topic: {topic}\n\nProvide your ideas and analysis."
-        if self.config.tools:
-            tool_names = ", ".join(self.config.tools)
-            prompt += f"\n\nYou have access to these tools: {tool_names}. To use a tool, write: [tool: tool_name(query=\"your query\")]"
-
         msgs.append({"role": "user", "content": prompt})
         return msgs
 
-    async def _handle_tool_calls(self, content: str) -> List[Dict[str, Any]]:
-        """检测并执行 LLM 输出中的工具调用。"""
-        if not self.tools or not self.config.tools:
-            return []
-
-        # 匹配 [tool: tool_name(query="...")] 格式
-        pattern = r'\[tool:\s*(\w+)\(query="([^"]+)"\)\]'
-        matches = re.findall(pattern, content)
-        results = []
-
-        for tool_name, query in matches:
-            if tool_name not in self.config.tools:
-                continue
-            tool = self.tools.get_tool(tool_name)
-            if not tool:
-                continue
-            self.state.status = "executing"
-            self.state.last_action = f"calling {tool_name}"
-            tool_result = await tool.execute({"query": query, "max_results": 3})
-            results.append({
-                "tool": tool_name,
-                "query": query,
-                "success": tool_result.success,
-                "data": tool_result.data,
-            })
-
-        return results
-
     def _parse_output(self, content: str) -> List[Message]:
         """解析 LLM 输出为 Message 对象列表。"""
-        # 尝试从输出中提取 msg_type 标记
+        import re
+
         msg_type = self._detect_msg_type(content)
 
         # 清理认知规划部分（前 3 行反思），保留实质内容

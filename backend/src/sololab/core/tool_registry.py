@@ -35,6 +35,31 @@ class ToolBase(ABC):
         """使用给定参数执行工具。"""
         ...
 
+    def to_openai_function(self) -> Dict[str, Any]:
+        """转换为 OpenAI function calling 格式。"""
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "搜索查询关键词",
+                        },
+                        "max_results": {
+                            "type": "integer",
+                            "description": "最大返回结果数",
+                            "default": 3,
+                        },
+                    },
+                    "required": ["query"],
+                },
+            },
+        }
+
 
 class ToolRegistry:
     """管理外部 API 工具的工具注册表。"""
@@ -57,6 +82,14 @@ class ToolRegistry:
     def get_tools_for_module(self, tool_names: List[str]) -> List[ToolBase]:
         """根据名称列表获取多个工具。"""
         return [self._tools[n] for n in tool_names if n in self._tools]
+
+    def get_openai_tools(self, tool_names: List[str]) -> List[Dict[str, Any]]:
+        """根据名称列表获取 OpenAI function calling 格式的工具定义。"""
+        return [
+            self._tools[n].to_openai_function()
+            for n in tool_names
+            if n in self._tools
+        ]
 
     def list_tools(self) -> List[Dict[str, str]]:
         """列出所有已注册的工具。"""

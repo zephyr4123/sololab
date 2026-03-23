@@ -2,6 +2,7 @@
 
 import { useIdeaSparkStore } from '@/stores/module-stores/ideaspark-store';
 import { Trophy } from 'lucide-react';
+import { MarkdownViewer } from '@/components/shared/MarkdownViewer';
 
 export function IdeaBoard() {
   const { ideas, topIdeas, phase } = useIdeaSparkStore();
@@ -31,7 +32,7 @@ export function IdeaBoard() {
                 </span>
               )}
             </div>
-            <p className="text-sm leading-relaxed">{idea.content}</p>
+            <MarkdownViewer content={idea.content} compact />
             {idea.eloScore > 0 && idea.eloScore !== 1500 && (
               <div className="text-xs text-muted-foreground">
                 Elo: {Math.round(idea.eloScore)}

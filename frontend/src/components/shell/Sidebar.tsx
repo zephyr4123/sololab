@@ -1,7 +1,8 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
-import { Lightbulb, Code, PenTool, BarChart3, BookOpen, Search, FlaskConical, Lock } from 'lucide-react';
+import { Lightbulb, Code, PenTool, BarChart3, BookOpen, Search, Lock } from 'lucide-react';
 import { useAppStore } from '@/stores/app-store';
 
 const modules = [
@@ -20,7 +21,7 @@ export function Sidebar() {
   return (
     <aside className="flex h-full w-16 flex-col items-center border-r bg-card py-4 lg:w-56">
       <Link href="/" className="mb-6 flex items-center gap-2 px-3">
-        <FlaskConical className="h-6 w-6" />
+        <Image src="/logo.png" alt="SoloLab" width={32} height={32} className="h-8 w-8 object-contain" />
         <span className="hidden text-lg font-bold lg:block">SoloLab</span>
       </Link>
 
@@ -58,6 +59,12 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+      <div className="mt-auto px-3 pt-4 border-t w-full">
+        <p className="hidden text-[10px] text-muted-foreground/60 text-center lg:block">
+          Powered By Suxiang.Huang
+        </p>
+      </div>
     </aside>
   );
 }

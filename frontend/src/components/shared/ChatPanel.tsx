@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import Image from 'next/image';
 import { Send, Loader2, Square } from 'lucide-react';
 import { StreamRenderer } from '@/components/shared/StreamRenderer';
 import { ResilientSSEClient } from '@/lib/sse-client';
@@ -76,9 +77,9 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
         if (round) ideaStore.setRound(round);
         appendEvent({ type: 'status', phase, round });
       },
-      onAgent: (agent, action, content) => {
+      onAgent: (agent, action, content, messageCount) => {
         ideaStore.addAgentEvent({ agent, action, content });
-        appendEvent({ type: 'agent', agent, action, content });
+        appendEvent({ type: 'agent', agent, action, content, message_count: messageCount });
       },
       onIdea: (id, content, author) => {
         ideaStore.addIdea({ id, content, author, eloScore: 1500 });
@@ -131,10 +132,10 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4">
         {entries.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center text-center">
-            <div className="mb-4 text-4xl">{'\u{1F9EA}'}</div>
+            <Image src="/logo.png" alt="SoloLab" width={80} height={80} className="mb-4 h-20 w-auto object-contain opacity-80" />
             <h3 className="mb-1 text-lg font-semibold text-foreground">IdeaSpark</h3>
             <p className="max-w-sm text-sm text-muted-foreground">
-              {'\u8F93\u5165\u7814\u7A76\u4E3B\u9898\uFF0C\u591A\u667A\u80FD\u4F53\u5C06\u534F\u4F5C\u751F\u6210\u521B\u65B0\u6027\u7814\u7A76\u521B\u610F\u3002'}
+              输入研究主题，多智能体将协作生成创新性研究创意。
             </p>
           </div>
         )}

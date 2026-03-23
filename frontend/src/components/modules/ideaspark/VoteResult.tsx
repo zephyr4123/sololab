@@ -2,6 +2,7 @@
 
 import { useIdeaSparkStore } from '@/stores/module-stores/ideaspark-store';
 import { Trophy, DollarSign } from 'lucide-react';
+import { MarkdownViewer } from '@/components/shared/MarkdownViewer';
 
 export function VoteResult() {
   const { topIdeas, costUsd, phase } = useIdeaSparkStore();
@@ -29,7 +30,7 @@ export function VoteResult() {
               <span className="text-xs text-muted-foreground capitalize">by {idea.author}</span>
               <span className="ml-auto text-xs font-mono">Elo: {Math.round(idea.eloScore)}</span>
             </div>
-            <p className="text-sm leading-relaxed">{idea.content}</p>
+            <MarkdownViewer content={idea.content} compact />
           </div>
         ))}
       </div>

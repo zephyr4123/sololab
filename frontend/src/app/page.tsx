@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import { Lightbulb, Code, PenTool, BarChart3, BookOpen, Search } from 'lucide-react';
 
 const modules = [
@@ -12,8 +13,13 @@ const modules = [
 export default function DashboardPage() {
   return (
     <div className="mx-auto max-w-5xl">
-      <h1 className="mb-2 text-3xl font-bold">SoloLab</h1>
-      <p className="mb-8 text-muted-foreground">AI-assisted research platform for independent researchers</p>
+      <div className="mb-8 flex items-center gap-4">
+        <Image src="/logo.png" alt="SoloLab" width={64} height={64} className="h-16 w-auto object-contain" />
+        <div>
+          <h1 className="text-3xl font-bold">SoloLab</h1>
+          <p className="text-muted-foreground">AI-assisted research platform for independent researchers</p>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {modules.map((mod) => {

@@ -44,9 +44,13 @@ export function ModuleContainer({ moduleId }: ModuleContainerProps) {
         </div>
 
         {activeTab === 'chat' && <ChatPanel moduleId={moduleId} />}
-        {activeTab === 'board' && <IdeaBoard />}
-        {activeTab === 'detail' && <VoteResult />}
-        {activeTab === 'report' && <IdeaReport />}
+        {activeTab !== 'chat' && (
+          <div className="flex-1 min-h-0 overflow-y-auto p-2">
+            {activeTab === 'board' && <IdeaBoard />}
+            {activeTab === 'detail' && <VoteResult />}
+            {activeTab === 'report' && <IdeaReport />}
+          </div>
+        )}
       </div>
 
       <aside className="hidden w-80 min-h-0 overflow-y-auto space-y-6 border-l pl-4 xl:block">
