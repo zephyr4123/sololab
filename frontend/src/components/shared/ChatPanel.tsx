@@ -59,6 +59,9 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
         ideaStore.addAgentEvent({ agent, action, content });
         sessionStore.appendEventToLastEntry({ type: 'agent', agent, action, content, message_count: messageCount });
       },
+      onTool: (event) => {
+        sessionStore.appendEventToLastEntry(event);
+      },
       onIdea: (id, content, author) => {
         ideaStore.addIdea({ id, content, author, eloScore: 1500 });
         sessionStore.appendEventToLastEntry({ type: 'idea', id, content, author });

@@ -47,7 +47,12 @@ class AgentRunner:
         """执行智能体，返回生成的消息列表。"""
         self.state.status = "thinking"
 
-        system_prompt = get_prompt(self.config.name)
+        from datetime import datetime
+        system_prompt = get_prompt(
+            self.config.name,
+            topic=topic or "(见上下文)",
+            timestamp=datetime.now().strftime("%Y-%m-%d %H:%M"),
+        )
         messages: List[Dict[str, Any]] = [{"role": "system", "content": system_prompt}]
         messages.extend(self._build_messages(topic, context_messages or [], task_prompt))
 
@@ -144,6 +149,18 @@ class AgentRunner:
         )
 
         tool_result = await tool.execute(arguments)
+
+        # 提取搜索结果明细供前端展示
+        raw_results = tool_result.data.get("results", []) if tool_result.data else []
+        results_detail = [
+            {
+                "title": r.get("title", ""),
+                "url": r.get("url", ""),
+                "snippet": (r.get("content", "") or r.get("abstract", "") or r.get("summary", ""))[:200],
+            }
+            for r in raw_results[:5]
+        ]
+
         # 收集工具事件供前端展示
         self.tool_events.append({
             "type": "tool",
@@ -153,7 +170,8 @@ class AgentRunner:
             "original_query": original_query,
             "success": tool_result.success,
             "result_preview": (tool_result.data.get("answer", "") or "")[:200] if tool_result.data else "",
-            "result_count": len(tool_result.data.get("results", [])) if tool_result.data else 0,
+            "result_count": len(raw_results),
+            "results": results_detail,
             "error": tool_result.error,
         })
         return {

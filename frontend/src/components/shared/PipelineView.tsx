@@ -288,7 +288,7 @@ function AgentColumn({ agent, events }: { agent: string; events: StreamEvent[] }
       {tools.length > 0 && (
         <div className="space-y-1">
           {tools.map((t, i) => (
-            <ToolCallBadge key={i} event={t} />
+            <ToolCallCard key={i} event={t} />
           ))}
         </div>
       )}
@@ -353,7 +353,7 @@ function TogetherPhaseView({ events }: { events: StreamEvent[] }) {
 
             {tools.length > 0 && (
               <div className="space-y-1">
-                {tools.map((t, i) => <ToolCallBadge key={i} event={t} />)}
+                {tools.map((t, i) => <ToolCallCard key={i} event={t} />)}
               </div>
             )}
 
@@ -480,24 +480,74 @@ function GenericPhaseView({ events }: { events: StreamEvent[] }) {
   );
 }
 
-// ─── Shared: Tool Call Badge ─────────────────────────────────
+// ─── Shared: Tool Call Card (expandable with results) ────────
 
-function ToolCallBadge({ event }: { event: StreamEvent }) {
+function ToolCallCard({ event }: { event: StreamEvent }) {
+  const [expanded, setExpanded] = useState(true);
   const ToolIcon = event.tool === 'web_search' ? Globe : BookOpen;
-  const toolLabel = event.tool === 'web_search' ? 'Web' : event.tool === 'arxiv_search' ? 'arXiv' : event.tool === 'scholar_search' ? 'Scholar' : event.tool;
+  const toolLabel = event.tool === 'web_search' ? 'Web Search'
+    : event.tool === 'arxiv_search' ? 'arXiv Search'
+    : event.tool === 'scholar_search' ? 'Scholar Search'
+    : event.tool;
+
+  const results: Array<{ title: string; url: string; snippet: string }> = event.results || [];
 
   return (
-    <div className="flex items-center gap-1.5 rounded-md bg-cyan-50/80 border border-cyan-200/50 px-2 py-1 text-[11px]">
-      <ToolIcon className="h-3 w-3 text-cyan-600" />
-      <span className="font-medium text-cyan-700">{toolLabel}</span>
-      <span className="text-cyan-600/70 truncate max-w-[200px]">{event.query}</span>
-      {event.success ? (
-        <CheckCircle className="ml-auto h-3 w-3 shrink-0 text-green-500" />
-      ) : (
-        <AlertTriangle className="ml-auto h-3 w-3 shrink-0 text-red-500" />
+    <div className="rounded-lg border border-cyan-200/60 bg-cyan-50/40 overflow-hidden">
+      {/* Header */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-[11px] hover:bg-cyan-100/30 transition-colors"
+      >
+        <ToolIcon className="h-3.5 w-3.5 shrink-0 text-cyan-600" />
+        <span className="font-semibold text-cyan-800">{toolLabel}</span>
+        <span className="flex-1 truncate text-left text-cyan-600/80">{event.query}</span>
+        {event.success ? (
+          <CheckCircle className="h-3 w-3 shrink-0 text-green-500" />
+        ) : (
+          <AlertTriangle className="h-3 w-3 shrink-0 text-red-500" />
+        )}
+        {event.result_count > 0 && (
+          <span className="shrink-0 rounded-full bg-cyan-200/60 px-1.5 py-0.5 text-[10px] font-medium text-cyan-700">
+            {event.result_count}
+          </span>
+        )}
+        {expanded ? <ChevronDown className="h-3 w-3 shrink-0 text-cyan-400" /> : <ChevronRight className="h-3 w-3 shrink-0 text-cyan-400" />}
+      </button>
+
+      {/* Results list */}
+      {expanded && results.length > 0 && (
+        <div className="border-t border-cyan-200/40 px-2.5 py-1.5 space-y-1">
+          {results.map((r, i) => (
+            <div key={i} className="flex items-start gap-2 text-[11px]">
+              <span className="shrink-0 mt-0.5 text-cyan-400 font-mono">{i + 1}.</span>
+              <div className="min-w-0 flex-1">
+                {r.url ? (
+                  <a
+                    href={r.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-cyan-700 hover:underline line-clamp-1"
+                  >
+                    {r.title || r.url}
+                  </a>
+                ) : (
+                  <span className="font-medium text-cyan-700 line-clamp-1">{r.title}</span>
+                )}
+                {r.snippet && (
+                  <p className="text-cyan-600/60 line-clamp-2 mt-0.5">{r.snippet}</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
-      {event.result_count > 0 && (
-        <span className="text-cyan-500">{event.result_count}</span>
+
+      {/* Error */}
+      {expanded && event.error && (
+        <div className="border-t border-red-200/40 px-2.5 py-1.5 text-[11px] text-red-500">
+          {event.error}
+        </div>
       )}
     </div>
   );

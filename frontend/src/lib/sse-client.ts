@@ -98,7 +98,7 @@ export class ResilientSSEClient {
       case 'task_created': handlers.onTaskCreated?.((event as any).session_id); break;
       case 'text': handlers.onText?.(event.content); break;
       case 'agent': handlers.onAgent?.(event.agent, event.action, event.content, event.message_count); break;
-      case 'tool': handlers.onTool?.(event.tool, event.result); break;
+      case 'tool': handlers.onTool?.(event); break;
       case 'status': handlers.onStatus?.(event.phase || event.status || '', event.round); break;
       case 'idea': handlers.onIdea?.(event.id, event.content, event.author); break;
       case 'vote': handlers.onVote?.(event.idea_id, event.content, event.author, event.elo_score, event.rank); break;
