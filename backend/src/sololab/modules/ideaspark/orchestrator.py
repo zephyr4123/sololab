@@ -100,7 +100,7 @@ class Orchestrator:
                 yield {
                     "type": "vote",
                     "idea_id": idea.id,
-                    "content": idea.content[:200],
+                    "content": idea.content,
                     "author": idea.sender,
                     "elo_score": round(score),
                     "rank": rank,
@@ -159,11 +159,16 @@ class Orchestrator:
             # 更新状态
             runner = next(r for n, r in runners if n == name)
             self.agent_states[name] = runner.state
+
+            # 发送工具调用事件（让前端看到搜索过程）
+            for tool_event in runner.tool_events:
+                yield tool_event
+
             yield {"type": "agent", "agent": name, "action": "done", "message_count": len(messages)}
 
             for msg in messages:
                 self.blackboard.append(msg)
-                yield {"type": "idea", "id": msg.id, "content": msg.content[:300], "author": name}
+                yield {"type": "idea", "id": msg.id, "content": msg.content, "author": name}
                 yield msg  # 传递 Message 对象
 
     async def _cluster_ideas(self, ideas: List[Message], num_groups: int = 4) -> List[List[Message]]:
@@ -203,14 +208,16 @@ class Orchestrator:
             task_prompt = (
                 f"审辩第 {group_idx + 1} 组的以下创意。"
                 f"找出弱点并提出改进建议。\n\n"
-                + "\n".join(f"- {m.content[:200]}" for m in group)
+                + "\n".join(f"- {m.content}" for m in group)
             )
             critiques = await critic_runner.run("", context_messages=group, task_prompt=task_prompt)
             self.agent_states["critic"] = critic_runner.state
+            for tool_event in critic_runner.tool_events:
+                yield tool_event
 
             for msg in critiques:
                 self.blackboard.append(msg)
-                yield {"type": "agent", "agent": "critic", "action": "critique", "content": msg.content[:200]}
+                yield {"type": "agent", "agent": "critic", "action": "critique", "content": msg.content}
                 yield msg
 
             # Connector 综合
@@ -226,7 +233,7 @@ class Orchestrator:
 
             for msg in syntheses:
                 self.blackboard.append(msg)
-                yield {"type": "agent", "agent": "connector", "action": "synthesis", "content": msg.content[:200]}
+                yield {"type": "agent", "agent": "connector", "action": "synthesis", "content": msg.content}
                 yield msg
                 group.append(msg)
 
@@ -239,11 +246,11 @@ class Orchestrator:
         runner = AgentRunner(connector_config, self.llm, self.tools)
         task_prompt = (
             "你正在进行跨组全局整合。"
-            "审阅以下所有创意，识别最具独特性的优质创意。"
-            "合并相似创意，去除重复，输出一个精简的最具前景研究方向列表。\n\n"
-            + "\n".join(f"[{m.sender}] {m.content[:300]}" for m in ideas)
+            "审阅之前讨论中的所有创意，识别最具独特性的优质创意。"
+            "合并相似创意，去除重复，输出一个精简的最具前景研究方向列表。"
         )
-        result = await runner.run("", task_prompt=task_prompt)
+        # 通过 context_messages 传递所有创意，走统一的 _build_messages 分类逻辑
+        result = await runner.run("", context_messages=ideas, task_prompt=task_prompt)
         self.agent_states["connector"] = runner.state
 
         # 保留所有原始 idea + 综合结果
@@ -272,8 +279,8 @@ class Orchestrator:
             runner = AgentRunner(evaluator_config, self.llm, self.tools)
             task_prompt = (
                 "比较以下两个研究创意，投票选出更优秀的一个。\n\n"
-                f"创意 A（来自 {idea_a.sender}）：\n{idea_a.content[:500]}\n\n"
-                f"创意 B（来自 {idea_b.sender}）：\n{idea_b.content[:500]}\n\n"
+                f"创意 A（来自 {idea_a.sender}）：\n{idea_a.content}\n\n"
+                f"创意 B（来自 {idea_b.sender}）：\n{idea_b.content}\n\n"
                 "哪个更好？输出：\n[msg_type: vote]\nWinner: A 或 B\nReason: <评审理由>"
             )
             result = await runner.run("", task_prompt=task_prompt)

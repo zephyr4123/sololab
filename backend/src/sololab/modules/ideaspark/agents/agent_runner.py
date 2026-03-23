@@ -36,6 +36,7 @@ class AgentRunner:
         self.llm = llm_gateway
         self.tools = tool_registry
         self.state = AgentState(name=config.name)
+        self.tool_events: List[Dict[str, Any]] = []  # 收集工具调用事件，供 orchestrator yield
 
     async def run(
         self,
@@ -131,35 +132,103 @@ class AgentRunner:
 
         self.state.status = "executing"
         self.state.last_action = f"calling {tool_name}"
-        logger.info("智能体 %s 调用工具 %s: %s", self.config.name, tool_name, arguments.get("query", ""))
+
+        # Query 改写：用 LLM 将原始 query 优化为更精确的搜索词
+        original_query = arguments.get("query", "")
+        rewritten_query = await self._rewrite_query(original_query, tool_name)
+        arguments["query"] = rewritten_query
+
+        logger.info(
+            "智能体 %s 调用工具 %s: %s → %s",
+            self.config.name, tool_name, original_query, rewritten_query,
+        )
 
         tool_result = await tool.execute(arguments)
+        # 收集工具事件供前端展示
+        self.tool_events.append({
+            "type": "tool",
+            "agent": self.config.name,
+            "tool": tool_name,
+            "query": rewritten_query,
+            "original_query": original_query,
+            "success": tool_result.success,
+            "result_preview": (tool_result.data.get("answer", "") or "")[:200] if tool_result.data else "",
+            "result_count": len(tool_result.data.get("results", [])) if tool_result.data else 0,
+            "error": tool_result.error,
+        })
         return {
             "tool": tool_name,
-            "query": arguments.get("query", ""),
+            "query": rewritten_query,
             "success": tool_result.success,
             "data": tool_result.data,
             "error": tool_result.error,
         }
 
+    async def _rewrite_query(self, query: str, tool_name: str) -> str:
+        """用 LLM 将 agent 的搜索 query 改写为更精确的搜索词。"""
+        if not query.strip():
+            return query
+
+        target = "学术论文" if tool_name in ("arxiv_search", "scholar_search") else "网页"
+        try:
+            result = await self.llm.generate(
+                messages=[{
+                    "role": "user",
+                    "content": (
+                        f"将以下搜索意图改写为 1 条精确的{target}搜索查询词（英文，不超过 15 个词）。\n"
+                        f"只输出改写后的查询词，不要任何解释。\n\n"
+                        f"原始意图：{query}"
+                    ),
+                }],
+                temperature=0.0,
+                max_tokens=60,
+            )
+            rewritten = result["content"].strip().strip('"').strip("'")
+            self.state.tokens_used += result["usage"]["prompt_tokens"] + result["usage"]["completion_tokens"]
+            self.state.cost_usd += result["usage"]["cost_usd"]
+            return rewritten if rewritten else query
+        except Exception:
+            return query  # 改写失败，使用原始 query
+
     def _build_messages(
         self, topic: str, context: List[Message], task_prompt: str
     ) -> List[Dict[str, str]]:
-        """构建发送给 LLM 的消息列表。"""
+        """构建发送给 LLM 的消息列表。
+
+        上下文传递策略：
+        - 按消息类型分类呈现（创意/批评/综合），而非按时间堆砌
+        - 传递完整内容，不做截断
+        - 标注消息来源和类型，便于 LLM 理解结构
+        """
         msgs: List[Dict[str, str]] = []
 
-        # 上下文消息（黑板上其他智能体的输出）
         if context:
-            context_text = "\n\n".join(
-                f"[{m.sender}] ({m.msg_type.value}): {m.content}" for m in context
-            )
+            # 按类型分组
+            by_type: Dict[str, List[str]] = {}
+            for m in context:
+                key = m.msg_type.value
+                by_type.setdefault(key, []).append(f"- [{m.sender}]: {m.content}")
+
+            TYPE_LABELS = {
+                "idea": "已有的研究创意",
+                "critique": "审辩意见",
+                "synthesis": "综合方案",
+                "vote": "评审结果",
+            }
+
+            parts = []
+            for msg_type, items in by_type.items():
+                label = TYPE_LABELS.get(msg_type, msg_type)
+                parts.append(f"### {label}\n" + "\n".join(items))
+
+            context_text = "\n\n".join(parts)
             msgs.append({
                 "role": "user",
-                "content": f"Previous discussion:\n{context_text}",
+                "content": f"以下是之前的讨论内容，请基于这些信息展开你的工作：\n\n{context_text}",
             })
 
-        # 当前任务（不再追加 inline 工具指令，由 API tools 参数处理）
-        prompt = task_prompt or f"Research topic: {topic}\n\nProvide your ideas and analysis."
+        # 当前任务
+        prompt = task_prompt or f"研究主题：{topic}\n\n请基于这个主题提出你的创意和分析。"
         msgs.append({"role": "user", "content": prompt})
         return msgs
 

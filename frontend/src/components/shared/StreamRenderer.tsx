@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { Sparkles, Search, MessageSquare, Brain, Scale, Trophy, CheckCircle, AlertTriangle, Bot } from 'lucide-react';
+import { Sparkles, Search, MessageSquare, Brain, Scale, Trophy, CheckCircle, AlertTriangle, Bot, Globe, BookOpen } from 'lucide-react';
 import { MarkdownViewer } from './MarkdownViewer';
+import { PipelineView } from './PipelineView';
 
 interface StreamEvent {
   type: string;
@@ -55,6 +56,14 @@ function AgentIcon({ agent, className = 'h-3.5 w-3.5' }: { agent: string; classN
 export function StreamRenderer({ events }: StreamRendererProps) {
   if (!events.length) return null;
 
+  // Detect if this is a pipeline stream (has status events)
+  const hasPipelineEvents = events.some(e => e.type === 'status');
+
+  if (hasPipelineEvents) {
+    return <PipelineView events={events} />;
+  }
+
+  // Fallback: flat card rendering for non-pipeline events
   return (
     <div className="space-y-3">
       {events.map((event, idx) => (
@@ -122,6 +131,37 @@ function StreamEventCard({ event }: { event: StreamEvent }) {
               ? `完成 (${event.message_count || 0} 条消息)`
               : event.action}
         </span>
+      </div>
+    );
+  }
+
+  if (event.type === 'tool') {
+    const ToolIcon = event.tool === 'web_search' ? Globe : BookOpen;
+    const toolLabel = event.tool === 'web_search' ? 'Web Search' : event.tool === 'arxiv_search' ? 'arXiv' : event.tool === 'scholar_search' ? 'Scholar' : event.tool;
+    return (
+      <div className="flex items-start gap-2 rounded-md border border-dashed border-cyan-300 bg-cyan-50/50 px-3 py-2 text-xs">
+        <ToolIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-600" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 font-medium text-cyan-800">
+            <span>{AGENT_NAMES[event.agent] || event.agent}</span>
+            <span className="rounded bg-cyan-200/60 px-1.5 py-0.5 text-[10px] font-semibold">{toolLabel}</span>
+            {event.success ? (
+              <CheckCircle className="h-3 w-3 text-green-500" />
+            ) : (
+              <AlertTriangle className="h-3 w-3 text-red-500" />
+            )}
+          </div>
+          <p className="mt-0.5 text-cyan-700 truncate">
+            {event.query}
+            {event.result_count > 0 && <span className="ml-1 text-cyan-500">({event.result_count} results)</span>}
+          </p>
+          {event.result_preview && (
+            <p className="mt-0.5 text-cyan-600/80 line-clamp-2">{event.result_preview}</p>
+          )}
+          {event.error && (
+            <p className="mt-0.5 text-red-500">{event.error}</p>
+          )}
+        </div>
       </div>
     );
   }
