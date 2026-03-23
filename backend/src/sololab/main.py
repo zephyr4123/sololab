@@ -52,8 +52,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from sololab.tools.scholar_search import SemanticScholarTool
     from sololab.tools.doc_parse import DocParseTool
 
-    for tool_cls in [TavilySearchTool, ArxivTool, SemanticScholarTool, DocParseTool]:
-        tool_registry.register(tool_cls())
+    doc_parse_tool = DocParseTool()
+    for tool in [TavilySearchTool(), ArxivTool(), SemanticScholarTool(), doc_parse_tool]:
+        tool_registry.register(tool)
 
     # 提示词管理器
     app.state.prompt_manager = PromptManager()
@@ -93,6 +94,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         app.state.document_pipeline = DocumentPipeline(
             app.state.llm_gateway, db_session, settings.storage_path
         )
+        # 将 DocumentPipeline 注入到 DocParseTool
+        doc_parse_tool.set_pipeline(app.state.document_pipeline)
     else:
         app.state.document_pipeline = None
 

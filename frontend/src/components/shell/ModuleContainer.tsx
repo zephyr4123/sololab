@@ -6,12 +6,13 @@ import { AgentTimeline } from '@/components/shared/AgentTimeline';
 import { AgentPanel } from '@/components/modules/ideaspark/AgentPanel';
 import { IdeaBoard } from '@/components/modules/ideaspark/IdeaBoard';
 import { VoteResult } from '@/components/modules/ideaspark/VoteResult';
+import { IdeaReport } from '@/components/modules/ideaspark/IdeaReport';
 
 interface ModuleContainerProps {
   moduleId: string;
 }
 
-type TabId = 'chat' | 'board' | 'detail';
+type TabId = 'chat' | 'board' | 'detail' | 'report';
 
 export function ModuleContainer({ moduleId }: ModuleContainerProps) {
   const [activeTab, setActiveTab] = useState<TabId>('chat');
@@ -20,6 +21,7 @@ export function ModuleContainer({ moduleId }: ModuleContainerProps) {
     { id: 'chat', label: 'Chat' },
     { id: 'board', label: 'Ideas' },
     { id: 'detail', label: 'Results' },
+    { id: 'report', label: 'Report' },
   ];
 
   return (
@@ -44,6 +46,7 @@ export function ModuleContainer({ moduleId }: ModuleContainerProps) {
         {activeTab === 'chat' && <ChatPanel moduleId={moduleId} />}
         {activeTab === 'board' && <IdeaBoard />}
         {activeTab === 'detail' && <VoteResult />}
+        {activeTab === 'report' && <IdeaReport />}
       </div>
 
       <aside className="hidden w-80 space-y-6 border-l pl-4 xl:block">

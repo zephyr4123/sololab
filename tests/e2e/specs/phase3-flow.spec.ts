@@ -63,4 +63,18 @@ test.describe("Phase 3: Document & Session Management", () => {
       expect(body).toHaveProperty("results");
     }
   });
+
+  test("IdeaSpark module page has Report tab", async ({ page }) => {
+    await page.goto("/modules/ideaspark");
+    const reportTab = page.getByRole("button", { name: "Report" });
+    await expect(reportTab).toBeVisible();
+  });
+
+  test("tools API lists doc_parse tool", async ({ request }) => {
+    const response = await request.get("/api/tools");
+    expect(response.ok()).toBeTruthy();
+    const body = await response.json();
+    const names = body.map((t: { name: string }) => t.name);
+    expect(names).toContain("doc_parse");
+  });
 });

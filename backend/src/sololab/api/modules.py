@@ -2,15 +2,31 @@
 
 import json
 from dataclasses import asdict
-from typing import Any
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from sololab.core.module_registry import ModuleRequest
 from sololab.models.module import ModuleRunRequest
 
 router = APIRouter()
+
+
+class ReportIdea(BaseModel):
+    """报告中的创意条目。"""
+    content: str
+    author: str = "unknown"
+    elo_score: float = 1500
+    rank: int = 0
+
+
+class ReportRequest(BaseModel):
+    """报告生成请求 — 接收已有的 top ideas，无需重跑模块。"""
+    topic: str
+    ideas: List[ReportIdea]
+    cost_usd: float = 0.0
 
 
 @router.get("/modules")
@@ -118,3 +134,61 @@ async def stop_module(module_id: str, request: Request) -> dict:
     """停止正在运行的模块执行。"""
     # TODO: 通过 task_id 取消具体任务
     return {"status": "stopped", "module_id": module_id}
+
+
+@router.post("/modules/{module_id}/report")
+async def export_report(module_id: str, body: ReportRequest, request: Request) -> dict:
+    """将已生成的 top ideas 导出为 Markdown 报告。
+
+    接收前端传来的 ideas 列表，通过 LLM 生成结构化报告。
+    不会重新执行模块流程。
+    """
+    from sololab.main import _build_module_context
+
+    registry = request.app.state.module_registry
+    if not registry.get_module(module_id):
+        raise HTTPException(404, f"Module '{module_id}' not loaded")
+
+    if not body.ideas:
+        raise HTTPException(400, "No ideas provided. Run the module first and submit top ideas.")
+
+    if not body.topic.strip():
+        raise HTTPException(400, "Topic cannot be empty.")
+
+    ctx = _build_module_context(request.app)
+    llm = ctx.llm_gateway
+
+    # 构建创意文本
+    ideas_text = "\n".join(
+        f"### Rank #{idea.rank}: (Elo {round(idea.elo_score)})\n"
+        f"**Author:** {idea.author}\n\n"
+        f"{idea.content}\n"
+        for idea in sorted(body.ideas, key=lambda x: x.rank)
+    )
+
+    report_prompt = (
+        f"Generate a comprehensive research ideation report in Markdown format.\n\n"
+        f"## Topic\n{body.topic}\n\n"
+        f"## Top Ideas\n{ideas_text}\n\n"
+        f"Write a well-structured report with:\n"
+        f"1. Executive Summary\n"
+        f"2. Methodology (multi-agent collaborative ideation)\n"
+        f"3. Top Research Ideas (with analysis)\n"
+        f"4. Recommended Next Steps\n"
+        f"5. References & Further Reading\n\n"
+        f"Use proper Markdown formatting with headers, bullet points, and emphasis."
+    )
+
+    result = await llm.generate(
+        messages=[{"role": "user", "content": report_prompt}],
+        temperature=0.3,
+        max_tokens=4096,
+    )
+
+    return {
+        "module_id": module_id,
+        "topic": body.topic,
+        "report_markdown": result["content"],
+        "idea_count": len(body.ideas),
+        "cost_usd": body.cost_usd + result["usage"].get("cost_usd", 0),
+    }

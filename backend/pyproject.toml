@@ -22,6 +22,7 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.25",
     "pgvector>=0.2.5",
     "aiohttp>=3.9.0",
+    "aiofiles>=23.0.0",
     "python-multipart>=0.0.9",
     "structlog>=24.1.0",
     "pyyaml>=6.0.1",
