@@ -11,12 +11,24 @@ router = APIRouter()
 
 @router.get("/providers")
 async def list_providers(request: Request) -> dict:
-    """列出可用的 LLM 提供商。"""
+    """列出可用的 LLM 提供商和模型。"""
     llm = request.app.state.llm_gateway
     config = llm.config
+
+    # 构建模型列表：default_model + fallback_chain（去重）
+    all_models = [config.default_model]
+    for model in config.fallback_chain:
+        if model not in all_models:
+            all_models.append(model)
+
+    models = [
+        {"id": m, "label": m.split("/")[-1] if "/" in m else m}
+        for m in all_models
+    ]
+
     return {
         "default_model": config.default_model,
-        "fallback_chain": config.fallback_chain,
+        "models": models,
         "embedding_model": config.embedding_model,
         "budget_limit_usd": config.budget_limit_usd,
     }
