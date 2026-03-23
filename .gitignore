@@ -63,3 +63,4 @@ CLAUDE.md
 *.log
 *.bak
 *.tmp
+*.tsbuildinfo
