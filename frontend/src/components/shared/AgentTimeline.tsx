@@ -10,13 +10,29 @@ const AGENT_COLORS: Record<string, string> = {
   evaluator: 'bg-yellow-500',
 };
 
+const AGENT_NAMES: Record<string, string> = {
+  divergent: '发散者',
+  expert: '领域专家',
+  critic: '审辩者',
+  connector: '整合者',
+  evaluator: '评审者',
+};
+
+const ACTION_LABELS: Record<string, string> = {
+  thinking: '思考中',
+  done: '完成',
+  critique: '审辩',
+  synthesis: '整合',
+  error: '出错',
+};
+
 export function AgentTimeline() {
   const { agentEvents } = useIdeaSparkStore();
 
   if (agentEvents.length === 0) {
     return (
       <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">
-        Agent activity will appear here
+        智能体活动将在此显示
       </div>
     );
   }
@@ -30,8 +46,8 @@ export function AgentTimeline() {
           <div key={idx} className="flex items-start gap-2 text-xs">
             <div className={`mt-1 h-2 w-2 rounded-full ${color} shrink-0`} />
             <div className="flex-1 min-w-0">
-              <span className="font-medium capitalize">{event.agent}</span>
-              <span className="text-muted-foreground"> {event.action}</span>
+              <span className="font-medium">{AGENT_NAMES[event.agent] || event.agent}</span>
+              <span className="text-muted-foreground"> {ACTION_LABELS[event.action] || event.action}</span>
               {event.content && (
                 <p className="text-muted-foreground truncate">{event.content}</p>
               )}

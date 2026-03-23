@@ -18,15 +18,15 @@ export function ModuleContainer({ moduleId }: ModuleContainerProps) {
   const [activeTab, setActiveTab] = useState<TabId>('chat');
 
   const tabs: { id: TabId; label: string }[] = [
-    { id: 'chat', label: 'Chat' },
-    { id: 'board', label: 'Ideas' },
-    { id: 'detail', label: 'Results' },
-    { id: 'report', label: 'Report' },
+    { id: 'chat', label: '对话' },
+    { id: 'board', label: '创意' },
+    { id: 'detail', label: '结果' },
+    { id: 'report', label: '报告' },
   ];
 
   return (
-    <div className="flex h-full gap-4">
-      <div className="flex flex-1 flex-col">
+    <div className="flex h-full min-h-0 gap-4">
+      <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
         <div className="mb-4 flex gap-1 border-b">
           {tabs.map((tab) => (
             <button
@@ -49,10 +49,10 @@ export function ModuleContainer({ moduleId }: ModuleContainerProps) {
         {activeTab === 'report' && <IdeaReport />}
       </div>
 
-      <aside className="hidden w-80 space-y-6 border-l pl-4 xl:block">
+      <aside className="hidden w-80 min-h-0 overflow-y-auto space-y-6 border-l pl-4 xl:block">
         <AgentPanel />
         <div>
-          <h3 className="mb-3 text-sm font-semibold text-muted-foreground">Activity</h3>
+          <h3 className="mb-3 text-sm font-semibold text-muted-foreground">活动日志</h3>
           <AgentTimeline />
         </div>
       </aside>

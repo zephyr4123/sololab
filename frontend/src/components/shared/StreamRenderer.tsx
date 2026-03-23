@@ -14,7 +14,7 @@ const PHASE_LABELS: Record<string, string> = {
   cluster: '语义聚类',
   together: '分组讨论',
   synthesize: '全局综合',
-  evaluate: '锦标赛评估',
+  evaluate: '综合评审',
   converged: '已收敛',
   done: '完成',
 };
@@ -33,6 +33,14 @@ const AGENT_ICONS: Record<string, string> = {
   critic: '\u{1F50D}',
   connector: '\u{1F517}',
   evaluator: '\u{2696}\u{FE0F}',
+};
+
+const AGENT_NAMES: Record<string, string> = {
+  divergent: '发散者',
+  expert: '领域专家',
+  critic: '审辩者',
+  connector: '整合者',
+  evaluator: '评审者',
 };
 
 export function StreamRenderer({ events }: StreamRendererProps) {
@@ -69,7 +77,7 @@ function StreamEventCard({ event }: { event: StreamEvent }) {
       <div className={`rounded-lg border p-3 ${colorClass}`}>
         <div className="mb-1 flex items-center gap-2 text-xs font-semibold">
           <span>{icon}</span>
-          <span className="capitalize">{event.author}</span>
+          <span>{AGENT_NAMES[event.author] || event.author}</span>
           <span className="font-normal opacity-60">{'\u63D0\u51FA\u4E86\u65B0\u521B\u610F'}</span>
         </div>
         <p className="text-sm leading-relaxed">{event.content}</p>
@@ -87,7 +95,7 @@ function StreamEventCard({ event }: { event: StreamEvent }) {
         <div className={`rounded-lg border p-3 ${colorClass}`}>
           <div className="mb-1 flex items-center gap-2 text-xs font-semibold">
             <span>{icon}</span>
-            <span className="capitalize">{event.agent}</span>
+            <span>{AGENT_NAMES[event.agent] || event.agent}</span>
             <span className="rounded bg-white/50 px-1.5 py-0.5 text-[10px] font-medium">{event.action}</span>
           </div>
           <p className="whitespace-pre-wrap text-sm leading-relaxed">{event.content}</p>
@@ -99,7 +107,7 @@ function StreamEventCard({ event }: { event: StreamEvent }) {
     return (
       <div className="flex items-center gap-2 py-1 text-xs text-gray-500">
         <span>{icon}</span>
-        <span className="font-medium capitalize">{event.agent}</span>
+        <span className="font-medium">{AGENT_NAMES[event.agent] || event.agent}</span>
         <span>
           {event.action === 'thinking'
             ? '\u6B63\u5728\u601D\u8003...'
@@ -118,7 +126,7 @@ function StreamEventCard({ event }: { event: StreamEvent }) {
           <div className="flex items-center gap-2 text-xs font-semibold text-amber-800">
             <span>{'\u{1F3C6}'}</span>
             <span>#{event.rank}</span>
-            <span className="font-normal capitalize text-amber-600">by {event.author}</span>
+            <span className="font-normal text-amber-600">来自 {AGENT_NAMES[event.author] || event.author}</span>
           </div>
           <span className="rounded bg-amber-200 px-2 py-0.5 text-xs font-bold text-amber-900">
             Elo {event.elo_score}

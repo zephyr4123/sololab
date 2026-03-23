@@ -19,6 +19,23 @@ const AGENT_COLORS: Record<string, string> = {
   evaluator: 'text-yellow-500',
 };
 
+const AGENT_NAMES: Record<string, string> = {
+  divergent: '发散者',
+  expert: '领域专家',
+  critic: '审辩者',
+  connector: '整合者',
+  evaluator: '评审者',
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  idle: '待命',
+  thinking: '思考中',
+  done: '完成',
+  executing: '执行中',
+  critique: '审辩中',
+  synthesis: '整合中',
+};
+
 export function AgentPanel() {
   const { agentEvents, phase } = useIdeaSparkStore();
 
@@ -30,7 +47,7 @@ export function AgentPanel() {
 
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-semibold text-muted-foreground">Agents</h3>
+      <h3 className="text-sm font-semibold text-muted-foreground">智能体</h3>
       <div className="space-y-2">
         {agentNames.map((name) => {
           const Icon = AGENT_ICONS[name] || Brain;
@@ -41,9 +58,9 @@ export function AgentPanel() {
           return (
             <div key={name} className="flex items-center gap-2 rounded-md border p-2 text-sm">
               <Icon className={`h-4 w-4 ${color}`} />
-              <span className="flex-1 capitalize font-medium">{name}</span>
+              <span className="flex-1 font-medium">{AGENT_NAMES[name] || name}</span>
               <span className={`text-xs ${isActive ? 'text-green-500 animate-pulse' : 'text-muted-foreground'}`}>
-                {status}
+                {STATUS_LABELS[status] || status}
               </span>
             </div>
           );

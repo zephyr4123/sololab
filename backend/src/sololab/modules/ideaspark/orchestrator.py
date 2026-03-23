@@ -201,8 +201,8 @@ class Orchestrator:
             yield {"type": "agent", "agent": "critic", "action": f"reviewing group {group_idx + 1}, round {i + 1}"}
             critic_runner = AgentRunner(critic_config, self.llm, self.tools)
             task_prompt = (
-                f"Review and critique the following ideas in group {group_idx + 1}. "
-                f"Identify weaknesses and suggest improvements.\n\n"
+                f"审辩第 {group_idx + 1} 组的以下创意。"
+                f"找出弱点并提出改进建议。\n\n"
                 + "\n".join(f"- {m.content[:200]}" for m in group)
             )
             critiques = await critic_runner.run("", context_messages=group, task_prompt=task_prompt)
@@ -217,8 +217,8 @@ class Orchestrator:
             yield {"type": "agent", "agent": "connector", "action": f"synthesizing group {group_idx + 1}, round {i + 1}"}
             conn_runner = AgentRunner(connector_config, self.llm, self.tools)
             task_prompt = (
-                f"Based on the ideas and critiques in group {group_idx + 1}, "
-                f"synthesize improved ideas by combining strengths and addressing weaknesses."
+                f"基于第 {group_idx + 1} 组的创意和审辩意见，"
+                f"通过结合优势和解决弱点来整合出改进后的创意。"
             )
             all_context = group + critiques
             syntheses = await conn_runner.run("", context_messages=all_context, task_prompt=task_prompt)
@@ -238,10 +238,9 @@ class Orchestrator:
         connector_config = get_persona("connector")
         runner = AgentRunner(connector_config, self.llm, self.tools)
         task_prompt = (
-            "You are performing global synthesis across all discussion groups. "
-            "Review all the ideas below and identify the strongest unique ideas. "
-            "Merge similar ideas, remove duplicates, and output a consolidated list "
-            "of the most promising research directions.\n\n"
+            "你正在进行跨组全局整合。"
+            "审阅以下所有创意，识别最具独特性的优质创意。"
+            "合并相似创意，去除重复，输出一个精简的最具前景研究方向列表。\n\n"
             + "\n".join(f"[{m.sender}] {m.content[:300]}" for m in ideas)
         )
         result = await runner.run("", task_prompt=task_prompt)
@@ -272,10 +271,10 @@ class Orchestrator:
         async def _evaluate_pair(idea_a, idea_b):
             runner = AgentRunner(evaluator_config, self.llm, self.tools)
             task_prompt = (
-                "Compare these two research ideas and vote for the better one.\n\n"
-                f"Idea A (by {idea_a.sender}):\n{idea_a.content[:500]}\n\n"
-                f"Idea B (by {idea_b.sender}):\n{idea_b.content[:500]}\n\n"
-                "Which is better? Output:\n[msg_type: vote]\nWinner: A or B\nReason: <justification>"
+                "比较以下两个研究创意，投票选出更优秀的一个。\n\n"
+                f"创意 A（来自 {idea_a.sender}）：\n{idea_a.content[:500]}\n\n"
+                f"创意 B（来自 {idea_b.sender}）：\n{idea_b.content[:500]}\n\n"
+                "哪个更好？输出：\n[msg_type: vote]\nWinner: A 或 B\nReason: <评审理由>"
             )
             result = await runner.run("", task_prompt=task_prompt)
             self.agent_states["evaluator"] = runner.state
@@ -341,8 +340,7 @@ class Orchestrator:
             f"- {m.content[:150]}" for m in top_ideas[:3]
         )
         return (
-            f"Original topic: {original_topic}\n\n"
-            f"The best ideas so far are:\n{idea_summaries}\n\n"
-            f"Deepen, extend, and improve upon these ideas. "
-            f"Explore new angles and combinations."
+            f"原始主题：{original_topic}\n\n"
+            f"目前最佳创意：\n{idea_summaries}\n\n"
+            f"请深化、延展和改进这些创意，探索新的角度和组合。"
         )
