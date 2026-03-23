@@ -41,23 +41,6 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  litellm:
-    image: ghcr.io/berriai/litellm:main-latest
-    restart: unless-stopped
-    ports:
-      - "4000:4000"
-    env_file: .env
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    volumes:
-      - ./backend/src/sololab/config/litellm_config.yaml:/app/config.yaml
-    command: --config /app/config.yaml --port 4000
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped

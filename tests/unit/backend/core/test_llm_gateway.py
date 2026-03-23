@@ -65,10 +65,8 @@ class TestLLMGateway:
         assert len(vectors) == 3
 
     @pytest.mark.unit
-    def test_model_name_auto_prefix(self):
-        """不含 / 的模型名应自动加 openai/ 前缀。"""
+    def test_config_default_model(self):
+        """LLMConfig 应正确设置默认模型。"""
         config = LLMConfig(default_model="qwen-plus")
         gw = LLMGateway(config)
-        assert gw._model_name() == "openai/qwen-plus"
-        assert gw._model_name("gpt-4o") == "openai/gpt-4o"
-        assert gw._model_name("openai/gpt-4o") == "openai/gpt-4o"
+        assert gw.config.default_model == "qwen-plus"

@@ -74,7 +74,7 @@ class TestModulesAPI:
         assert response.status_code == 200
         data = response.json()
         assert "default_model" in data
-        assert "fallback_chain" in data
+        assert "models" in data
         assert "embedding_model" in data
 
     @pytest.mark.unit

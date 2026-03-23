@@ -16,11 +16,6 @@
 		reverse_proxy frontend:3000
 	}
 
-	# LiteLLM 代理（内部）
-	handle /litellm/* {
-		reverse_proxy litellm:4000
-	}
-
 	# 日志
 	log {
 		output stdout

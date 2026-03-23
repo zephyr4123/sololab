@@ -41,7 +41,7 @@ class TestModuleFlow:
         assert resp.status_code == 200
         data = resp.json()
         assert "default_model" in data
-        assert "fallback_chain" in data
+        assert "models" in data
 
         # 4. 测试 LLM 提供商连通性
         model_name = data.get("default_model", "gpt-4o")

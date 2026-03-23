@@ -15,8 +15,5 @@ services:
     environment:
       - NODE_ENV=production
 
-  litellm:
-    restart: unless-stopped
-
   caddy:
     restart: unless-stopped
