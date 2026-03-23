@@ -3,8 +3,7 @@
 import { useState } from 'react';
 import { MessageSquare, Lightbulb, Trophy, FileText } from 'lucide-react';
 import { ChatPanel } from '@/components/shared/ChatPanel';
-import { AgentTimeline } from '@/components/shared/AgentTimeline';
-import { AgentPanel } from '@/components/modules/ideaspark/AgentPanel';
+import { ConversationHistory } from '@/components/shared/ConversationHistory';
 import { IdeaBoard } from '@/components/modules/ideaspark/IdeaBoard';
 import { VoteResult } from '@/components/modules/ideaspark/VoteResult';
 import { IdeaReport } from '@/components/modules/ideaspark/IdeaReport';
@@ -64,12 +63,9 @@ export function ModuleContainer({ moduleId }: ModuleContainerProps) {
         </div>
       </div>
 
-      <aside className="hidden w-80 min-h-0 overflow-y-auto space-y-6 border-l pl-4 xl:block">
-        <AgentPanel />
-        <div>
-          <h3 className="mb-3 text-sm font-semibold text-muted-foreground">活动日志</h3>
-          <AgentTimeline />
-        </div>
+      {/* Right sidebar: Conversation History */}
+      <aside className="hidden w-72 min-h-0 border-l pl-4 xl:block">
+        <ConversationHistory moduleId={moduleId} />
       </aside>
     </div>
   );

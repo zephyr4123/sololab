@@ -12,13 +12,15 @@ export class ResilientSSEClient {
   private abortController: AbortController | null = null;
   private maxRetries = 3;
 
-  async start(moduleId: string, input: string, params: Record<string, unknown>, handlers: StreamHandlers) {
+  private sessionId: string | null = null;
+
+  async start(moduleId: string, input: string, params: Record<string, unknown>, handlers: StreamHandlers, sessionId?: string) {
     this.abortController = new AbortController();
     try {
       const response = await fetch(`${API_BASE}/api/modules/${moduleId}/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input, params }),
+        body: JSON.stringify({ input, params, session_id: sessionId }),
         signal: this.abortController.signal,
       });
       await this.consumeStream(response, handlers);
@@ -48,8 +50,9 @@ export class ResilientSSEClient {
         }
         if (!line.startsWith('data: ')) continue;
 
-        const event = JSON.parse(line.slice(6)) as SSEEvent & { task_id?: string };
+        const event = JSON.parse(line.slice(6)) as SSEEvent & { task_id?: string; session_id?: string };
         if (event.task_id) this.taskId = event.task_id;
+        if (event.session_id) this.sessionId = event.session_id;
         this.dispatchEvent(event, handlers);
         if (event.type === 'done' || event.type === 'error') return;
       }
@@ -92,6 +95,7 @@ export class ResilientSSEClient {
 
   private dispatchEvent(event: SSEEvent, handlers: StreamHandlers) {
     switch (event.type) {
+      case 'task_created': handlers.onTaskCreated?.((event as any).session_id); break;
       case 'text': handlers.onText?.(event.content); break;
       case 'agent': handlers.onAgent?.(event.agent, event.action, event.content, event.message_count); break;
       case 'tool': handlers.onTool?.(event.tool, event.result); break;

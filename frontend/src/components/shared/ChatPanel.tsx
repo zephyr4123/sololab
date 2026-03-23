@@ -1,68 +1,41 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import { Send, Loader2, Square } from 'lucide-react';
 import { StreamRenderer } from '@/components/shared/StreamRenderer';
 import { ResilientSSEClient } from '@/lib/sse-client';
 import { useIdeaSparkStore } from '@/stores/module-stores/ideaspark-store';
 import { useTaskStore } from '@/stores/task-store';
+import { useSessionStore } from '@/stores/session-store';
 
 interface ChatPanelProps {
   moduleId: string;
 }
 
-interface StreamEvent {
-  type: string;
-  [key: string]: any;
-}
-
-interface ChatEntry {
-  kind: 'user' | 'stream';
-  userText?: string;
-  events?: StreamEvent[];
-}
-
 export function ChatPanel({ moduleId }: ChatPanelProps) {
-  const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const clientRef = useRef<ResilientSSEClient | null>(null);
   const ideaStore = useIdeaSparkStore();
   const taskStore = useTaskStore();
+  const sessionStore = useSessionStore();
+  const entries = sessionStore.chatEntries;
 
   // Auto-scroll when entries change
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [entries]);
 
-  // Helper: append an SSE event to the current (last) stream entry
-  const appendEvent = useCallback((event: StreamEvent) => {
-    setEntries((prev) => {
-      const copy = [...prev];
-      const last = copy[copy.length - 1];
-      if (last && last.kind === 'stream') {
-        copy[copy.length - 1] = {
-          ...last,
-          events: [...(last.events || []), event],
-        };
-      }
-      return copy;
-    });
-  }, []);
-
   const handleSend = async () => {
     if (!input.trim() || isStreaming) return;
 
     const topic = input.trim();
-    // Add user bubble + empty stream entry
-    setEntries((prev) => [
-      ...prev,
-      { kind: 'user', userText: topic },
-      { kind: 'stream', events: [] },
-    ]);
+
+    // Add user bubble + empty stream entry to store
+    sessionStore.appendChatEntry({ kind: 'user', userText: topic });
+    sessionStore.appendChatEntry({ kind: 'stream', events: [] });
     setInput('');
     setIsStreaming(true);
     ideaStore.reset();
@@ -72,25 +45,30 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
     clientRef.current = client;
 
     await client.start(moduleId, topic, {}, {
+      onTaskCreated: (sessionId) => {
+        if (sessionId) {
+          sessionStore.setCurrentSession(sessionId);
+        }
+      },
       onStatus: (phase, round) => {
         ideaStore.setPhase(phase as any);
         if (round) ideaStore.setRound(round);
-        appendEvent({ type: 'status', phase, round });
+        sessionStore.appendEventToLastEntry({ type: 'status', phase, round });
       },
       onAgent: (agent, action, content, messageCount) => {
         ideaStore.addAgentEvent({ agent, action, content });
-        appendEvent({ type: 'agent', agent, action, content, message_count: messageCount });
+        sessionStore.appendEventToLastEntry({ type: 'agent', agent, action, content, message_count: messageCount });
       },
       onIdea: (id, content, author) => {
         ideaStore.addIdea({ id, content, author, eloScore: 1500 });
-        appendEvent({ type: 'idea', id, content, author });
+        sessionStore.appendEventToLastEntry({ type: 'idea', id, content, author });
       },
       onVote: (ideaId, content, author, eloScore, rank) => {
         ideaStore.setTopIdeas([
           ...ideaStore.topIdeas,
           { id: ideaId, content, author, eloScore, rank, round: ideaStore.currentRound },
         ]);
-        appendEvent({ type: 'vote', idea_id: ideaId, content, author, elo_score: eloScore, rank });
+        sessionStore.appendEventToLastEntry({ type: 'vote', idea_id: ideaId, content, author, elo_score: eloScore, rank });
       },
       onDone: (topIdeas, costUsd) => {
         if (topIdeas) {
@@ -107,12 +85,15 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
         ideaStore.setPhase('done');
         taskStore.setStatus('completed');
         setIsStreaming(false);
-        appendEvent({ type: 'done', top_ideas: topIdeas, cost_usd: costUsd });
+        sessionStore.appendEventToLastEntry({ type: 'done', top_ideas: topIdeas, cost_usd: costUsd });
+        // Refresh session list to show the new conversation
+        sessionStore.fetchSessions(moduleId);
       },
       onError: (message) => {
         taskStore.setStatus('failed');
         setIsStreaming(false);
-        appendEvent({ type: 'error', message });
+        sessionStore.appendEventToLastEntry({ type: 'error', message });
+        sessionStore.fetchSessions(moduleId);
       },
       onReconnecting: () => {
         taskStore.setStatus('reconnecting');
@@ -129,7 +110,7 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
   return (
     <div className="flex flex-1 flex-col min-h-0">
       {/* Scrollable chat area */}
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-4">
         {entries.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center text-center">
             <Image src="/logo.png" alt="SoloLab" width={80} height={80} className="mb-4 h-20 w-auto object-contain opacity-80" />
@@ -151,8 +132,6 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
                 </div>
               );
             }
-
-            // Stream entry
             return (
               <div key={i} className="w-full">
                 <StreamRenderer events={entry.events || []} />
@@ -161,11 +140,10 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
           })}
         </div>
 
-        {/* Streaming indicator */}
         {isStreaming && (
           <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            <span>{'\u667A\u80FD\u4F53\u6B63\u5728\u534F\u4F5C\u4E2D...'}</span>
+            <span>智能体正在协作中...</span>
           </div>
         )}
 
@@ -184,7 +162,7 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
                 handleSend();
               }
             }}
-            placeholder={'\u8F93\u5165\u7814\u7A76\u4E3B\u9898\uFF0C\u4F8B\u5982\uFF1A\u201C\u5982\u4F55\u7528 LLM \u6539\u8FDB\u8DE8\u5B66\u79D1\u7814\u7A76\u534F\u4F5C\u201D'}
+            placeholder='输入研究主题，例如："如何用 LLM 改进跨学科研究协作"'
             rows={1}
             className="max-h-32 min-h-[40px] flex-1 resize-none rounded-lg border bg-background px-4 py-2.5 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary"
             disabled={isStreaming}

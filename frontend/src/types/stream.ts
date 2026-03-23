@@ -7,11 +7,12 @@ export type SSEEvent =
   | { type: 'status'; phase?: string; round?: number; status?: string; [key: string]: unknown }
   | { type: 'idea'; id: string; content: string; author: string }
   | { type: 'vote'; idea_id: string; content: string; author: string; elo_score: number; rank: number; round: number }
-  | { type: 'task_created'; task_id: string }
+  | { type: 'task_created'; task_id: string; session_id?: string }
   | { type: 'done'; top_ideas?: Array<{ id: string; content: string; author: string; elo_score: number }>; cost_usd?: number }
   | { type: 'error'; message?: string; error?: string };
 
 export interface StreamHandlers {
+  onTaskCreated?: (sessionId?: string) => void;
   onText?: (text: string) => void;
   onAgent?: (agent: string, action: string, content?: string, messageCount?: number) => void;
   onTool?: (tool: string, result: unknown) => void;

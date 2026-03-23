@@ -100,11 +100,12 @@ async def run_module(module_id: str, body: ModuleRunRequest, request: Request) -
 
 @router.post("/modules/{module_id}/stream")
 async def stream_module(module_id: str, body: ModuleRunRequest, request: Request) -> StreamingResponse:
-    """SSE 流式模块执行，带任务状态追踪。"""
+    """SSE 流式模块执行，带任务状态追踪和会话持久化。"""
     from sololab.main import _build_module_context
 
     registry = request.app.state.module_registry
     tsm = request.app.state.task_state_manager
+    session_mgr = getattr(request.app.state, "session_manager", None)
 
     if not registry.get_module(module_id):
         raise HTTPException(404, f"Module '{module_id}' not loaded")
@@ -113,17 +114,58 @@ async def stream_module(module_id: str, body: ModuleRunRequest, request: Request
     ctx = _build_module_context(request.app)
     mod_request = ModuleRequest(input=body.input, params=body.params or {})
 
+    # 会话持久化：创建或复用 session
+    session_id = body.session_id
+    if session_mgr and not session_id:
+        try:
+            session_id = await session_mgr.create_session(
+                title=body.input[:50], module_id=module_id,
+            )
+            await session_mgr.add_message(
+                session_id=session_id, role="user", content=body.input, module_id=module_id,
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("会话创建失败，降级运行: %s", e)
+            session_mgr = None
+
     async def event_generator():
-        yield f"data: {json.dumps({'type': 'task_created', 'task_id': task_id})}\n\n"
+        collected_events: list[dict] = []
+        yield f"data: {json.dumps({'type': 'task_created', 'task_id': task_id, 'session_id': session_id})}\n\n"
         try:
             async for chunk in registry.run(module_id, mod_request, ctx):
                 event_data = chunk if isinstance(chunk, dict) else {"content": str(chunk)}
+                collected_events.append(event_data)
                 await tsm.append_event(task_id, event_data.get("type", "text"), event_data)
                 yield f"data: {json.dumps(event_data)}\n\n"
             await tsm.complete_task(task_id, {})
-            yield f"data: {json.dumps({'type': 'done', 'task_id': task_id})}\n\n"
+            # 持久化完整对话到 PostgreSQL
+            if session_mgr and session_id:
+                try:
+                    cost = next(
+                        (e.get("cost_usd", 0) for e in reversed(collected_events) if e.get("type") == "done"),
+                        0,
+                    )
+                    await session_mgr.add_message(
+                        session_id=session_id, role="assistant", content="",
+                        module_id=module_id,
+                        metadata={"events": collected_events, "task_id": task_id},
+                        cost_usd=cost,
+                    )
+                except Exception:
+                    pass  # 持久化失败不影响流式响应
         except Exception as e:
             await tsm.fail_task(task_id, str(e))
+            # 持久化失败的部分对话
+            if session_mgr and session_id:
+                try:
+                    await session_mgr.add_message(
+                        session_id=session_id, role="assistant", content="",
+                        module_id=module_id,
+                        metadata={"events": collected_events, "task_id": task_id, "status": "failed", "error": str(e)},
+                    )
+                except Exception:
+                    pass
             yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
