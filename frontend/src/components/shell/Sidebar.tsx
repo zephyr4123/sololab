@@ -19,13 +19,22 @@ export function Sidebar() {
   const setCurrentModule = useAppStore((s) => s.setCurrentModule);
 
   return (
-    <aside className="flex h-full w-16 flex-col items-center border-r bg-card py-4 lg:w-56">
-      <Link href="/" className="mb-6 flex items-center gap-2 px-3">
-        <Image src="/logo.png" alt="SoloLab" width={32} height={32} className="h-8 w-8 object-contain" />
-        <span className="hidden text-lg font-bold lg:block">SoloLab</span>
+    <aside className="flex h-full w-16 flex-col border-r bg-card/50 backdrop-blur-sm lg:w-56">
+      {/* Logo */}
+      <Link href="/" className="flex items-center gap-2.5 px-4 py-5 transition-opacity hover:opacity-80">
+        <Image src="/logo.png" alt="SoloLab" width={28} height={28} className="h-7 w-7 object-contain" />
+        <span className="hidden text-base font-bold tracking-tight lg:block">SoloLab</span>
       </Link>
 
-      <nav className="flex flex-1 flex-col gap-1 px-2 w-full">
+      {/* Divider */}
+      <div className="mx-3 mb-2 h-px bg-border/60" />
+
+      {/* Navigation label */}
+      <p className="hidden mb-1.5 px-4 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 lg:block">
+        Modules
+      </p>
+
+      <nav className="flex flex-1 flex-col gap-0.5 px-2">
         {modules.map((mod) => {
           const Icon = mod.icon;
           const isActive = currentModule === mod.id;
@@ -34,10 +43,10 @@ export function Sidebar() {
             return (
               <div
                 key={mod.id}
-                className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground/50 cursor-not-allowed"
-                title="即将推出"
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground/40 cursor-not-allowed"
+                title="Coming soon"
               >
-                <Icon className="h-5 w-5 shrink-0" />
+                <Icon className="h-4 w-4 shrink-0" />
                 <span className="hidden flex-1 lg:block">{mod.name}</span>
                 <Lock className="hidden h-3 w-3 lg:block" />
               </div>
@@ -49,19 +58,22 @@ export function Sidebar() {
               key={mod.id}
               href={`/modules/${mod.id}`}
               onClick={() => setCurrentModule(mod.id)}
-              className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
-                isActive ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent'
+              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
+                isActive
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-muted-foreground hover:bg-accent hover:text-foreground'
               }`}
             >
-              <Icon className="h-5 w-5 shrink-0" />
+              <Icon className="h-4 w-4 shrink-0" />
               <span className="hidden lg:block">{mod.name}</span>
             </Link>
           );
         })}
       </nav>
 
-      <div className="mt-auto px-3 pt-4 border-t w-full">
-        <p className="hidden text-[10px] text-muted-foreground/60 text-center lg:block">
+      {/* Footer */}
+      <div className="px-4 py-3 border-t border-border/40">
+        <p className="hidden text-[10px] text-muted-foreground/50 text-center lg:block">
           Powered By Suxiang.Huang
         </p>
       </div>

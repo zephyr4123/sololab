@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { MessageSquare, Lightbulb, Trophy, FileText } from 'lucide-react';
 import { ChatPanel } from '@/components/shared/ChatPanel';
 import { AgentTimeline } from '@/components/shared/AgentTimeline';
 import { AgentPanel } from '@/components/modules/ideaspark/AgentPanel';
@@ -14,43 +15,53 @@ interface ModuleContainerProps {
 
 type TabId = 'chat' | 'board' | 'detail' | 'report';
 
+const tabs: { id: TabId; label: string; icon: typeof MessageSquare }[] = [
+  { id: 'chat', label: '对话', icon: MessageSquare },
+  { id: 'board', label: '创意', icon: Lightbulb },
+  { id: 'detail', label: '结果', icon: Trophy },
+  { id: 'report', label: '报告', icon: FileText },
+];
+
 export function ModuleContainer({ moduleId }: ModuleContainerProps) {
   const [activeTab, setActiveTab] = useState<TabId>('chat');
-
-  const tabs: { id: TabId; label: string }[] = [
-    { id: 'chat', label: '对话' },
-    { id: 'board', label: '创意' },
-    { id: 'detail', label: '结果' },
-    { id: 'report', label: '报告' },
-  ];
 
   return (
     <div className="flex h-full min-h-0 gap-4">
       <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
-        <div className="mb-4 flex gap-1 border-b">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${
-                activeTab === tab.id
-                  ? 'border-b-2 border-primary text-primary'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        {/* Tab bar */}
+        <div className="mb-3 flex gap-1 rounded-lg bg-muted/50 p-1">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-sm font-medium transition-all ${
+                  activeTab === tab.id
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
 
-        {activeTab === 'chat' && <ChatPanel moduleId={moduleId} />}
-        {activeTab !== 'chat' && (
-          <div className="flex-1 min-h-0 overflow-y-auto p-2">
-            {activeTab === 'board' && <IdeaBoard />}
-            {activeTab === 'detail' && <VoteResult />}
-            {activeTab === 'report' && <IdeaReport />}
-          </div>
-        )}
+        {/* Tab content — all panels stay mounted, hidden via CSS */}
+        <div className={activeTab === 'chat' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
+          <ChatPanel moduleId={moduleId} />
+        </div>
+        <div className={activeTab === 'board' ? 'flex-1 min-h-0 overflow-y-auto p-2' : 'hidden'}>
+          <IdeaBoard />
+        </div>
+        <div className={activeTab === 'detail' ? 'flex-1 min-h-0 overflow-y-auto p-2' : 'hidden'}>
+          <VoteResult />
+        </div>
+        <div className={activeTab === 'report' ? 'flex-1 min-h-0 overflow-y-auto p-2' : 'hidden'}>
+          <IdeaReport />
+        </div>
       </div>
 
       <aside className="hidden w-80 min-h-0 overflow-y-auto space-y-6 border-l pl-4 xl:block">
