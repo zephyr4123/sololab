@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, memo } from 'react';
 import {
   Sparkles, Search, MessageSquare, Brain, Scale, Bot,
   Globe, BookOpen, Trophy, CheckCircle, AlertTriangle,
@@ -105,7 +105,7 @@ interface PipelineViewProps {
   events: StreamEvent[];
 }
 
-export function PipelineView({ events }: PipelineViewProps) {
+export const PipelineView = memo(function PipelineView({ events }: PipelineViewProps) {
   const { rounds, currentPhase, currentRound } = useMemo(() => groupEventsByPhase(events), [events]);
 
   // Check for done/error events
@@ -130,7 +130,7 @@ export function PipelineView({ events }: PipelineViewProps) {
       {errorEvent && <ErrorSection event={errorEvent} />}
     </div>
   );
-}
+});
 
 // ─── Round Section ───────────────────────────────────────────
 
@@ -483,7 +483,7 @@ function GenericPhaseView({ events }: { events: StreamEvent[] }) {
 // ─── Shared: Tool Call Card (expandable with results) ────────
 
 function ToolCallCard({ event }: { event: StreamEvent }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const ToolIcon = event.tool === 'web_search' ? Globe : BookOpen;
   const toolLabel = event.tool === 'web_search' ? 'Web Search'
     : event.tool === 'arxiv_search' ? 'arXiv Search'

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -10,7 +11,7 @@ interface MarkdownViewerProps {
   compact?: boolean;
 }
 
-export function MarkdownViewer({ content, compact = false }: MarkdownViewerProps) {
+export const MarkdownViewer = memo(function MarkdownViewer({ content, compact = false }: MarkdownViewerProps) {
   return (
     <div
       className={
@@ -27,4 +28,4 @@ export function MarkdownViewer({ content, compact = false }: MarkdownViewerProps
       </ReactMarkdown>
     </div>
   );
-}
+});
