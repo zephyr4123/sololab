@@ -60,10 +60,22 @@ class Orchestrator:
             idea_groups = await self._cluster_ideas(ideas, num_groups=num_groups)
             yield {"type": "status", "phase": "together", "round": round_num, "group_count": len(idea_groups)}
 
-            # 阶段 2：汇聚 - 分组讨论
-            refined_ideas = []
-            for group_idx, group in enumerate(idea_groups):
+            # 阶段 2：汇聚 - 分组讨论（各组并行）
+            async def _run_group(group, group_idx):
+                events = []
                 async for event in self._together_phase_grouped(group, group_idx, iterations=2):
+                    events.append(event)
+                return events
+
+            group_tasks = [_run_group(group, idx) for idx, group in enumerate(idea_groups)]
+            group_results = await asyncio.gather(*group_tasks, return_exceptions=True)
+
+            refined_ideas = []
+            for result in group_results:
+                if isinstance(result, Exception):
+                    yield {"type": "agent", "agent": "unknown", "action": "error", "error": str(result)}
+                    continue
+                for event in result:
                     if isinstance(event, dict):
                         yield event
                     if isinstance(event, Message):
@@ -251,13 +263,13 @@ class Orchestrator:
                 self.elo_scores[idea.id] = 1500.0
 
         evaluator_config = get_persona("evaluator")
-        num_matches = min(len(ideas) * 2, 20)
+        num_matches = min(len(ideas), 10)
         pairs = []
         for _ in range(num_matches):
             a, b = random.sample(ideas, 2)
             pairs.append((a, b))
 
-        for idea_a, idea_b in pairs:
+        async def _evaluate_pair(idea_a, idea_b):
             runner = AgentRunner(evaluator_config, self.llm, self.tools)
             task_prompt = (
                 "Compare these two research ideas and vote for the better one.\n\n"
@@ -267,10 +279,18 @@ class Orchestrator:
             )
             result = await runner.run("", task_prompt=task_prompt)
             self.agent_states["evaluator"] = runner.state
-
-            # 解析投票结果
             winner = self._parse_vote(result[0].content if result else "")
-            self._update_elo(idea_a.id, idea_b.id, winner)
+            return idea_a.id, idea_b.id, winner
+
+        # 并行执行所有评估
+        eval_tasks = [_evaluate_pair(a, b) for a, b in pairs]
+        eval_results = await asyncio.gather(*eval_tasks, return_exceptions=True)
+
+        for result in eval_results:
+            if isinstance(result, Exception):
+                continue
+            id_a, id_b, winner = result
+            self._update_elo(id_a, id_b, winner)
 
         # 按 Elo 排序
         sorted_ideas = sorted(ideas, key=lambda m: self.elo_scores.get(m.id, 1500), reverse=True)
