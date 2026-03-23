@@ -1,16 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { Lightbulb, Code, PenTool, BarChart3, BookOpen, Search, FlaskConical } from 'lucide-react';
+import { Lightbulb, Code, PenTool, BarChart3, BookOpen, Search, FlaskConical, Lock } from 'lucide-react';
 import { useAppStore } from '@/stores/app-store';
 
 const modules = [
-  { id: 'ideaspark', name: 'IdeaSpark', icon: Lightbulb },
-  { id: 'codelab', name: 'CodeLab', icon: Code },
-  { id: 'writer', name: 'WriterAI', icon: PenTool },
-  { id: 'datalens', name: 'DataLens', icon: BarChart3 },
-  { id: 'litreview', name: 'LitReview', icon: BookOpen },
-  { id: 'reviewer', name: 'Reviewer', icon: Search },
+  { id: 'ideaspark', name: 'IdeaSpark', icon: Lightbulb, ready: true },
+  { id: 'codelab', name: 'CodeLab', icon: Code, ready: false },
+  { id: 'writer', name: 'WriterAI', icon: PenTool, ready: false },
+  { id: 'datalens', name: 'DataLens', icon: BarChart3, ready: false },
+  { id: 'litreview', name: 'LitReview', icon: BookOpen, ready: false },
+  { id: 'reviewer', name: 'Reviewer', icon: Search, ready: false },
 ];
 
 export function Sidebar() {
@@ -28,6 +28,21 @@ export function Sidebar() {
         {modules.map((mod) => {
           const Icon = mod.icon;
           const isActive = currentModule === mod.id;
+
+          if (!mod.ready) {
+            return (
+              <div
+                key={mod.id}
+                className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground/50 cursor-not-allowed"
+                title="即将推出"
+              >
+                <Icon className="h-5 w-5 shrink-0" />
+                <span className="hidden flex-1 lg:block">{mod.name}</span>
+                <Lock className="hidden h-3 w-3 lg:block" />
+              </div>
+            );
+          }
+
           return (
             <Link
               key={mod.id}

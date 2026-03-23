@@ -20,9 +20,18 @@ export const useAppStore = create<AppState>((set) => ({
   currentModule: null,
   provider: '',
   providers: [],
-  theme: 'light',
+  theme: (typeof window !== 'undefined' && localStorage.getItem('theme') === 'dark') ? 'dark' : 'light',
   setCurrentModule: (moduleId) => set({ currentModule: moduleId }),
   setProvider: (provider) => set({ provider }),
   setProviders: (providers) => set({ providers }),
-  toggleTheme: () => set((s) => ({ theme: s.theme === 'light' ? 'dark' : 'light' })),
+  toggleTheme: () =>
+    set((s) => {
+      const next = s.theme === 'light' ? 'dark' : 'light';
+      // 切换 <html> 的 dark class
+      if (typeof document !== 'undefined') {
+        document.documentElement.classList.toggle('dark', next === 'dark');
+        localStorage.setItem('theme', next);
+      }
+      return { theme: next };
+    }),
 }));

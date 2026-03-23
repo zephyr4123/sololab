@@ -3,41 +3,42 @@
 from sololab.models.agent import AgentConfig
 
 # 5 个差异化角色智能体
+# model=None 表示使用 settings.py 中的 default_model
 PERSONAS: list[AgentConfig] = [
     AgentConfig(
         name="divergent",
-        persona="Divergent Thinker",
+        persona="发散者",
         temperature=1.0,
         tools=["web_search", "arxiv_search"],
-        model="divergent",
+        model=None,
     ),
     AgentConfig(
         name="expert",
-        persona="Domain Expert",
+        persona="领域专家",
         temperature=0.5,
         tools=["arxiv_search", "scholar_search", "doc_parse"],
-        model="reasoning",
+        model=None,
     ),
     AgentConfig(
         name="critic",
-        persona="Critic",
+        persona="审辩者",
         temperature=0.3,
         tools=["scholar_search"],
-        model="reasoning",
+        model=None,
     ),
     AgentConfig(
         name="connector",
-        persona="Connector",
+        persona="整合者",
         temperature=0.7,
         tools=[],
-        model="reasoning",
+        model=None,
     ),
     AgentConfig(
         name="evaluator",
-        persona="Evaluator",
+        persona="评审者",
         temperature=0.3,
         tools=[],
-        model="reasoning",
+        model=None,
     ),
 ]
 

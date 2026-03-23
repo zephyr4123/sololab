@@ -126,9 +126,9 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
   };
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex flex-1 flex-col min-h-0">
       {/* Scrollable chat area */}
-      <div ref={scrollContainerRef} className="flex-1 overflow-auto p-4">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4">
         {entries.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center text-center">
             <div className="mb-4 text-4xl">{'\u{1F9EA}'}</div>
