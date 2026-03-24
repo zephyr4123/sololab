@@ -12,6 +12,27 @@ logger = logging.getLogger(__name__)
 
 _ARXIV_API = "https://export.arxiv.org/api/query"
 
+# arXiv AND 搜索中需要过滤的英文停用词
+# 这些词在 all: 字段搜索时会导致误匹配或零结果
+_STOP_WORDS = frozenset({
+    'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+    'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'be',
+    'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will',
+    'would', 'could', 'should', 'may', 'might', 'can', 'shall', 'not',
+    'no', 'nor', 'so', 'if', 'then', 'than', 'that', 'this', 'these',
+    'those', 'it', 'its', 'about', 'into', 'through', 'during', 'before',
+    'after', 'above', 'below', 'between', 'under', 'over', 'up', 'down',
+    'out', 'off', 'such', 'only', 'also', 'very', 'just', 'using', 'via',
+    'based', 'review', 'survey', 'study', 'analysis', 'approach',
+    'method', 'methods', 'framework', 'towards', 'toward',
+    'novel', 'new', 'recent', 'advanced', 'improved', 'efficient',
+    'optimization', 'optimizing', 'strategies', 'strategy', 'mechanism',
+    'mechanisms', 'architecture', 'abstract',
+})
+
+# AND 连接的最大关键词数量，超过此数量 arXiv 几乎返回 0
+_MAX_AND_TERMS = 5
+
 
 class ArxivTool(ToolBase):
     """在 arXiv 搜索预印本论文。"""
@@ -105,11 +126,19 @@ class ArxivTool(ToolBase):
         if not query:
             return query
 
-        # 多词查询：用 AND 连接
+        # 多词查询：过滤停用词，保留有意义的关键词，用 AND 连接
         words = query.split()
-        if len(words) > 1:
-            return ' AND '.join(words)
-        return query
+        keywords = [w for w in words if w.lower() not in _STOP_WORDS]
+        # 如果过滤后为空，回退到原始词列表
+        if not keywords:
+            keywords = words
+
+        # 限制 AND 项数，防止过度限制（arXiv AND 项超过 5 个几乎返回 0）
+        keywords = keywords[:_MAX_AND_TERMS]
+
+        if len(keywords) > 1:
+            return ' AND '.join(keywords)
+        return keywords[0] if keywords else query
 
     @staticmethod
     def _is_valid_xml(text: str) -> bool:

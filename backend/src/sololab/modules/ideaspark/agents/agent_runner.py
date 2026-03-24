@@ -203,8 +203,9 @@ class AgentRunner:
                 messages=[{
                     "role": "user",
                     "content": (
-                        f"将以下搜索意图改写为 1 条精确的{target}搜索查询词（{lang_hint}，不超过 15 个词）。\n"
-                        f"只输出改写后的查询词，不要任何解释。禁止输出中文。{year_hint}\n\n"
+                        f"将以下搜索意图改写为 1 条精确的{target}搜索查询词（{lang_hint}，3-5 个关键词）。\n"
+                        f"只输出关键词，用空格分隔，不要写完整句子。禁止输出中文。{year_hint}\n"
+                        f"禁止使用 a/an/the/in/on/for/of/with/using/based 等停用词。\n\n"
                         f"原始意图：{query}"
                     ),
                 }],
