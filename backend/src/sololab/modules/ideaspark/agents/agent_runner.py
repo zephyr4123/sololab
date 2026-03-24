@@ -186,18 +186,25 @@ class AgentRunner:
         }
 
     async def _rewrite_query(self, query: str, tool_name: str) -> str:
-        """用 LLM 将 agent 的搜索 query 改写为更精确的搜索词。"""
+        """用 LLM 将 agent 的搜索 query 改写为更精确的搜索词。
+
+        对 arXiv/Scholar 等英文学术库，强制输出英文。
+        """
         if not query.strip():
             return query
 
-        target = "学术论文" if tool_name in ("arxiv_search", "scholar_search") else "网页"
+        is_academic = tool_name in ("arxiv_search", "scholar_search")
+        target = "学术论文" if is_academic else "网页"
+        lang_hint = "必须使用英文" if is_academic else "英文"
+        year_hint = "禁止包含年份数字（如2024、2025）。" if is_academic else ""
+
         try:
             result = await self.llm.generate(
                 messages=[{
                     "role": "user",
                     "content": (
-                        f"将以下搜索意图改写为 1 条精确的{target}搜索查询词（英文，不超过 15 个词）。\n"
-                        f"只输出改写后的查询词，不要任何解释。\n\n"
+                        f"将以下搜索意图改写为 1 条精确的{target}搜索查询词（{lang_hint}，不超过 15 个词）。\n"
+                        f"只输出改写后的查询词，不要任何解释。禁止输出中文。{year_hint}\n\n"
                         f"原始意图：{query}"
                     ),
                 }],
@@ -207,9 +214,29 @@ class AgentRunner:
             rewritten = result["content"].strip().strip('"').strip("'")
             self.state.tokens_used += result["usage"]["prompt_tokens"] + result["usage"]["completion_tokens"]
             self.state.cost_usd += result["usage"]["cost_usd"]
+
+            # 对学术搜索，验证输出确实是英文（检测是否包含中文字符）
+            if is_academic and rewritten and self._contains_chinese(rewritten):
+                logger.warning("Query 改写仍含中文，丢弃: %s", rewritten)
+                # 降级：用原始 query 中的英文部分，或直接用原 query
+                fallback = self._extract_english(query)
+                return fallback if fallback else query
+
             return rewritten if rewritten else query
         except Exception:
             return query  # 改写失败，使用原始 query
+
+    @staticmethod
+    def _contains_chinese(text: str) -> bool:
+        """检查文本是否包含中文字符。"""
+        return any('\u4e00' <= c <= '\u9fff' for c in text)
+
+    @staticmethod
+    def _extract_english(text: str) -> str:
+        """从混合文本中提取英文单词。"""
+        import re
+        words = re.findall(r'[a-zA-Z][\w-]*', text)
+        return ' '.join(words) if words else ""
 
     def _build_messages(
         self, topic: str, context: List[Message], task_prompt: str, doc_context: str = ""

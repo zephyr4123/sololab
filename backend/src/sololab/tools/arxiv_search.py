@@ -30,8 +30,12 @@ class ArxivTool(ToolBase):
         if not query:
             return ToolResult(success=False, data={}, error="Query is required")
 
-        # 清理 query：去除 arXiv 不支持的特殊字符，避免 400 错误
+        # 清理 query：过滤中文和特殊字符（arXiv 是全英文数据库）
         clean_query = self._sanitize_query(query)
+        if not clean_query:
+            logger.info("arXiv query 过滤后为空（可能是纯中文）: %s", query[:50])
+            return ToolResult(success=True, data={"query": query, "results": []})
+
         max_results = params.get("max_results", 5)
 
         try:
@@ -72,14 +76,18 @@ class ArxivTool(ToolBase):
     def _sanitize_query(query: str) -> str:
         """清理查询字符串，构建 arXiv AND 查询。
 
-        arXiv 默认用空格作 OR，导致结果过于宽泛。
-        改为对每个关键词用 AND 连接，确保所有词都出现。
+        arXiv 是全英文数据库，中文 query 永远返回 0 结果。
+        此方法会过滤中文字符，仅保留英文关键词。
+        arXiv 默认用空格作 OR，改为 AND 连接确保精度。
         """
-        # 如果 query 已经包含 arXiv 字段前缀，去掉它（避免 all:all:... 嵌套）
+        # 如果 query 已经包含 arXiv 字段前缀，去掉它
         query = re.sub(r'^(all|ti|au|abs|cat):', '', query, flags=re.IGNORECASE)
+
+        # 过滤中文字符（arXiv 是英文数据库）
+        query = re.sub(r'[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]+', ' ', query)
+
         # 去除 arXiv 不支持的标点
         query = re.sub(r'[?!;@#$%^&*(){}[\]|\\<>]', ' ', query)
-        # 去除多余引号
         query = query.replace('"', '').replace("'", '')
         # 多个空格合并
         query = re.sub(r'\s+', ' ', query).strip()
@@ -87,11 +95,17 @@ class ArxivTool(ToolBase):
         if not query:
             return query
 
-        # 保留用户已写的 AND/OR/ANDNOT 逻辑
-        if re.search(r'\b(AND|OR|ANDNOT)\b', query):
+        # 去除孤立的布尔运算符
+        query = re.sub(r'\b(AND|OR|ANDNOT)\b', ' ', query)
+        # 去除独立的年份数字（如 2024、2025）—— arXiv 按 all: 搜索时，
+        # 年份 AND 连接会导致大量 0 结果，应使用 sortBy 而非文本匹配年份
+        query = re.sub(r'\b(19|20)\d{2}\b', ' ', query)
+        query = re.sub(r'\s+', ' ', query).strip()
+
+        if not query:
             return query
 
-        # 多词查询：用 AND 连接（arXiv 默认空格=OR，太宽泛）
+        # 多词查询：用 AND 连接
         words = query.split()
         if len(words) > 1:
             return ' AND '.join(words)
