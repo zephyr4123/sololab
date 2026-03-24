@@ -43,6 +43,7 @@ class AgentRunner:
         topic: str,
         context_messages: List[Message] = None,
         task_prompt: str = "",
+        doc_context: str = "",
     ) -> List[Message]:
         """执行智能体，返回生成的消息列表。"""
         self.state.status = "thinking"
@@ -54,7 +55,7 @@ class AgentRunner:
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M"),
         )
         messages: List[Dict[str, Any]] = [{"role": "system", "content": system_prompt}]
-        messages.extend(self._build_messages(topic, context_messages or [], task_prompt))
+        messages.extend(self._build_messages(topic, context_messages or [], task_prompt, doc_context))
 
         # 获取 OpenAI function calling 格式的工具定义
         openai_tools = None
@@ -209,7 +210,7 @@ class AgentRunner:
             return query  # 改写失败，使用原始 query
 
     def _build_messages(
-        self, topic: str, context: List[Message], task_prompt: str
+        self, topic: str, context: List[Message], task_prompt: str, doc_context: str = ""
     ) -> List[Dict[str, str]]:
         """构建发送给 LLM 的消息列表。
 
@@ -217,8 +218,20 @@ class AgentRunner:
         - 按消息类型分类呈现（创意/批评/综合），而非按时间堆砌
         - 传递完整内容，不做截断
         - 标注消息来源和类型，便于 LLM 理解结构
+        - 如果有文档上下文，作为独立消息注入
         """
         msgs: List[Dict[str, str]] = []
+
+        # 文档参考文献上下文（放在最前面，让 agent 先看到参考资料）
+        if doc_context:
+            msgs.append({
+                "role": "user",
+                "content": (
+                    f"以下是用户上传的参考文献摘要（仅供背景参考，不能替代网络搜索）：\n\n{doc_context}\n\n"
+                    f"重要：这些文献只是起点。你仍然必须使用搜索工具查找该领域的最新进展和其他相关工作，"
+                    f"不要仅依赖上述文献。"
+                ),
+            })
 
         if context:
             # 按类型分组

@@ -23,7 +23,7 @@ PERSONAS: list[AgentConfig] = [
         name="critic",
         persona="审辩者",
         temperature=0.3,
-        tools=["scholar_search"],
+        tools=["arxiv_search"],  # scholar_search 免费 API 限流严重，暂用 arxiv 替代
         model=None,
     ),
     AgentConfig(

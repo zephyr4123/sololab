@@ -164,6 +164,7 @@ def _build_module_context(app: FastAPI) -> ModuleContext:
         tool_registry=app.state.tool_registry,
         memory_manager=app.state.memory_manager,
         task_state_manager=app.state.task_state_manager,
+        document_pipeline=getattr(app.state, "document_pipeline", None),
     )
 
 

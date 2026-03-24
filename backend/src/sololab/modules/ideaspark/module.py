@@ -1,9 +1,12 @@
 """IdeaSpark 模块 - 多智能体创意生成。"""
 
-from typing import Any, AsyncGenerator
+import logging
+from typing import Any, AsyncGenerator, List
 
 from sololab.core.module_registry import ModuleBase, ModuleContext, ModuleManifest, ModuleRequest
 from sololab.modules.ideaspark.orchestrator import Orchestrator
+
+logger = logging.getLogger(__name__)
 
 
 class IdeaSparkModule(ModuleBase):
@@ -18,7 +21,7 @@ class IdeaSparkModule(ModuleBase):
         return ModuleManifest(
             id="ideaspark",
             name="IdeaSpark",
-            version="2.0.0",
+            version="2.1.0",
             description="Multi-agent idea generation with Separate-Together collaboration",
             icon="Lightbulb",
             entry_point="sololab.modules.ideaspark.module:IdeaSparkModule",
@@ -42,10 +45,39 @@ class IdeaSparkModule(ModuleBase):
 
         max_rounds = request.params.get("max_rounds", 3)
         top_k = request.params.get("top_k", 5)
+        doc_ids: List[str] = request.params.get("doc_ids", [])
+
+        # 如果用户上传了文档，搜索相关分块作为参考文献上下文
+        doc_context = ""
+        if doc_ids and ctx.document_pipeline:
+            doc_context = await self._build_doc_context(
+                ctx.document_pipeline, request.input, doc_ids
+            )
 
         async for event in self._orchestrator.run(
             user_input=request.input,
             max_rounds=max_rounds,
             top_k=top_k,
+            doc_context=doc_context,
         ):
             yield event
+
+    async def _build_doc_context(
+        self, pipeline, topic: str, doc_ids: List[str]
+    ) -> str:
+        """从上传的文档中搜索与主题相关的分块，组装为参考文献上下文。"""
+        try:
+            chunks = await pipeline.search(topic, top_k=10, doc_ids=doc_ids)
+            if not chunks:
+                return ""
+
+            parts = []
+            for i, chunk in enumerate(chunks, 1):
+                source = chunk.get("document_title") or chunk.get("document_filename", "")
+                content = chunk.get("content", "")
+                parts.append(f"[参考文献 {i}] 来源: {source}\n{content}")
+
+            return "\n\n---\n\n".join(parts)
+        except Exception as e:
+            logger.warning("文档上下文构建失败: %s", e)
+            return ""

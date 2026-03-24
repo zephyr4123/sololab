@@ -1,42 +1,100 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import Image from 'next/image';
-import { Send, Loader2, Square } from 'lucide-react';
+import { Send, Loader2, Square, Paperclip, X, FileText, CheckCircle } from 'lucide-react';
 import { StreamRenderer } from '@/components/shared/StreamRenderer';
 import { ResilientSSEClient } from '@/lib/sse-client';
 import { useIdeaSparkStore } from '@/stores/module-stores/ideaspark-store';
 import { useTaskStore } from '@/stores/task-store';
 import { useSessionStore } from '@/stores/session-store';
+import { documentApi } from '@/lib/api-client';
 
 interface ChatPanelProps {
   moduleId: string;
 }
 
+interface UploadedDoc {
+  docId: string;
+  filename: string;
+  status: 'uploading' | 'processing' | 'completed' | 'failed';
+}
+
 export function ChatPanel({ moduleId }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
+  const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const clientRef = useRef<ResilientSSEClient | null>(null);
   const ideaStore = useIdeaSparkStore();
   const taskStore = useTaskStore();
   const sessionStore = useSessionStore();
   const entries = sessionStore.chatEntries;
 
-  // Auto-scroll when entries change
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [entries]);
+
+  // Poll document processing status
+  const pollDocStatus = useCallback(async (docId: string) => {
+    const poll = async () => {
+      try {
+        const status = await documentApi.getStatus(docId);
+        setUploadedDocs(prev =>
+          prev.map(d => d.docId === docId ? { ...d, status: status.status } : d)
+        );
+        if (status.status === 'processing' || status.status === 'pending') {
+          setTimeout(poll, 2000);
+        }
+      } catch { /* ignore */ }
+    };
+    poll();
+  }, []);
+
+  const handleFileUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    for (const file of Array.from(files)) {
+      const tempDoc: UploadedDoc = { docId: '', filename: file.name, status: 'uploading' };
+      setUploadedDocs(prev => [...prev, tempDoc]);
+
+      try {
+        const result = await documentApi.upload(file);
+        setUploadedDocs(prev =>
+          prev.map(d => d.filename === file.name && d.status === 'uploading'
+            ? { ...d, docId: result.doc_id, status: 'processing' }
+            : d
+          )
+        );
+        pollDocStatus(result.doc_id);
+      } catch {
+        setUploadedDocs(prev =>
+          prev.map(d => d.filename === file.name && d.status === 'uploading'
+            ? { ...d, status: 'failed' }
+            : d
+          )
+        );
+      }
+    }
+  };
+
+  const removeDoc = (filename: string) => {
+    setUploadedDocs(prev => prev.filter(d => d.filename !== filename));
+  };
 
   const handleSend = async () => {
     if (!input.trim() || isStreaming) return;
 
     const topic = input.trim();
+    const docIds = uploadedDocs
+      .filter(d => d.status === 'completed' && d.docId)
+      .map(d => d.docId);
 
-    // Add user bubble + empty stream entry to store
     sessionStore.appendChatEntry({ kind: 'user', userText: topic });
     sessionStore.appendChatEntry({ kind: 'stream', events: [] });
     setInput('');
+    setUploadedDocs([]);  // 文件已附带到本次请求，清空标签
     setIsStreaming(true);
     ideaStore.reset();
     taskStore.reset();
@@ -44,11 +102,10 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
     const client = new ResilientSSEClient();
     clientRef.current = client;
 
-    await client.start(moduleId, topic, {}, {
+    // Pass doc_ids in params
+    await client.start(moduleId, topic, { doc_ids: docIds }, {
       onTaskCreated: (sessionId) => {
-        if (sessionId) {
-          sessionStore.setCurrentSession(sessionId);
-        }
+        if (sessionId) sessionStore.setCurrentSession(sessionId);
       },
       onStatus: (phase, round) => {
         ideaStore.setPhase(phase as any);
@@ -76,12 +133,8 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
       onDone: (topIdeas, costUsd) => {
         if (topIdeas) {
           ideaStore.setTopIdeas(topIdeas.map((t, i) => ({
-            id: t.id,
-            content: t.content,
-            author: t.author,
-            eloScore: t.elo_score,
-            rank: i + 1,
-            round: ideaStore.currentRound,
+            id: t.id, content: t.content, author: t.author,
+            eloScore: t.elo_score, rank: i + 1, round: ideaStore.currentRound,
           })));
         }
         if (costUsd) ideaStore.setCostUsd(costUsd);
@@ -89,7 +142,6 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
         taskStore.setStatus('completed');
         setIsStreaming(false);
         sessionStore.appendEventToLastEntry({ type: 'done', top_ideas: topIdeas, cost_usd: costUsd });
-        // Refresh session list to show the new conversation
         sessionStore.fetchSessions(moduleId);
       },
       onError: (message) => {
@@ -98,9 +150,7 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
         sessionStore.appendEventToLastEntry({ type: 'error', message });
         sessionStore.fetchSessions(moduleId);
       },
-      onReconnecting: () => {
-        taskStore.setStatus('reconnecting');
-      },
+      onReconnecting: () => { taskStore.setStatus('reconnecting'); },
     });
   };
 
@@ -120,6 +170,9 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
             <h3 className="mb-1 text-lg font-semibold text-foreground">IdeaSpark</h3>
             <p className="max-w-sm text-sm text-muted-foreground">
               输入研究主题，多智能体将协作生成创新性研究创意。
+            </p>
+            <p className="mt-2 max-w-sm text-xs text-muted-foreground/60">
+              支持上传 PDF 参考文献，让 AI 基于真实论文内容生成创意
             </p>
           </div>
         )}
@@ -155,7 +208,59 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
 
       {/* Input area */}
       <div className="border-t bg-background p-4">
+        {/* Uploaded document tags */}
+        {uploadedDocs.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {uploadedDocs.map((doc) => (
+              <div
+                key={doc.filename}
+                className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs ${
+                  doc.status === 'completed'
+                    ? 'border-green-200 bg-green-50 text-green-700'
+                    : doc.status === 'failed'
+                      ? 'border-red-200 bg-red-50 text-red-600'
+                      : 'border-blue-200 bg-blue-50 text-blue-600'
+                }`}
+              >
+                {doc.status === 'completed' ? (
+                  <CheckCircle className="h-3 w-3" />
+                ) : doc.status === 'failed' ? (
+                  <X className="h-3 w-3" />
+                ) : (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                )}
+                <FileText className="h-3 w-3" />
+                <span className="max-w-[120px] truncate">{doc.filename}</span>
+                <button
+                  onClick={() => removeDoc(doc.filename)}
+                  className="ml-0.5 rounded hover:bg-black/10 p-0.5"
+                >
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="flex items-end gap-2">
+          {/* Upload button */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            title="上传参考文献 (PDF)"
+            disabled={isStreaming}
+          >
+            <Paperclip className="h-4 w-4" />
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.md,.docx"
+            multiple
+            className="hidden"
+            onChange={(e) => handleFileUpload(e.target.files)}
+          />
+
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}

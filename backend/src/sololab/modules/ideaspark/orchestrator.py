@@ -38,13 +38,22 @@ class Orchestrator:
         self._prev_top_ids: List[str] = []
 
     async def run(
-        self, user_input: str, max_rounds: int = 3, top_k: int = 5
+        self, user_input: str, max_rounds: int = 3, top_k: int = 5, doc_context: str = ""
     ) -> AsyncGenerator[Any, None]:
         """执行完整的分离-汇聚流程。"""
         self.user_topic = user_input
+        self.doc_context = doc_context
         total_cost = 0.0
 
         for round_num in range(1, max_rounds + 1):
+            # 文档上下文注入通知（仅第一轮）
+            if round_num == 1 and doc_context:
+                yield {
+                    "type": "doc_context",
+                    "chunk_count": doc_context.count("[参考文献"),
+                    "preview": doc_context[:300] + "..." if len(doc_context) > 300 else doc_context,
+                }
+
             yield {"type": "status", "phase": "separate", "round": round_num}
 
             # 阶段 1：分离 - 并行生成创意
@@ -148,7 +157,7 @@ class Orchestrator:
 
         # 并行执行
         async def _run_agent(name, runner):
-            return name, await runner.run(topic)
+            return name, await runner.run(topic, doc_context=self.doc_context)
 
         tasks = [_run_agent(name, runner) for name, runner in runners]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -212,7 +221,7 @@ class Orchestrator:
                 f"找出弱点并提出改进建议。\n\n"
                 + "\n".join(f"- {m.content}" for m in group)
             )
-            critiques = await critic_runner.run(self.user_topic, context_messages=group, task_prompt=task_prompt)
+            critiques = await critic_runner.run(self.user_topic, context_messages=group, task_prompt=task_prompt, doc_context=self.doc_context)
             self.agent_states["critic"] = critic_runner.state
             for tool_event in critic_runner.tool_events:
                 yield tool_event
@@ -230,7 +239,7 @@ class Orchestrator:
                 f"通过结合优势和解决弱点来整合出改进后的创意。"
             )
             all_context = group + critiques
-            syntheses = await conn_runner.run(self.user_topic, context_messages=all_context, task_prompt=task_prompt)
+            syntheses = await conn_runner.run(self.user_topic, context_messages=all_context, task_prompt=task_prompt, doc_context=self.doc_context)
             self.agent_states["connector"] = conn_runner.state
 
             for msg in syntheses:
@@ -252,7 +261,7 @@ class Orchestrator:
             "合并相似创意，去除重复，输出一个精简的最具前景研究方向列表。"
         )
         # 通过 context_messages 传递所有创意，走统一的 _build_messages 分类逻辑
-        result = await runner.run(self.user_topic, context_messages=ideas, task_prompt=task_prompt)
+        result = await runner.run(self.user_topic, context_messages=ideas, task_prompt=task_prompt, doc_context=self.doc_context)
         self.agent_states["connector"] = runner.state
 
         # 保留所有原始 idea + 综合结果

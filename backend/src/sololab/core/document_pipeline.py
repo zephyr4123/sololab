@@ -113,8 +113,23 @@ class DocumentPipeline:
     async def upload_and_process(
         self, filename: str, content: bytes, project_id: str = "default"
     ) -> str:
-        """上传文件并启动处理。返回 doc_id。"""
+        """上传文件并启动处理。SHA256 去重：相同文件直接返回已有 doc_id。"""
+        import hashlib
         from sololab.models.orm import DocumentRecord
+
+        # SHA256 去重检查
+        file_hash = hashlib.sha256(content).hexdigest()
+        async with self.db() as session:
+            existing = await session.execute(
+                select(DocumentRecord).where(
+                    DocumentRecord.file_hash == file_hash,
+                    DocumentRecord.status == "completed",
+                )
+            )
+            existing_doc = existing.scalars().first()
+            if existing_doc:
+                logger.info("文档去重命中: hash=%s, 复用 doc_id=%s", file_hash[:12], existing_doc.doc_id)
+                return existing_doc.doc_id
 
         doc_id = str(uuid.uuid4())[:8]
 
@@ -135,11 +150,12 @@ class DocumentPipeline:
                 doc_type=doc_type.value,
                 status="pending",
                 project_id=project_id,
+                file_hash=file_hash,
             )
             session.add(record)
             await session.commit()
 
-        logger.info("文档已上传: doc_id=%s, filename=%s", doc_id, filename)
+        logger.info("文档已上传: doc_id=%s, filename=%s, hash=%s", doc_id, filename, file_hash[:12])
         return doc_id
 
     async def get_status(self, doc_id: str) -> Optional[dict]:
@@ -188,8 +204,10 @@ class DocumentPipeline:
                 for r in records
             ]
 
-    async def search(self, query: str, top_k: int = 5, project_id: Optional[str] = None) -> List[dict]:
-        """跨文档语义搜索。"""
+    async def search(
+        self, query: str, top_k: int = 5, project_id: Optional[str] = None, doc_ids: Optional[List[str]] = None
+    ) -> List[dict]:
+        """跨文档语义搜索。支持按 doc_ids 过滤范围。"""
         # 生成查询嵌入
         query_embeddings = await self.llm_gateway.embed([query])
         query_embedding = query_embeddings[0]
@@ -198,16 +216,23 @@ class DocumentPipeline:
         from sqlalchemy import text as sql_text
 
         async with self.db() as session:
-            # 使用 pgvector 余弦相似度搜索文档分块
-            sql = sql_text("""
+            # 构建 SQL（可选 doc_id 过滤）
+            where_clause = "dc.embedding IS NOT NULL AND d.status = 'completed'"
+            params: dict = {"embedding": embedding_str, "top_k": top_k}
+
+            if doc_ids:
+                # asyncpg 需要用 ANY(:param::text[]) 格式
+                placeholders = ",".join(f"'{did}'" for did in doc_ids)
+                where_clause += f" AND dc.doc_id IN ({placeholders})"
+
+            sql = sql_text(f"""
                 SELECT dc.doc_id, dc.chunk_index, dc.content, dc.content_type,
                        dc.metadata_json, d.title, d.filename,
-                       1 - (dc.embedding <=> :embedding::vector) AS similarity
+                       1 - (dc.embedding <=> CAST(:embedding AS vector)) AS similarity
                 FROM document_chunks dc
                 JOIN documents d ON dc.doc_id = d.doc_id
-                WHERE dc.embedding IS NOT NULL
-                  AND d.status = 'completed'
-                ORDER BY dc.embedding <=> :embedding::vector
+                WHERE {where_clause}
+                ORDER BY dc.embedding <=> CAST(:embedding AS vector)
                 LIMIT :top_k
             """)
 
@@ -233,19 +258,23 @@ class DocumentPipeline:
     # -- 内部方法 --
 
     async def _parse_with_mineru(self, file_path: str) -> str:
-        """使用 MinerU CLI 解析 PDF。"""
-        output_dir = os.path.join(self.storage_path, "parsed", self._generate_id())
-        os.makedirs(output_dir, exist_ok=True)
+        """使用 PyMuPDF 解析 PDF，提取文本和表格为 Markdown。"""
+        import fitz  # PyMuPDF
 
-        result = subprocess.run(
-            ["magic-pdf", "-p", file_path, "-o", output_dir, "-m", "auto"],
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
+        doc = fitz.open(file_path)
+        pages_md = []
 
-        if result.returncode != 0:
-            raise RuntimeError(f"MinerU parsing failed: {result.stderr}")
+        for page_num, page in enumerate(doc, 1):
+            text = page.get_text("text")
+            if text.strip():
+                pages_md.append(f"## Page {page_num}\n\n{text.strip()}")
+
+        doc.close()
+
+        if not pages_md:
+            raise RuntimeError("PDF contains no extractable text")
+
+        return "\n\n---\n\n".join(pages_md)
 
         md_files = glob_module.glob(os.path.join(output_dir, "**/*.md"), recursive=True)
         if not md_files:
@@ -354,7 +383,7 @@ class DocumentPipeline:
             return
 
         # 批量嵌入（每次最多 20 个，避免 token 超限）
-        batch_size = 20
+        batch_size = 6  # 阿里云 text-embedding-v4 限制 batch <= 10，留余量
         all_embeddings = []
 
         for i in range(0, len(chunks), batch_size):

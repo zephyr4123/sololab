@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import { MessageSquare, Lightbulb, FileText } from 'lucide-react';
 import { ChatPanel } from '@/components/shared/ChatPanel';
 import { ConversationHistory } from '@/components/shared/ConversationHistory';
+import { DocumentManager } from '@/components/shared/DocumentManager';
 import { IdeaBoard } from '@/components/modules/ideaspark/IdeaBoard';
 import { IdeaReport } from '@/components/modules/ideaspark/IdeaReport';
 
@@ -74,9 +75,12 @@ export function ModuleContainer({ moduleId }: ModuleContainerProps) {
         )}
       </div>
 
-      {/* Right sidebar: Conversation History */}
-      <aside className="hidden w-72 min-h-0 border-l pl-4 xl:block">
+      {/* Right sidebar: Conversation History + Document Manager */}
+      <aside className="hidden w-72 min-h-0 overflow-y-auto border-l pl-4 xl:block space-y-6">
         <ConversationHistory moduleId={moduleId} />
+        <div className="border-t pt-4">
+          <DocumentManager />
+        </div>
       </aside>
     </div>
   );

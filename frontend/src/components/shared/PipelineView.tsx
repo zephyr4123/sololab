@@ -3,7 +3,7 @@
 import { useState, useMemo, memo } from 'react';
 import {
   Sparkles, Search, MessageSquare, Brain, Scale, Bot,
-  Globe, BookOpen, Trophy, CheckCircle, AlertTriangle,
+  Globe, BookOpen, FileText, Trophy, CheckCircle, AlertTriangle,
   ChevronDown, ChevronRight, Loader2,
 } from 'lucide-react';
 import { MarkdownViewer } from './MarkdownViewer';
@@ -86,7 +86,7 @@ function groupEventsByPhase(events: StreamEvent[]): { rounds: Map<number, PhaseG
       continue;
     }
 
-    if (event.type === 'done' || event.type === 'error' || event.type === 'task_created') {
+    if (event.type === 'done' || event.type === 'error' || event.type === 'task_created' || event.type === 'doc_context') {
       // These are top-level events, not part of a phase
       continue;
     }
@@ -108,14 +108,16 @@ interface PipelineViewProps {
 export const PipelineView = memo(function PipelineView({ events }: PipelineViewProps) {
   const { rounds, currentPhase, currentRound } = useMemo(() => groupEventsByPhase(events), [events]);
 
-  // Check for done/error events
   const doneEvent = events.find(e => e.type === 'done');
   const errorEvent = events.find(e => e.type === 'error');
+  const docContextEvent = events.find(e => e.type === 'doc_context');
 
   if (events.length === 0) return null;
 
   return (
     <div className="space-y-4">
+      {/* Document context injection notice */}
+      {docContextEvent && <DocContextSection event={docContextEvent} />}
       {Array.from(rounds.entries()).map(([roundNum, phases]) => (
         <RoundSection
           key={roundNum}
@@ -484,10 +486,11 @@ function GenericPhaseView({ events }: { events: StreamEvent[] }) {
 
 function ToolCallCard({ event }: { event: StreamEvent }) {
   const [expanded, setExpanded] = useState(false);
-  const ToolIcon = event.tool === 'web_search' ? Globe : BookOpen;
+  const ToolIcon = event.tool === 'web_search' ? Globe : event.tool === 'doc_parse' ? FileText : BookOpen;
   const toolLabel = event.tool === 'web_search' ? 'Web Search'
     : event.tool === 'arxiv_search' ? 'arXiv Search'
     : event.tool === 'scholar_search' ? 'Scholar Search'
+    : event.tool === 'doc_parse' ? '文档解析'
     : event.tool;
 
   const results: Array<{ title: string; url: string; snippet: string }> = event.results || [];
@@ -547,6 +550,32 @@ function ToolCallCard({ event }: { event: StreamEvent }) {
       {expanded && event.error && (
         <div className="border-t border-red-200/40 px-2.5 py-1.5 text-[11px] text-red-500">
           {event.error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Document Context Section ────────────────────────────────
+
+function DocContextSection({ event }: { event: StreamEvent }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="rounded-xl border border-indigo-200/60 bg-indigo-50/30 p-3">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center gap-2 text-xs font-medium text-indigo-700"
+      >
+        <FileText className="h-3.5 w-3.5" />
+        <span>参考文献已注入</span>
+        <span className="rounded-full bg-indigo-200/60 px-1.5 py-0.5 text-[10px]">
+          {event.chunk_count || 0} 个相关分块
+        </span>
+        {expanded ? <ChevronDown className="ml-auto h-3 w-3" /> : <ChevronRight className="ml-auto h-3 w-3" />}
+      </button>
+      {expanded && event.preview && (
+        <div className="mt-2 rounded-md bg-white/60 p-2 text-[11px] text-indigo-600/80 whitespace-pre-wrap line-clamp-6">
+          {event.preview}
         </div>
       )}
     </div>

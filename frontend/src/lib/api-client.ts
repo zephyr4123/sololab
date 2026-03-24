@@ -45,6 +45,12 @@ export const api = {
 
 // === Document API ===
 export const documentApi = {
+  list: async (limit = 50) => {
+    const res = await fetch(`${API_BASE}/api/documents?limit=${limit}`);
+    if (!res.ok) throw new Error(`Documents fetch failed: ${res.statusText}`);
+    return res.json() as Promise<Array<{ doc_id: string; filename: string; title: string | null; status: string; total_chunks: number; total_pages: number; created_at: string | null }>>;
+  },
+
   upload: async (file: File, projectId = "default") => {
     const formData = new FormData();
     formData.append("file", file);
@@ -73,6 +79,12 @@ export const documentApi = {
       method: "POST",
     });
     if (!res.ok) throw new Error(`Search failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  delete: async (docId: string) => {
+    const res = await fetch(`${API_BASE}/api/documents/${docId}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(`Delete failed: ${res.statusText}`);
     return res.json();
   },
 };

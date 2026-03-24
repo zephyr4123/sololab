@@ -32,7 +32,7 @@ class MemoryRecord(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding = mapped_column(Vector(1536), nullable=True)  # OpenAI text-embedding-3-small dimension
+    embedding = mapped_column(Vector(1024), nullable=True)  # text-embedding-v4 (1024 dim)
     scope: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # module|session|project|global
     scope_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)  # module_id / session_id / project_id
     metadata_json: Mapped[Optional[str]] = mapped_column(JSONB, nullable=True, default={})
@@ -63,6 +63,7 @@ class DocumentRecord(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")  # pending|processing|completed|failed
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     project_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    file_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)  # SHA256 去重
     raw_markdown: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -80,7 +81,7 @@ class DocumentChunkRecord(Base):
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     content_type: Mapped[str] = mapped_column(String(20), default="text")  # text|table|formula|caption
-    embedding = mapped_column(Vector(1536), nullable=True)
+    embedding = mapped_column(Vector(1024), nullable=True)
     page_numbers: Mapped[Optional[str]] = mapped_column(JSONB, nullable=True, default=[])
     metadata_json: Mapped[Optional[str]] = mapped_column(JSONB, nullable=True, default={})
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

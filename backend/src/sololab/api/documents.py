@@ -2,9 +2,11 @@
 
 import asyncio
 import logging
+import shutil
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile
+from sqlalchemy import select, delete as sql_delete
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -85,3 +87,71 @@ async def search_documents(
 
     results = await pipeline.search(query, top_k=top_k, project_id=project_id)
     return {"query": query, "results": results, "total": len(results)}
+
+
+@router.get("/documents")
+async def list_documents(request: Request, limit: int = 50) -> list:
+    """列出所有已上传的文档。"""
+    pipeline = request.app.state.document_pipeline
+    if not pipeline:
+        raise HTTPException(503, "Document pipeline not initialized")
+
+    from sololab.models.orm import DocumentRecord
+
+    async with pipeline.db() as session:
+        result = await session.execute(
+            select(DocumentRecord)
+            .where(DocumentRecord.status != "deleted")
+            .order_by(DocumentRecord.created_at.desc())
+            .limit(limit)
+        )
+        docs = result.scalars().all()
+        return [
+            {
+                "doc_id": d.doc_id,
+                "filename": d.filename,
+                "title": d.title,
+                "status": d.status,
+                "total_chunks": d.total_chunks,
+                "total_pages": d.total_pages,
+                "created_at": d.created_at.isoformat() if d.created_at else None,
+            }
+            for d in docs
+        ]
+
+
+@router.delete("/documents/{doc_id}")
+async def delete_document(request: Request, doc_id: str) -> dict:
+    """删除文档及其分块和文件。"""
+    pipeline = request.app.state.document_pipeline
+    if not pipeline:
+        raise HTTPException(503, "Document pipeline not initialized")
+
+    from sololab.models.orm import DocumentRecord, DocumentChunkRecord
+    import os
+
+    async with pipeline.db() as session:
+        doc = (await session.execute(
+            select(DocumentRecord).where(DocumentRecord.doc_id == doc_id)
+        )).scalars().first()
+
+        if not doc:
+            raise HTTPException(404, f"Document '{doc_id}' not found")
+
+        # 删除分块记录
+        await session.execute(
+            sql_delete(DocumentChunkRecord).where(DocumentChunkRecord.doc_id == doc_id)
+        )
+        # 删除文档记录
+        await session.execute(
+            sql_delete(DocumentRecord).where(DocumentRecord.doc_id == doc_id)
+        )
+        await session.commit()
+
+        # 删除文件
+        upload_dir = os.path.join(pipeline.storage_path, "uploads", doc_id)
+        if os.path.exists(upload_dir):
+            shutil.rmtree(upload_dir)
+
+    logger.info("文档已删除: doc_id=%s", doc_id)
+    return {"status": "deleted", "doc_id": doc_id}

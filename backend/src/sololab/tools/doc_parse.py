@@ -62,6 +62,16 @@ class DocParseTool(ToolBase):
                     "content": chunk.content[:500],  # 截断至 500 字符
                 })
 
+            # 构建与搜索工具兼容的 results 格式，供前端 ToolCallCard 复用
+            results = [
+                {
+                    "title": f"[{chunk.content_type}] Chunk {chunk.chunk_index + 1}",
+                    "url": "",
+                    "snippet": chunk.content[:200],
+                }
+                for chunk in parsed.chunks[:10]
+            ]
+
             return ToolResult(
                 success=True,
                 data={
@@ -71,6 +81,7 @@ class DocParseTool(ToolBase):
                     "authors": parsed.authors,
                     "total_pages": parsed.total_pages,
                     "total_chunks": len(parsed.chunks),
+                    "results": results,
                     "chunks": chunks_summary,
                     "raw_markdown_preview": parsed.raw_markdown[:2000],
                 },

@@ -46,6 +46,7 @@ class ModuleContext:
     tool_registry: Any  # ToolRegistry
     memory_manager: Any  # MemoryManager
     task_state_manager: Any  # TaskStateManager
+    document_pipeline: Any = None  # DocumentPipeline（可选）
     manifest: ModuleManifest = field(default_factory=lambda: ModuleManifest("", "", "", "", "", ""))
 
 
