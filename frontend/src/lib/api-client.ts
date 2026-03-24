@@ -24,6 +24,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ input, params }),
       }),
+    stop: (id: string, taskId: string) =>
+      fetchAPI(`/api/modules/${id}/stop`, {
+        method: 'POST',
+        body: JSON.stringify({ task_id: taskId }),
+      }),
   },
   tasks: {
     state: (taskId: string) => fetchAPI(`/api/tasks/${taskId}/state`),

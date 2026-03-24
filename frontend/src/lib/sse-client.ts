@@ -110,4 +110,12 @@ export class ResilientSSEClient {
   stop() {
     this.abortController?.abort();
   }
+
+  getTaskId(): string | null {
+    return this.taskId;
+  }
+
+  getSessionId(): string | null {
+    return this.sessionId;
+  }
 }

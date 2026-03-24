@@ -1,5 +1,6 @@
 """模块注册表 - 热插拔模块加载与管理。"""
 
+import asyncio
 import importlib
 import json
 import logging
@@ -36,6 +37,7 @@ class ModuleRequest:
     input: str
     params: Dict[str, Any] = field(default_factory=dict)
     session_id: Optional[str] = None
+    cancel_event: Optional[asyncio.Event] = None
 
 
 @dataclass
@@ -48,6 +50,10 @@ class ModuleContext:
     task_state_manager: Any  # TaskStateManager
     document_pipeline: Any = None  # DocumentPipeline（可选）
     manifest: ModuleManifest = field(default_factory=lambda: ModuleManifest("", "", "", "", "", ""))
+    cancel_event: Optional[asyncio.Event] = None  # 取消信号
+    task_id: Optional[str] = None  # 当前任务 ID
+    session_id: Optional[str] = None  # 当前会话 ID
+    history: Optional[list] = None  # 会话历史消息 [{role, content}]
 
 
 def validate_manifest(manifest: ModuleManifest) -> None:

@@ -166,10 +166,50 @@ class SessionManager:
         """获取用于 LLM 上下文的消息列表（OpenAI 格式）。
 
         返回最近 N 条消息，格式为 [{"role": "user", "content": "..."}]
-        用于跨模块会话上下文共享。
+        对于 assistant 消息，如果 content 为空但有 events metadata，
+        则从 done 事件的 top_ideas 中提取**完整**创意内容。
         """
         history = await self.get_history(session_id, limit=max_messages)
-        return [{"role": m["role"], "content": m["content"]} for m in history]
+        result = []
+        for m in history:
+            role = m["role"]
+            content = m["content"]
+
+            # assistant 消息可能 content 为空，关键信息在 metadata.events 中
+            if role == "assistant" and not content.strip():
+                events = (m.get("metadata") or {}).get("events", [])
+                if events:
+                    # 优先从 done 事件提取完整的 top ideas（这是最重要的结论）
+                    done_event = next(
+                        (e for e in reversed(events) if e.get("type") == "done"),
+                        None,
+                    )
+                    if done_event and done_event.get("top_ideas"):
+                        top_ideas = done_event["top_ideas"]
+                        parts = []
+                        for i, idea in enumerate(top_ideas, 1):
+                            author = idea.get("author", "")
+                            score = idea.get("elo_score", 0)
+                            # 完整保留创意内容，不截断
+                            idea_content = idea.get("content", "")
+                            parts.append(
+                                f"### 排名 {i} (来自{author}, Elo={score})\n{idea_content}"
+                            )
+                        content = "上一轮生成的 Top 研究创意：\n\n" + "\n\n".join(parts)
+                    else:
+                        # 降级：从 vote 事件提取
+                        vote_parts = []
+                        for event in events:
+                            if event.get("type") == "vote":
+                                vote_parts.append(
+                                    f"排名{event.get('rank')}: {event.get('content', '')}"
+                                )
+                        content = "\n".join(vote_parts) if vote_parts else "[生成结果已保存]"
+
+            if content:
+                result.append({"role": role, "content": content})
+
+        return result
 
     async def delete_session(self, session_id: str) -> bool:
         """删除会话（软删除，标记为 deleted）。"""

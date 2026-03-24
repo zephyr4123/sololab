@@ -28,20 +28,25 @@ async def upload_document(
     if not content:
         raise HTTPException(400, "Empty file")
 
-    # 上传文件并创建记录
-    doc_id = await pipeline.upload_and_process(file.filename, content, project_id)
+    # 上传文件并创建记录（含 SHA256 去重）
+    doc_id, is_new = await pipeline.upload_and_process(file.filename, content, project_id)
 
-    # 异步启动处理（不阻塞响应）
-    async def _process():
-        try:
-            file_path = f"{pipeline.storage_path}/uploads/{doc_id}/{file.filename}"
-            await pipeline.process(file_path, project_id, doc_id=doc_id)
-        except Exception as e:
-            logger.error("文档处理失败: doc_id=%s, error=%s", doc_id, e)
+    if is_new:
+        # 仅对新文档启动异步处理
+        async def _process():
+            try:
+                file_path = f"{pipeline.storage_path}/uploads/{doc_id}/{file.filename}"
+                await pipeline.process(file_path, project_id, doc_id=doc_id)
+            except Exception as e:
+                logger.error("文档处理失败: doc_id=%s, error=%s", doc_id, e)
 
-    asyncio.create_task(_process())
-
-    return {"doc_id": doc_id, "filename": file.filename, "status": "processing"}
+        asyncio.create_task(_process())
+        return {"doc_id": doc_id, "filename": file.filename, "status": "processing"}
+    else:
+        # 去重命中，直接返回已有文档状态
+        status = await pipeline.get_status(doc_id)
+        logger.info("文档去重命中: doc_id=%s, filename=%s", doc_id, file.filename)
+        return {"doc_id": doc_id, "filename": file.filename, "status": status.get("status", "completed") if status else "completed"}
 
 
 @router.get("/documents/{doc_id}/status")

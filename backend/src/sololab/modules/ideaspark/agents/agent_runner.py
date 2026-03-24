@@ -44,6 +44,7 @@ class AgentRunner:
         context_messages: List[Message] = None,
         task_prompt: str = "",
         doc_context: str = "",
+        is_continuation: bool = False,
     ) -> List[Message]:
         """执行智能体，返回生成的消息列表。"""
         self.state.status = "thinking"
@@ -53,6 +54,7 @@ class AgentRunner:
             self.config.name,
             topic=topic or "(见上下文)",
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M"),
+            is_continuation=is_continuation,
         )
         messages: List[Dict[str, Any]] = [{"role": "system", "content": system_prompt}]
         messages.extend(self._build_messages(topic, context_messages or [], task_prompt, doc_context))

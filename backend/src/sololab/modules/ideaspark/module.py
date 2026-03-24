@@ -59,6 +59,8 @@ class IdeaSparkModule(ModuleBase):
             max_rounds=max_rounds,
             top_k=top_k,
             doc_context=doc_context,
+            cancel_event=ctx.cancel_event,
+            history=ctx.history,
         ):
             yield event
 

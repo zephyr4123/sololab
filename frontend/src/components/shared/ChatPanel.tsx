@@ -8,7 +8,7 @@ import { ResilientSSEClient } from '@/lib/sse-client';
 import { useIdeaSparkStore } from '@/stores/module-stores/ideaspark-store';
 import { useTaskStore } from '@/stores/task-store';
 import { useSessionStore } from '@/stores/session-store';
-import { documentApi } from '@/lib/api-client';
+import { documentApi, api } from '@/lib/api-client';
 
 interface ChatPanelProps {
   moduleId: string;
@@ -96,16 +96,22 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
     setInput('');
     setUploadedDocs([]);  // 文件已附带到本次请求，清空标签
     setIsStreaming(true);
-    ideaStore.reset();
-    taskStore.reset();
+    ideaStore.reset();  // 重置 IdeaSpark 状态（新一轮生成）
+    taskStore.setStatus('running');
 
     const client = new ResilientSSEClient();
     clientRef.current = client;
+
+    // 传递 session_id 以复用已有会话（实现多轮对话）
+    const currentSessionId = sessionStore.currentSessionId || undefined;
 
     // Pass doc_ids in params
     await client.start(moduleId, topic, { doc_ids: docIds }, {
       onTaskCreated: (sessionId) => {
         if (sessionId) sessionStore.setCurrentSession(sessionId);
+        // 记录 taskId 以支持停止功能
+        const taskId = client.getTaskId();
+        if (taskId) taskStore.setActiveTask(taskId);
       },
       onStatus: (phase, round) => {
         ideaStore.setPhase(phase as any);
@@ -151,13 +157,27 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
         sessionStore.fetchSessions(moduleId);
       },
       onReconnecting: () => { taskStore.setStatus('reconnecting'); },
-    });
+    }, currentSessionId);
   };
 
-  const handleStop = () => {
+  const handleStop = async () => {
+    // 1. 通知后端取消任务
+    const taskId = taskStore.activeTaskId || clientRef.current?.getTaskId();
+    if (taskId) {
+      try {
+        await api.modules.stop(moduleId, taskId);
+      } catch {
+        // 取消请求失败不影响前端状态
+      }
+    }
+    // 2. 中断 SSE 连接
     clientRef.current?.stop();
+    // 3. 更新前端状态
     setIsStreaming(false);
     taskStore.setStatus('idle');
+    ideaStore.setPhase('done');
+    sessionStore.appendEventToLastEntry({ type: 'status', phase: 'cancelled' });
+    sessionStore.fetchSessions(moduleId);
   };
 
   return (

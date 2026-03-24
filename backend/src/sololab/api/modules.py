@@ -100,7 +100,7 @@ async def run_module(module_id: str, body: ModuleRunRequest, request: Request) -
 
 @router.post("/modules/{module_id}/stream")
 async def stream_module(module_id: str, body: ModuleRunRequest, request: Request) -> StreamingResponse:
-    """SSE 流式模块执行，带任务状态追踪和会话持久化。"""
+    """SSE 流式模块执行，带任务状态追踪、会话持久化和取消支持。"""
     from sololab.main import _build_module_context
 
     registry = request.app.state.module_registry
@@ -112,7 +112,10 @@ async def stream_module(module_id: str, body: ModuleRunRequest, request: Request
 
     task_id = await tsm.create_task(module_id, {"input": body.input})
     ctx = _build_module_context(request.app)
-    mod_request = ModuleRequest(input=body.input, params=body.params or {})
+    # 将取消信号和任务 ID 注入上下文
+    ctx.cancel_event = tsm.get_cancel_event(task_id)
+    ctx.task_id = task_id
+    mod_request = ModuleRequest(input=body.input, params=body.params or {}, session_id=body.session_id)
 
     # 会话持久化：创建或复用 session
     session_id = body.session_id
@@ -128,32 +131,66 @@ async def stream_module(module_id: str, body: ModuleRunRequest, request: Request
             import logging
             logging.getLogger(__name__).warning("会话创建失败，降级运行: %s", e)
             session_mgr = None
+    elif session_mgr and session_id:
+        # 复用已有会话，追加用户消息
+        try:
+            await session_mgr.add_message(
+                session_id=session_id, role="user", content=body.input, module_id=module_id,
+            )
+        except Exception:
+            pass
+
+    # 如果有 session_id，获取历史消息传给模块
+    ctx.session_id = session_id
+    if session_mgr and session_id:
+        try:
+            ctx.history = await session_mgr.get_context_messages(session_id)
+        except Exception:
+            ctx.history = None
 
     async def event_generator():
         collected_events: list[dict] = []
         yield f"data: {json.dumps({'type': 'task_created', 'task_id': task_id, 'session_id': session_id})}\n\n"
         try:
             async for chunk in registry.run(module_id, mod_request, ctx):
+                # 检查取消信号
+                if tsm.is_cancelled(task_id):
+                    yield f"data: {json.dumps({'type': 'status', 'phase': 'cancelled'})}\n\n"
+                    break
+
                 event_data = chunk if isinstance(chunk, dict) else {"content": str(chunk)}
                 collected_events.append(event_data)
                 await tsm.append_event(task_id, event_data.get("type", "text"), event_data)
                 yield f"data: {json.dumps(event_data)}\n\n"
-            await tsm.complete_task(task_id, {})
-            # 持久化完整对话到 PostgreSQL
-            if session_mgr and session_id:
-                try:
-                    cost = next(
-                        (e.get("cost_usd", 0) for e in reversed(collected_events) if e.get("type") == "done"),
-                        0,
-                    )
-                    await session_mgr.add_message(
-                        session_id=session_id, role="assistant", content="",
-                        module_id=module_id,
-                        metadata={"events": collected_events, "task_id": task_id},
-                        cost_usd=cost,
-                    )
-                except Exception:
-                    pass  # 持久化失败不影响流式响应
+
+            if tsm.is_cancelled(task_id):
+                # 持久化已取消的部分对话
+                if session_mgr and session_id:
+                    try:
+                        await session_mgr.add_message(
+                            session_id=session_id, role="assistant", content="",
+                            module_id=module_id,
+                            metadata={"events": collected_events, "task_id": task_id, "status": "cancelled"},
+                        )
+                    except Exception:
+                        pass
+            else:
+                await tsm.complete_task(task_id, {})
+                # 持久化完整对话到 PostgreSQL
+                if session_mgr and session_id:
+                    try:
+                        cost = next(
+                            (e.get("cost_usd", 0) for e in reversed(collected_events) if e.get("type") == "done"),
+                            0,
+                        )
+                        await session_mgr.add_message(
+                            session_id=session_id, role="assistant", content="",
+                            module_id=module_id,
+                            metadata={"events": collected_events, "task_id": task_id},
+                            cost_usd=cost,
+                        )
+                    except Exception:
+                        pass  # 持久化失败不影响流式响应
         except Exception as e:
             await tsm.fail_task(task_id, str(e))
             # 持久化失败的部分对话
@@ -171,11 +208,21 @@ async def stream_module(module_id: str, body: ModuleRunRequest, request: Request
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
+class StopRequest(BaseModel):
+    """停止请求 — 包含要取消的 task_id。"""
+    task_id: Optional[str] = None
+
+
 @router.post("/modules/{module_id}/stop")
-async def stop_module(module_id: str, request: Request) -> dict:
-    """停止正在运行的模块执行。"""
-    # TODO: 通过 task_id 取消具体任务
-    return {"status": "stopped", "module_id": module_id}
+async def stop_module(module_id: str, body: StopRequest, request: Request) -> dict:
+    """停止正在运行的模块执行。通过 task_id 取消具体任务。"""
+    tsm = request.app.state.task_state_manager
+
+    if body.task_id:
+        await tsm.cancel_task(body.task_id)
+        return {"status": "cancelled", "module_id": module_id, "task_id": body.task_id}
+
+    return {"status": "no_task_id", "module_id": module_id}
 
 
 @router.post("/modules/{module_id}/report")

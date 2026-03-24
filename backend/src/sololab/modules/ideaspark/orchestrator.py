@@ -26,6 +26,8 @@ class Orchestrator:
     5. 锦标赛评估：基于 Elo 的成对比较
     6. Top-K 选择与收敛检查
     7. 未收敛则迭代
+
+    支持通过 cancel_event 主动取消。
     """
 
     def __init__(self, llm_gateway: LLMGateway, tool_registry: Optional[ToolRegistry] = None) -> None:
@@ -36,16 +38,36 @@ class Orchestrator:
         self.elo_scores: Dict[str, float] = {}
         self.user_topic: str = ""  # 用户原始主题，供所有 agent 锚定
         self._prev_top_ids: List[str] = []
+        self._cancel_event: Optional[asyncio.Event] = None
+
+    def _is_cancelled(self) -> bool:
+        """检查是否已收到取消信号。"""
+        return self._cancel_event is not None and self._cancel_event.is_set()
 
     async def run(
-        self, user_input: str, max_rounds: int = 3, top_k: int = 5, doc_context: str = ""
+        self, user_input: str, max_rounds: int = 3, top_k: int = 5,
+        doc_context: str = "", cancel_event: Optional[asyncio.Event] = None,
+        history: Optional[list] = None,
     ) -> AsyncGenerator[Any, None]:
-        """执行完整的分离-汇聚流程。"""
+        """执行完整的分离-汇聚流程。支持取消信号和会话历史上下文。"""
         self.user_topic = user_input
         self.doc_context = doc_context
+        self._cancel_event = cancel_event
+        self._history = history
         total_cost = 0.0
 
+        # 从会话历史中提取上一轮的创意作为种子（结构化方式，非字符串拼接）
+        self._history_seed_ideas: List[Message] = []
+        self._is_continuation = False
+        if history and len(history) > 1:
+            self._is_continuation = True
+            self._history_seed_ideas = self._extract_seed_ideas_from_history(history)
+
         for round_num in range(1, max_rounds + 1):
+            # 取消检查点
+            if self._is_cancelled():
+                yield {"type": "status", "phase": "cancelled", "round": round_num}
+                return
             # 文档上下文注入通知（仅第一轮）
             if round_num == 1 and doc_context:
                 yield {
@@ -65,6 +87,11 @@ class Orchestrator:
                     ideas.append(event)
 
             yield {"type": "status", "phase": "cluster", "round": round_num, "idea_count": len(ideas)}
+
+            # 取消检查点：分离阶段完成后
+            if self._is_cancelled():
+                yield {"type": "status", "phase": "cancelled", "round": round_num}
+                return
 
             # 阶段 1.5：语义聚类
             num_groups = min(4, max(2, len(ideas) // 3))
@@ -99,9 +126,19 @@ class Orchestrator:
 
             yield {"type": "status", "phase": "synthesize", "round": round_num}
 
+            # 取消检查点：汇聚阶段完成后
+            if self._is_cancelled():
+                yield {"type": "status", "phase": "cancelled", "round": round_num}
+                return
+
             # 阶段 2.5：全局综合
             synthesized = await self._global_synthesis(refined_ideas)
             yield {"type": "status", "phase": "evaluate", "round": round_num, "candidate_count": len(synthesized)}
+
+            # 取消检查点：综合阶段完成后
+            if self._is_cancelled():
+                yield {"type": "status", "phase": "cancelled", "round": round_num}
+                return
 
             # 阶段 3：锦标赛评估
             top_ideas = await self._tournament_evaluate(synthesized, k=top_k)
@@ -155,9 +192,24 @@ class Orchestrator:
         for name, _ in runners:
             yield {"type": "agent", "agent": name, "action": "thinking"}
 
-        # 并行执行
+        # 构建多轮任务提示（如果是延续对话）
+        continuation_prompt = ""
+        if self._is_continuation and self._history_seed_ideas:
+            continuation_prompt = (
+                "重要：这是用户的后续请求，你必须基于之前的研究成果来回答。\n"
+                "不要从零开始，而是在上一轮的最佳创意基础上，按照用户的新指令进行深入、细化或调整。\n"
+                "上一轮已有的创意已在上下文中提供。"
+            )
+
+        # 并行执行（传入上一轮创意作为 context_messages）
         async def _run_agent(name, runner):
-            return name, await runner.run(topic, doc_context=self.doc_context)
+            return name, await runner.run(
+                topic,
+                context_messages=self._history_seed_ideas if self._is_continuation else None,
+                task_prompt=continuation_prompt if continuation_prompt else "",
+                doc_context=self.doc_context,
+                is_continuation=self._is_continuation,
+            )
 
         tasks = [_run_agent(name, runner) for name, runner in runners]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -362,3 +414,45 @@ class Orchestrator:
             f"目前最佳创意：\n{idea_summaries}\n\n"
             f"请深化、延展和改进这些创意，探索新的角度和组合。"
         )
+
+    def _extract_seed_ideas_from_history(self, history: list) -> List[Message]:
+        """从会话历史中提取上一轮的创意，转为 Message 对象。
+
+        这些 Message 会作为 context_messages 传给 agent，
+        走 AgentRunner._build_messages 的结构化分类逻辑，
+        让 agent 以"已有创意"的方式看到历史内容。
+        """
+        seed_ideas = []
+        for msg in reversed(history):
+            if msg.get("role") != "assistant":
+                continue
+            content = msg.get("content", "")
+            if not content or content == "[生成结果已保存]":
+                continue
+
+            # 内容中包含 "排名" 格式，说明是 get_context_messages 提取的 top ideas
+            if "排名" in content and "Elo=" in content:
+                # 按 "### 排名" 分割
+                import re
+                sections = re.split(r"###\s*排名\s*\d+", content)
+                for section in sections:
+                    section = section.strip()
+                    if not section or section.startswith("上一轮"):
+                        continue
+                    # 提取作者信息
+                    author_match = re.search(r"\(来自(\w+),", section)
+                    author = author_match.group(1) if author_match else "previous_round"
+                    # 清理元信息行
+                    clean = re.sub(r"\(来自\w+,\s*Elo=\d+\)\s*\n?", "", section).strip()
+                    if clean:
+                        seed_ideas.append(
+                            Message(
+                                id=str(uuid.uuid4()),
+                                sender=author,
+                                content=clean,
+                                msg_type=MessageType.IDEA,
+                            )
+                        )
+                break  # 只取最近一次 assistant 回复
+
+        return seed_ideas

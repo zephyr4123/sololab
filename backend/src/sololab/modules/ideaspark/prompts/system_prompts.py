@@ -149,7 +149,7 @@ PROMPTS = {
 }
 
 
-def get_prompt(persona_name: str, topic: str = "", timestamp: str = "") -> str:
+def get_prompt(persona_name: str, topic: str = "", timestamp: str = "", is_continuation: bool = False) -> str:
     """获取角色的系统提示词，注入用户主题和当前时间作为锚点。"""
     prompt = PROMPTS.get(persona_name)
     if not prompt:
@@ -163,5 +163,18 @@ def get_prompt(persona_name: str, topic: str = "", timestamp: str = "") -> str:
         ts = timestamp or datetime.now().strftime("%Y-%m-%d %H:%M")
         anchor = f"\n\n## 当前任务锚点\n- 用户的研究主题：「{topic}」\n- 当前时间：{ts}\n\n请始终围绕上述研究主题展开工作。"
         prompt += anchor
+
+    # 多轮对话感知
+    if is_continuation:
+        prompt += """
+
+## 多轮对话指令（最高优先级）
+这是用户的**后续请求**，不是一个全新的话题。上下文中包含了上一轮已经生成的研究创意。
+
+你必须遵守以下规则：
+1. **不要从零开始** — 上一轮的创意已经存在，不需要重新发明
+2. **基于已有创意深入** — 按照用户的新指令，对上一轮的创意进行深化、细化、调整或扩展
+3. **引用上一轮内容** — 你的输出应该明确提到"基于上一轮的XX创意"来说明延续关系
+4. **聚焦增量贡献** — 只输出新的改进和深化内容，不要重复上一轮已有的东西"""
 
     return prompt

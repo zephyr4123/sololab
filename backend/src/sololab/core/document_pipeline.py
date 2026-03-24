@@ -79,16 +79,18 @@ class DocumentPipeline:
         await self._update_status(doc_id, "processing")
 
         try:
-            # 步骤 1：MinerU 解析
-            raw_markdown = await self._parse_with_mineru(file_path)
+            # 步骤 1：MinerU 解析（返回 markdown + 真实页数）
+            raw_markdown, actual_page_count = await self._parse_with_mineru(file_path)
 
             # 步骤 2：语义分块
             chunks = self._semantic_chunking(raw_markdown)
 
-            # 步骤 3：LLM 提取元数据
+            # 步骤 3：LLM 提取元数据（不再依赖 LLM 猜测页数）
             metadata = await self._extract_metadata(raw_markdown)
+            # 使用 PyMuPDF 的真实页数，覆盖 LLM 猜测值
+            metadata["total_pages"] = actual_page_count
 
-            # 步骤 4：嵌入并存储分块到向量数据库
+            # 步骤 4：嵌入并存储分块到向量数据库（先清理旧分块）
             await self._embed_and_store_chunks(doc_id, chunks)
 
             # 步骤 5：更新文档记录
@@ -99,7 +101,7 @@ class DocumentPipeline:
                 authors=metadata.get("authors"),
                 chunks=chunks,
                 raw_markdown=raw_markdown,
-                total_pages=metadata.get("total_pages", 0),
+                total_pages=actual_page_count,
             )
 
             await self._save_document_record(parsed, metadata, project_id)
@@ -112,24 +114,28 @@ class DocumentPipeline:
 
     async def upload_and_process(
         self, filename: str, content: bytes, project_id: str = "default"
-    ) -> str:
-        """上传文件并启动处理。SHA256 去重：相同文件直接返回已有 doc_id。"""
+    ) -> tuple[str, bool]:
+        """上传文件并启动处理。SHA256 去重：相同文件直接返回已有 doc_id。
+
+        Returns:
+            (doc_id, is_new) - is_new 为 False 表示去重命中，无需再次处理。
+        """
         import hashlib
         from sololab.models.orm import DocumentRecord
 
-        # SHA256 去重检查
+        # SHA256 去重检查（匹配所有非失败状态）
         file_hash = hashlib.sha256(content).hexdigest()
         async with self.db() as session:
             existing = await session.execute(
                 select(DocumentRecord).where(
                     DocumentRecord.file_hash == file_hash,
-                    DocumentRecord.status == "completed",
+                    DocumentRecord.status.in_(["completed", "processing", "pending"]),
                 )
             )
             existing_doc = existing.scalars().first()
             if existing_doc:
                 logger.info("文档去重命中: hash=%s, 复用 doc_id=%s", file_hash[:12], existing_doc.doc_id)
-                return existing_doc.doc_id
+                return existing_doc.doc_id, False
 
         doc_id = str(uuid.uuid4())[:8]
 
@@ -156,7 +162,7 @@ class DocumentPipeline:
             await session.commit()
 
         logger.info("文档已上传: doc_id=%s, filename=%s, hash=%s", doc_id, filename, file_hash[:12])
-        return doc_id
+        return doc_id, True
 
     async def get_status(self, doc_id: str) -> Optional[dict]:
         """获取文档处理状态。"""
@@ -257,11 +263,16 @@ class DocumentPipeline:
 
     # -- 内部方法 --
 
-    async def _parse_with_mineru(self, file_path: str) -> str:
-        """使用 PyMuPDF 解析 PDF，提取文本和表格为 Markdown。"""
+    async def _parse_with_mineru(self, file_path: str) -> tuple[str, int]:
+        """使用 PyMuPDF 解析 PDF，提取文本和表格为 Markdown。
+
+        Returns:
+            (raw_markdown, total_pages) - 真实页数来自 PyMuPDF，不依赖 LLM 猜测。
+        """
         import fitz  # PyMuPDF
 
         doc = fitz.open(file_path)
+        total_pages = doc.page_count  # 真实页数
         pages_md = []
 
         for page_num, page in enumerate(doc, 1):
@@ -274,14 +285,7 @@ class DocumentPipeline:
         if not pages_md:
             raise RuntimeError("PDF contains no extractable text")
 
-        return "\n\n---\n\n".join(pages_md)
-
-        md_files = glob_module.glob(os.path.join(output_dir, "**/*.md"), recursive=True)
-        if not md_files:
-            raise RuntimeError("MinerU produced no output")
-
-        with open(md_files[0], "r", encoding="utf-8") as f:
-            return f.read()
+        return "\n\n---\n\n".join(pages_md), total_pages
 
     def _semantic_chunking(self, markdown: str) -> List[ParsedChunk]:
         """按语义边界（标题）拆分 markdown，保留表格/公式完整性。"""
@@ -353,7 +357,10 @@ class DocumentPipeline:
         return chunks
 
     async def _extract_metadata(self, markdown: str) -> dict:
-        """通过 LLM 从 markdown 中提取结构化元数据。"""
+        """通过 LLM 从 markdown 中提取结构化元数据。
+
+        注意：total_pages 不从 LLM 提取，由 _parse_with_mineru 返回的真实值覆盖。
+        """
         try:
             response = await self.llm_gateway.generate(
                 messages=[
@@ -361,7 +368,8 @@ class DocumentPipeline:
                         "role": "user",
                         "content": (
                             "Extract metadata from this academic paper. "
-                            "Return JSON with: title, authors, abstract, keywords, year, total_pages.\n\n"
+                            "Return JSON with: title, authors, abstract, keywords, year.\n"
+                            "Do NOT guess total_pages - that will be determined separately.\n\n"
                             f"{markdown[:3000]}"
                         ),
                     }
@@ -376,8 +384,9 @@ class DocumentPipeline:
             return {}
 
     async def _embed_and_store_chunks(self, doc_id: str, chunks: List[ParsedChunk]) -> None:
-        """批量嵌入并存储分块到向量数据库。"""
+        """批量嵌入并存储分块到向量数据库。先清理旧分块，避免重复。"""
         from sololab.models.orm import DocumentChunkRecord
+        from sqlalchemy import delete as sql_delete
 
         if not chunks:
             return
@@ -396,8 +405,11 @@ class DocumentPipeline:
                 # 使用空嵌入填充
                 all_embeddings.extend([None] * len(batch_texts))
 
-        # 存储到数据库
+        # 存储到数据库（先清理旧分块，再插入新分块）
         async with self.db() as session:
+            await session.execute(
+                sql_delete(DocumentChunkRecord).where(DocumentChunkRecord.doc_id == doc_id)
+            )
             for idx, chunk in enumerate(chunks):
                 embedding = all_embeddings[idx] if idx < len(all_embeddings) else None
                 record = DocumentChunkRecord(

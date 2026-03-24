@@ -1,5 +1,6 @@
-"""任务状态管理器 - 基于 Redis 的任务状态持久化，支持断线恢复。"""
+"""任务状态管理器 - 基于 Redis 的任务状态持久化，支持断线恢复和主动取消。"""
 
+import asyncio
 import json
 import time
 import uuid
@@ -42,6 +43,7 @@ class TaskStateManager:
     """基于 Redis 的任务状态持久化。
     - 每个 SSE 事件写入 Redis Stream，带递增 event_id
     - 前端通过 event_id 游标重连，获取错过的事件
+    - 支持通过 asyncio.Event 主动取消正在运行的任务
     - 已完成任务可选持久化到 PostgreSQL
     """
 
@@ -49,6 +51,8 @@ class TaskStateManager:
 
     def __init__(self, redis: aioredis.Redis) -> None:
         self.redis = redis
+        # 内存中的取消信号：task_id -> asyncio.Event
+        self._cancel_events: Dict[str, asyncio.Event] = {}
 
     async def create_task(self, module_id: str, request: dict) -> str:
         """创建新任务，返回 task_id。"""
@@ -62,7 +66,18 @@ class TaskStateManager:
         }
         await self.redis.hset(f"task:{task_id}", mapping=state)
         await self.redis.expire(f"task:{task_id}", self.TTL)
+        # 创建取消信号
+        self._cancel_events[task_id] = asyncio.Event()
         return task_id
+
+    def get_cancel_event(self, task_id: str) -> Optional[asyncio.Event]:
+        """获取任务的取消信号 Event，供编排器检查。"""
+        return self._cancel_events.get(task_id)
+
+    def is_cancelled(self, task_id: str) -> bool:
+        """检查任务是否已被取消。"""
+        event = self._cancel_events.get(task_id)
+        return event.is_set() if event else False
 
     async def append_event(self, task_id: str, event_type: str, data: dict) -> int:
         """追加事件到 Redis Stream，返回 event_id。"""
@@ -105,7 +120,7 @@ class TaskStateManager:
             f"task:{task_id}",
             mapping={"status": TaskStatus.COMPLETED.value, "updated_at": str(time.time())},
         )
-        # TODO: 将最终结果持久化到 PostgreSQL
+        self._cleanup_cancel_event(task_id)
 
     async def fail_task(self, task_id: str, error: str) -> None:
         """标记任务为失败。"""
@@ -117,10 +132,19 @@ class TaskStateManager:
                 "updated_at": str(time.time()),
             },
         )
+        self._cleanup_cancel_event(task_id)
 
     async def cancel_task(self, task_id: str) -> None:
-        """取消正在运行的任务。"""
+        """取消正在运行的任务 — 同时设置 Redis 状态和内存取消信号。"""
         await self.redis.hset(
             f"task:{task_id}",
             mapping={"status": TaskStatus.CANCELLED.value, "updated_at": str(time.time())},
         )
+        # 触发取消信号，通知编排器停止
+        cancel_event = self._cancel_events.get(task_id)
+        if cancel_event:
+            cancel_event.set()
+
+    def _cleanup_cancel_event(self, task_id: str) -> None:
+        """清理已完成/失败任务的取消信号。"""
+        self._cancel_events.pop(task_id, None)
