@@ -196,7 +196,6 @@ class AgentRunner:
         is_academic = tool_name in ("arxiv_search", "scholar_search")
         target = "学术论文" if is_academic else "网页"
         lang_hint = "必须使用英文" if is_academic else "英文"
-        year_hint = "禁止包含年份数字（如2024、2025）。" if is_academic else ""
 
         try:
             result = await self.llm.generate(
@@ -204,7 +203,7 @@ class AgentRunner:
                     "role": "user",
                     "content": (
                         f"将以下搜索意图改写为 1 条精确的{target}搜索查询词（{lang_hint}，3-5 个关键词）。\n"
-                        f"只输出关键词，用空格分隔，不要写完整句子。禁止输出中文。{year_hint}\n"
+                        f"只输出关键词，用空格分隔，不要写完整句子。禁止输出中文。\n"
                         f"禁止使用 a/an/the/in/on/for/of/with/using/based 等停用词。\n\n"
                         f"原始意图：{query}"
                     ),
