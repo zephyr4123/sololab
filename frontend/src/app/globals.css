@@ -1,41 +1,64 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+/* ─── Google Fonts ─── */
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap');
+
+/* ─── Theme Tokens: "Warm Stone" ─── */
 @theme {
-  --color-background: hsl(0 0% 100%);
-  --color-foreground: hsl(222.2 84% 4.9%);
-  --color-card: hsl(0 0% 100%);
-  --color-card-foreground: hsl(222.2 84% 4.9%);
-  --color-primary: hsl(222.2 47.4% 11.2%);
-  --color-primary-foreground: hsl(210 40% 98%);
-  --color-secondary: hsl(210 40% 96.1%);
-  --color-secondary-foreground: hsl(222.2 47.4% 11.2%);
-  --color-muted: hsl(210 40% 96.1%);
-  --color-muted-foreground: hsl(215.4 16.3% 46.9%);
-  --color-accent: hsl(210 40% 96.1%);
-  --color-accent-foreground: hsl(222.2 47.4% 11.2%);
-  --color-border: hsl(214.3 31.8% 91.4%);
-  --radius: 0.5rem;
+  /* Light mode — warm paper tones */
+  --color-background: #FAFAF7;
+  --color-foreground: #1C1917;
+  --color-card: #F5F4F0;
+  --color-card-foreground: #1C1917;
+  --color-primary: #3D3730;
+  --color-primary-foreground: #FAF9F6;
+  --color-secondary: #EDEBE6;
+  --color-secondary-foreground: #44403C;
+  --color-muted: #F0EDE8;
+  --color-muted-foreground: #78716C;
+  --color-accent: #E8E4DE;
+  --color-accent-foreground: #292524;
+  --color-border: #E2DED6;
+  --color-destructive: #B91C1C;
+  --color-destructive-foreground: #FEF2F2;
+  --color-ring: #A8A29E;
+
+  /* Warm accent — used sparingly for highlights */
+  --color-warm: #B8956A;
+  --color-warm-foreground: #FFFBF5;
+
+  --radius: 0.625rem;
+
+  /* Font stacks */
+  --font-display: 'DM Serif Display', 'Noto Serif SC', Georgia, serif;
+  --font-sans: 'DM Sans', 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
 }
 
-/* 暗色模式变量 */
+/* ─── Dark mode — deep charcoal ─── */
 .dark {
-  --color-background: hsl(222.2 84% 4.9%);
-  --color-foreground: hsl(210 40% 98%);
-  --color-card: hsl(222.2 84% 4.9%);
-  --color-card-foreground: hsl(210 40% 98%);
-  --color-primary: hsl(210 40% 98%);
-  --color-primary-foreground: hsl(222.2 47.4% 11.2%);
-  --color-secondary: hsl(217.2 32.6% 17.5%);
-  --color-secondary-foreground: hsl(210 40% 98%);
-  --color-muted: hsl(217.2 32.6% 17.5%);
-  --color-muted-foreground: hsl(215 20.2% 65.1%);
-  --color-accent: hsl(217.2 32.6% 17.5%);
-  --color-accent-foreground: hsl(210 40% 98%);
-  --color-border: hsl(217.2 32.6% 17.5%);
+  --color-background: #1A1917;
+  --color-foreground: #E7E5E4;
+  --color-card: #231F1E;
+  --color-card-foreground: #E7E5E4;
+  --color-primary: #E7E5E4;
+  --color-primary-foreground: #1C1917;
+  --color-secondary: #2A2624;
+  --color-secondary-foreground: #D6D3D1;
+  --color-muted: #292524;
+  --color-muted-foreground: #A8A29E;
+  --color-accent: #33302D;
+  --color-accent-foreground: #E7E5E4;
+  --color-border: #33302D;
+  --color-destructive: #EF4444;
+  --color-destructive-foreground: #FEF2F2;
+  --color-ring: #78716C;
+  --color-warm: #C9A87C;
+  --color-warm-foreground: #1C1917;
 }
 
-/* 基础样式 */
+/* ─── Base Styles ─── */
 * {
   border-color: var(--color-border);
 }
@@ -43,4 +66,158 @@
 body {
   background-color: var(--color-background);
   color: var(--color-foreground);
+  font-family: var(--font-sans);
+  font-feature-settings: 'kern' 1, 'liga' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.01em;
+}
+
+/* ─── Typography Enhancement ─── */
+h1, h2, h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+code, pre, .font-mono {
+  font-family: var(--font-mono);
+}
+
+/* ─── Subtle Grain Texture ─── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+}
+
+.dark body::before {
+  opacity: 0.04;
+}
+
+/* ─── Scrollbar Styling ─── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted-foreground);
+}
+
+/* ─── Selection Color ─── */
+::selection {
+  background: var(--color-warm);
+  color: var(--color-warm-foreground);
+}
+
+/* ─── Focus Styles ─── */
+:focus-visible {
+  outline: 2px solid var(--color-warm);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ─── Smooth Transitions on Theme Toggle ─── */
+html {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ─── Staggered Entrance Animations ─── */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.4s ease-out both;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out both;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.3s ease-out both;
+}
+
+/* Stagger delays */
+.delay-1 { animation-delay: 50ms; }
+.delay-2 { animation-delay: 100ms; }
+.delay-3 { animation-delay: 150ms; }
+.delay-4 { animation-delay: 200ms; }
+.delay-5 { animation-delay: 250ms; }
+.delay-6 { animation-delay: 300ms; }
+
+/* ─── Card Hover Lift ─── */
+.card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.08);
+}
+
+.dark .card-hover:hover {
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.3);
+}
+
+/* ─── Agent Color Palette (softer, muted tones) ─── */
+.agent-divergent { --agent-bg: #F3F0FF; --agent-fg: #6D5BA3; --agent-border: #DDD6FE; }
+.agent-expert { --agent-bg: #EFF6FF; --agent-fg: #4B7BB5; --agent-border: #BFDBFE; }
+.agent-critic { --agent-bg: #FEF4F2; --agent-fg: #B05A4F; --agent-border: #FECACA; }
+.agent-connector { --agent-bg: #F0FAF5; --agent-fg: #4D8B6A; --agent-border: #BBF7D0; }
+.agent-evaluator { --agent-bg: #FFFBEB; --agent-fg: #92730A; --agent-border: #FDE68A; }
+
+.dark .agent-divergent { --agent-bg: #1E1B2E; --agent-fg: #A78BFA; --agent-border: #3B3260; }
+.dark .agent-expert { --agent-bg: #172033; --agent-fg: #7CB3E0; --agent-border: #1E3A5F; }
+.dark .agent-critic { --agent-bg: #2D1B1A; --agent-fg: #EF9A8E; --agent-border: #5C2C27; }
+.dark .agent-connector { --agent-bg: #142420; --agent-fg: #6EE7A0; --agent-border: #1A4434; }
+.dark .agent-evaluator { --agent-bg: #2A2413; --agent-fg: #FACC15; --agent-border: #4D3E12; }
+
+/* ─── Prose Typography Override ─── */
+.prose {
+  --tw-prose-body: var(--color-foreground);
+  --tw-prose-headings: var(--color-foreground);
+  --tw-prose-links: var(--color-warm);
+  font-family: var(--font-sans);
+}
+
+.prose h1, .prose h2, .prose h3 {
+  font-family: var(--font-display);
 }

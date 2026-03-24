@@ -1,10 +1,14 @@
 """arXiv 论文搜索工具。"""
 
+import logging
+import re
 import xml.etree.ElementTree as ET
 
 import aiohttp
 
 from sololab.core.tool_registry import ToolBase, ToolResult
+
+logger = logging.getLogger(__name__)
 
 _ARXIV_API = "https://export.arxiv.org/api/query"
 
@@ -26,28 +30,78 @@ class ArxivTool(ToolBase):
         if not query:
             return ToolResult(success=False, data={}, error="Query is required")
 
+        # 清理 query：去除 arXiv 不支持的特殊字符，避免 400 错误
+        clean_query = self._sanitize_query(query)
         max_results = params.get("max_results", 5)
+
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
                     _ARXIV_API,
                     params={
-                        "search_query": f"all:{query}",
+                        "search_query": f"all:{clean_query}",
                         "start": 0,
                         "max_results": max_results,
                         "sortBy": "relevance",
                         "sortOrder": "descending",
                     },
-                    timeout=aiohttp.ClientTimeout(total=10),
+                    timeout=aiohttp.ClientTimeout(total=15),
                 ) as resp:
                     text = await resp.text()
+
+                    # 检查响应是否为有效 XML（代理/防火墙可能返回 HTML 错误页）
+                    if not self._is_valid_xml(text):
+                        logger.warning(
+                            "arXiv 返回非 XML 响应 (status=%d, len=%d): %s",
+                            resp.status, len(text), text[:200],
+                        )
+                        return ToolResult(
+                            success=False, data={"query": clean_query},
+                            error=f"arXiv returned non-XML response (HTTP {resp.status}). Possible proxy/network issue.",
+                        )
+
                     results = self._parse_atom(text)
                     return ToolResult(
                         success=True,
-                        data={"query": query, "results": results},
+                        data={"query": clean_query, "results": results},
                     )
         except Exception as e:
             return ToolResult(success=False, data={}, error=f"arXiv search failed: {e}")
+
+    @staticmethod
+    def _sanitize_query(query: str) -> str:
+        """清理查询字符串，构建 arXiv AND 查询。
+
+        arXiv 默认用空格作 OR，导致结果过于宽泛。
+        改为对每个关键词用 AND 连接，确保所有词都出现。
+        """
+        # 如果 query 已经包含 arXiv 字段前缀，去掉它（避免 all:all:... 嵌套）
+        query = re.sub(r'^(all|ti|au|abs|cat):', '', query, flags=re.IGNORECASE)
+        # 去除 arXiv 不支持的标点
+        query = re.sub(r'[?!;@#$%^&*(){}[\]|\\<>]', ' ', query)
+        # 去除多余引号
+        query = query.replace('"', '').replace("'", '')
+        # 多个空格合并
+        query = re.sub(r'\s+', ' ', query).strip()
+
+        if not query:
+            return query
+
+        # 保留用户已写的 AND/OR/ANDNOT 逻辑
+        if re.search(r'\b(AND|OR|ANDNOT)\b', query):
+            return query
+
+        # 多词查询：用 AND 连接（arXiv 默认空格=OR，太宽泛）
+        words = query.split()
+        if len(words) > 1:
+            return ' AND '.join(words)
+        return query
+
+    @staticmethod
+    def _is_valid_xml(text: str) -> bool:
+        """快速检查响应是否为 XML 格式。"""
+        stripped = text.strip()
+        return stripped.startswith('<?xml') or stripped.startswith('<feed')
 
     @staticmethod
     def _parse_atom(xml_text: str) -> list:

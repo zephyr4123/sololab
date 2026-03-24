@@ -22,8 +22,7 @@ const tabs: { id: TabId; label: string; icon: typeof MessageSquare }[] = [
 
 export function ModuleContainer({ moduleId }: ModuleContainerProps) {
   const [activeTab, setActiveTab] = useState<TabId>('chat');
-  // Track which tabs have been visited — only mount after first visit
-  const [visited, setVisited] = useState<Set<TabId>>(new Set(['chat']));
+  const [visited, setVisited] = useState<Set<TabId>>(new Set<TabId>(['chat']));
 
   const switchTab = useCallback((id: TabId) => {
     setActiveTab(id);
@@ -36,30 +35,35 @@ export function ModuleContainer({ moduleId }: ModuleContainerProps) {
   }, []);
 
   return (
-    <div className="flex h-full min-h-0 gap-4">
+    <div className="flex h-full min-h-0 gap-5">
       <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
-        {/* Tab bar */}
-        <div className="mb-3 flex gap-1 rounded-lg bg-muted/50 p-1">
+        {/* Tab bar — elegant underline style */}
+        <div className="mb-4 flex items-center gap-1 border-b border-border/50">
           {tabs.map((tab) => {
             const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
                 onClick={() => switchTab(tab.id)}
-                className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-sm font-medium transition-all ${
-                  activeTab === tab.id
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
+                className={`relative flex items-center gap-1.5 px-4 pb-2.5 pt-1 text-sm font-medium transition-all duration-200 ${
+                  isActive
+                    ? 'text-foreground'
+                    : 'text-muted-foreground/60 hover:text-muted-foreground'
                 }`}
               >
                 <Icon className="h-3.5 w-3.5" />
                 {tab.label}
+                {/* Active indicator — warm underline */}
+                {isActive && (
+                  <span className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-[var(--color-warm)]" />
+                )}
               </button>
             );
           })}
         </div>
 
-        {/* Tab content — lazy mount on first visit, then keep mounted via CSS hidden */}
+        {/* Tab content */}
         <div className={activeTab === 'chat' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
           <ChatPanel moduleId={moduleId} />
         </div>
@@ -75,10 +79,10 @@ export function ModuleContainer({ moduleId }: ModuleContainerProps) {
         )}
       </div>
 
-      {/* Right sidebar: Conversation History + Document Manager */}
-      <aside className="hidden w-72 min-h-0 overflow-y-auto border-l pl-4 xl:block space-y-6">
+      {/* Right sidebar */}
+      <aside className="hidden w-72 min-h-0 overflow-y-auto border-l border-border/40 pl-5 xl:block space-y-6">
         <ConversationHistory moduleId={moduleId} />
-        <div className="border-t pt-4">
+        <div className="border-t border-border/30 pt-5">
           <DocumentManager />
         </div>
       </aside>

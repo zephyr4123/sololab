@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Settings, Sun, Moon, Activity } from 'lucide-react';
+import { Settings, Sun, Moon, Cpu } from 'lucide-react';
 import { useAppStore } from '@/stores/app-store';
 import { SettingsPanel } from '@/components/shell/SettingsPanel';
 
@@ -33,35 +33,35 @@ export function TopBar() {
 
   return (
     <>
-      <header className="flex h-12 items-center justify-between border-b border-border/60 bg-background/80 backdrop-blur-sm px-4">
-        <div className="flex items-center gap-3">
-          <Activity className="h-4 w-4 text-muted-foreground/60" />
+      <header className="flex h-11 items-center justify-between border-b border-border/40 bg-background/60 backdrop-blur-md px-5">
+        <div className="flex items-center gap-2.5">
+          <Cpu className="h-3.5 w-3.5 text-muted-foreground/40" />
           {providers.length > 0 ? (
             <select
               value={provider}
               onChange={(e) => setProvider(e.target.value)}
-              className="rounded-md border border-border/60 bg-background px-2.5 py-1 text-xs font-medium"
+              className="appearance-none rounded-md border-0 bg-foreground/[0.04] px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-foreground/[0.06] focus:outline-none focus:ring-1 focus:ring-[var(--color-warm)]/40"
             >
               {providers.map((p) => (
                 <option key={p.id} value={p.id}>{p.label}</option>
               ))}
             </select>
           ) : (
-            <span className="text-xs text-muted-foreground">Loading models...</span>
+            <span className="text-xs text-muted-foreground/40 tracking-wide">Loading models...</span>
           )}
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           <button
             onClick={toggleTheme}
-            className="rounded-lg p-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            className="rounded-lg p-2 text-muted-foreground/60 hover:bg-foreground/[0.04] hover:text-foreground transition-all duration-200"
             aria-label="Toggle theme"
           >
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </button>
           <button
             onClick={() => setSettingsOpen(true)}
-            className="rounded-lg p-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            className="rounded-lg p-2 text-muted-foreground/60 hover:bg-foreground/[0.04] hover:text-foreground transition-all duration-200"
             aria-label="Settings"
           >
             <Settings className="h-4 w-4" />

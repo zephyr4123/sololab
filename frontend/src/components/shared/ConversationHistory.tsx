@@ -40,10 +40,12 @@ export function ConversationHistory({ moduleId }: ConversationHistoryProps) {
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-muted-foreground">最近对话</h3>
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/50">
+          对话记录
+        </h3>
         <button
           onClick={resetConversation}
-          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-accent transition-colors"
+          className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-[var(--color-warm)] hover:bg-[var(--color-warm)]/5 transition-colors"
         >
           <Plus className="h-3 w-3" />
           新建
@@ -51,29 +53,29 @@ export function ConversationHistory({ moduleId }: ConversationHistoryProps) {
       </div>
 
       {isLoadingSessions && (
-        <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">
+        <div className="flex items-center justify-center py-8 text-[11px] text-muted-foreground/40 tracking-wide">
           加载中...
         </div>
       )}
 
       {!isLoadingSessions && sessions.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-8 text-center">
-          <MessageSquare className="h-8 w-8 text-muted-foreground/30 mb-2" />
-          <p className="text-xs text-muted-foreground/60">暂无对话记录</p>
+        <div className="flex flex-col items-center justify-center py-10 text-center">
+          <MessageSquare className="h-7 w-7 text-muted-foreground/15 mb-2.5" />
+          <p className="text-[11px] text-muted-foreground/35">暂无对话记录</p>
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto space-y-1">
+      <div className="flex-1 overflow-y-auto space-y-0.5">
         {sessions.map((session) => {
           const isActive = session.session_id === currentSessionId;
 
           return (
             <div
               key={session.session_id}
-              className={`group relative rounded-lg px-3 py-2.5 cursor-pointer transition-all ${
+              className={`group relative rounded-lg px-3 py-2.5 cursor-pointer transition-all duration-200 ${
                 isActive
-                  ? 'bg-accent text-accent-foreground'
-                  : 'hover:bg-accent/50'
+                  ? 'bg-foreground/[0.06] border-l-2 border-l-[var(--color-warm)]'
+                  : 'hover:bg-foreground/[0.03] border-l-2 border-l-transparent'
               }`}
               onClick={() => {
                 if (!isLoadingHistory && session.session_id !== currentSessionId) {
@@ -81,21 +83,20 @@ export function ConversationHistory({ moduleId }: ConversationHistoryProps) {
                 }
               }}
             >
-              <p className="text-sm font-medium leading-snug line-clamp-2 pr-6">
+              <p className="text-[13px] font-medium leading-snug line-clamp-2 pr-6">
                 {session.title || 'Untitled'}
               </p>
-              <div className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
+              <div className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground/40">
                 <Clock className="h-2.5 w-2.5" />
                 {timeAgo(session.updated_at || session.created_at)}
               </div>
 
-              {/* Delete button */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   deleteSession(session.session_id);
                 }}
-                className="absolute right-2 top-2.5 hidden rounded p-1 text-muted-foreground hover:bg-red-100 hover:text-red-600 group-hover:block transition-colors"
+                className="absolute right-2 top-2.5 hidden rounded-md p-1 text-muted-foreground/40 hover:bg-destructive/10 hover:text-destructive group-hover:block transition-colors"
                 title="删除对话"
               >
                 <Trash2 className="h-3 w-3" />

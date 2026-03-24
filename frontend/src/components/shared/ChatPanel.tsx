@@ -36,7 +36,6 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [entries]);
 
-  // Poll document processing status
   const pollDocStatus = useCallback(async (docId: string) => {
     const poll = async () => {
       try {
@@ -54,11 +53,9 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
 
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-
     for (const file of Array.from(files)) {
       const tempDoc: UploadedDoc = { docId: '', filename: file.name, status: 'uploading' };
       setUploadedDocs(prev => [...prev, tempDoc]);
-
       try {
         const result = await documentApi.upload(file);
         setUploadedDocs(prev =>
@@ -85,7 +82,6 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
 
   const handleSend = async () => {
     if (!input.trim() || isStreaming) return;
-
     const topic = input.trim();
     const docIds = uploadedDocs
       .filter(d => d.status === 'completed' && d.docId)
@@ -94,22 +90,18 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
     sessionStore.appendChatEntry({ kind: 'user', userText: topic });
     sessionStore.appendChatEntry({ kind: 'stream', events: [] });
     setInput('');
-    setUploadedDocs([]);  // 文件已附带到本次请求，清空标签
+    setUploadedDocs([]);
     setIsStreaming(true);
-    ideaStore.reset();  // 重置 IdeaSpark 状态（新一轮生成）
+    ideaStore.reset();
     taskStore.setStatus('running');
 
     const client = new ResilientSSEClient();
     clientRef.current = client;
-
-    // 传递 session_id 以复用已有会话（实现多轮对话）
     const currentSessionId = sessionStore.currentSessionId || undefined;
 
-    // Pass doc_ids in params
     await client.start(moduleId, topic, { doc_ids: docIds }, {
       onTaskCreated: (sessionId) => {
         if (sessionId) sessionStore.setCurrentSession(sessionId);
-        // 记录 taskId 以支持停止功能
         const taskId = client.getTaskId();
         if (taskId) taskStore.setActiveTask(taskId);
       },
@@ -161,18 +153,11 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
   };
 
   const handleStop = async () => {
-    // 1. 通知后端取消任务
     const taskId = taskStore.activeTaskId || clientRef.current?.getTaskId();
     if (taskId) {
-      try {
-        await api.modules.stop(moduleId, taskId);
-      } catch {
-        // 取消请求失败不影响前端状态
-      }
+      try { await api.modules.stop(moduleId, taskId); } catch {}
     }
-    // 2. 中断 SSE 连接
     clientRef.current?.stop();
-    // 3. 更新前端状态
     setIsStreaming(false);
     taskStore.setStatus('idle');
     ideaStore.setPhase('done');
@@ -183,16 +168,18 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
   return (
     <div className="flex flex-1 flex-col min-h-0">
       {/* Scrollable chat area */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto px-2 py-3">
         {entries.length === 0 && (
-          <div className="flex h-full flex-col items-center justify-center text-center">
-            <Image src="/logo.png" alt="SoloLab" width={80} height={80} className="mb-4 h-20 w-auto object-contain opacity-80" />
-            <h3 className="mb-1 text-lg font-semibold text-foreground">IdeaSpark</h3>
-            <p className="max-w-sm text-sm text-muted-foreground">
-              输入研究主题，多智能体将协作生成创新性研究创意。
+          <div className="flex h-full flex-col items-center justify-center text-center animate-fade-in">
+            <Image src="/logo.png" alt="SoloLab" width={56} height={56} className="mb-5 h-14 w-auto object-contain opacity-60" />
+            <h3 className="mb-1.5 text-lg font-semibold tracking-tight" style={{ fontFamily: 'var(--font-display)' }}>
+              IdeaSpark
+            </h3>
+            <p className="max-w-xs text-[13px] leading-relaxed text-muted-foreground/70">
+              输入研究主题，多智能体将协作生成创新性研究创意
             </p>
-            <p className="mt-2 max-w-sm text-xs text-muted-foreground/60">
-              支持上传 PDF 参考文献，让 AI 基于真实论文内容生成创意
+            <p className="mt-2.5 max-w-xs text-[11px] text-muted-foreground/40">
+              支持上传 PDF 参考文献，让 AI 基于论文内容生成创意
             </p>
           </div>
         )}
@@ -201,15 +188,15 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
           {entries.map((entry, i) => {
             if (entry.kind === 'user') {
               return (
-                <div key={i} className="flex justify-end">
-                  <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-primary px-4 py-2.5 text-sm text-primary-foreground shadow-sm">
+                <div key={i} className="flex justify-end animate-fade-in-up">
+                  <div className="max-w-[75%] rounded-2xl rounded-br-sm bg-foreground/[0.07] px-4 py-2.5 text-sm leading-relaxed">
                     {entry.userText}
                   </div>
                 </div>
               );
             }
             return (
-              <div key={i} className="w-full">
+              <div key={i} className="w-full animate-fade-in">
                 <StreamRenderer events={entry.events || []} />
               </div>
             );
@@ -217,9 +204,13 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
         </div>
 
         {isStreaming && (
-          <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            <span>智能体正在协作中...</span>
+          <div className="mt-4 flex items-center gap-2.5 text-xs text-muted-foreground/60">
+            <span className="flex gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-warm)] animate-pulse" />
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-warm)] animate-pulse" style={{ animationDelay: '150ms' }} />
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-warm)] animate-pulse" style={{ animationDelay: '300ms' }} />
+            </span>
+            <span className="tracking-wide">智能体协作中</span>
           </div>
         )}
 
@@ -227,19 +218,19 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
       </div>
 
       {/* Input area */}
-      <div className="border-t bg-background p-4">
+      <div className="border-t border-border/40 bg-background/80 backdrop-blur-sm px-3 py-3">
         {/* Uploaded document tags */}
         {uploadedDocs.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-1.5">
+          <div className="mb-2.5 flex flex-wrap gap-1.5">
             {uploadedDocs.map((doc) => (
               <div
                 key={doc.filename}
-                className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs ${
+                className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${
                   doc.status === 'completed'
-                    ? 'border-green-200 bg-green-50 text-green-700'
+                    ? 'border-[var(--color-warm)]/20 bg-[var(--color-warm)]/5 text-[var(--color-warm)]'
                     : doc.status === 'failed'
-                      ? 'border-red-200 bg-red-50 text-red-600'
-                      : 'border-blue-200 bg-blue-50 text-blue-600'
+                      ? 'border-destructive/20 bg-destructive/5 text-destructive'
+                      : 'border-border bg-muted/50 text-muted-foreground'
                 }`}
               >
                 {doc.status === 'completed' ? (
@@ -250,11 +241,8 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
                   <Loader2 className="h-3 w-3 animate-spin" />
                 )}
                 <FileText className="h-3 w-3" />
-                <span className="max-w-[120px] truncate">{doc.filename}</span>
-                <button
-                  onClick={() => removeDoc(doc.filename)}
-                  className="ml-0.5 rounded hover:bg-black/10 p-0.5"
-                >
+                <span className="max-w-[100px] truncate">{doc.filename}</span>
+                <button onClick={() => removeDoc(doc.filename)} className="ml-0.5 rounded-full p-0.5 hover:bg-foreground/10">
                   <X className="h-2.5 w-2.5" />
                 </button>
               </div>
@@ -263,10 +251,9 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
         )}
 
         <div className="flex items-end gap-2">
-          {/* Upload button */}
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/60 text-muted-foreground/50 transition-all duration-200 hover:bg-foreground/[0.04] hover:text-foreground hover:border-border"
             title="上传参考文献 (PDF)"
             disabled={isStreaming}
           >
@@ -290,24 +277,24 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
                 handleSend();
               }
             }}
-            placeholder='输入研究主题，例如："如何用 LLM 改进跨学科研究协作"'
+            placeholder="输入研究主题..."
             rows={1}
-            className="max-h-32 min-h-[40px] flex-1 resize-none rounded-lg border bg-background px-4 py-2.5 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary"
+            className="max-h-32 min-h-[40px] flex-1 resize-none rounded-xl border border-border/60 bg-transparent px-4 py-2.5 text-sm leading-relaxed placeholder:text-muted-foreground/35 focus:outline-none focus:border-[var(--color-warm)]/40 focus:ring-1 focus:ring-[var(--color-warm)]/20 transition-all duration-200"
             disabled={isStreaming}
           />
           {isStreaming ? (
             <button
               onClick={handleStop}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-500 text-white transition-colors hover:bg-red-600"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-foreground/10 text-foreground/60 transition-all duration-200 hover:bg-foreground/15"
               title="Stop"
             >
-              <Square className="h-4 w-4" />
+              <Square className="h-3.5 w-3.5" />
             </button>
           ) : (
             <button
               onClick={handleSend}
               disabled={!input.trim()}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-50"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-warm)] text-[var(--color-warm-foreground)] transition-all duration-200 hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed"
               title="Send"
             >
               <Send className="h-4 w-4" />

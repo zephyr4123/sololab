@@ -25,11 +25,11 @@ const PHASE_LABELS: Record<string, string> = {
 };
 
 const AGENT_COLORS: Record<string, string> = {
-  divergent: 'bg-purple-100 text-purple-800 border-purple-200',
-  expert: 'bg-blue-100 text-blue-800 border-blue-200',
-  critic: 'bg-red-100 text-red-800 border-red-200',
-  connector: 'bg-green-100 text-green-800 border-green-200',
-  evaluator: 'bg-amber-100 text-amber-800 border-amber-200',
+  divergent: 'agent-divergent',
+  expert: 'agent-expert',
+  critic: 'agent-critic',
+  connector: 'agent-connector',
+  evaluator: 'agent-evaluator',
 };
 
 const AGENT_ICON_COMPONENTS: Record<string, typeof Brain> = {
@@ -56,14 +56,12 @@ function AgentIcon({ agent, className = 'h-3.5 w-3.5' }: { agent: string; classN
 export function StreamRenderer({ events }: StreamRendererProps) {
   if (!events.length) return null;
 
-  // Detect if this is a pipeline stream (has status events)
   const hasPipelineEvents = events.some(e => e.type === 'status');
 
   if (hasPipelineEvents) {
     return <PipelineView events={events} />;
   }
 
-  // Fallback: flat card rendering for non-pipeline events
   return (
     <div className="space-y-3">
       {events.map((event, idx) => (
@@ -77,52 +75,62 @@ function StreamEventCard({ event }: { event: StreamEvent }) {
   if (event.type === 'status') {
     return (
       <div className="flex items-center justify-center py-2">
-        <div className="flex items-center gap-2 rounded-full bg-gray-100 px-4 py-1.5 text-xs font-medium text-gray-600">
-          <span className="h-2 w-2 rounded-full bg-blue-400 animate-pulse" />
+        <div className="flex items-center gap-2.5 rounded-full border border-border/50 bg-card/60 px-4 py-1.5 text-[11px] font-medium text-muted-foreground">
+          <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-warm)] animate-pulse" />
           {PHASE_LABELS[event.phase] || event.phase}
-          {event.round && <span className="text-gray-400">{'\u7B2C'} {event.round} {'\u8F6E'}</span>}
-          {event.idea_count != null && <span className="text-gray-400">{event.idea_count} {'\u4E2A\u521B\u610F'}</span>}
-          {event.group_count != null && <span className="text-gray-400">{event.group_count} {'\u4E2A\u8BA8\u8BBA\u7EC4'}</span>}
+          {event.round && <span className="text-muted-foreground/50">{'\u7B2C'} {event.round} {'\u8F6E'}</span>}
+          {event.idea_count != null && <span className="text-muted-foreground/50">{event.idea_count} {'\u4E2A\u521B\u610F'}</span>}
+          {event.group_count != null && <span className="text-muted-foreground/50">{event.group_count} {'\u4E2A\u8BA8\u8BBA\u7EC4'}</span>}
         </div>
       </div>
     );
   }
 
   if (event.type === 'idea') {
-    const colorClass = AGENT_COLORS[event.author] || 'bg-gray-100 text-gray-800 border-gray-200';
+    const agentClass = AGENT_COLORS[event.author] || '';
     return (
-      <div className={`rounded-lg border p-3 ${colorClass}`}>
-        <div className="mb-1 flex items-center gap-2 text-xs font-semibold">
+      <div className={`rounded-xl border p-3.5 ${agentClass}`} style={{
+        backgroundColor: 'var(--agent-bg)',
+        color: 'var(--agent-fg)',
+        borderColor: 'var(--agent-border)',
+      }}>
+        <div className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold">
           <AgentIcon agent={event.author} />
           <span>{AGENT_NAMES[event.author] || event.author}</span>
-          <span className="font-normal opacity-60">提出了新创意</span>
+          <span className="font-normal opacity-50">提出了新创意</span>
         </div>
-        <MarkdownViewer content={event.content} compact />
+        <div className="text-foreground">
+          <MarkdownViewer content={event.content} compact />
+        </div>
       </div>
     );
   }
 
   if (event.type === 'agent') {
-    const colorClass = AGENT_COLORS[event.agent] || 'bg-gray-50 text-gray-700';
+    const agentClass = AGENT_COLORS[event.agent] || '';
 
-    // Events with substantial content (critique, synthesis) show detailed cards
     if (event.content) {
       return (
-        <div className={`rounded-lg border p-3 ${colorClass}`}>
-          <div className="mb-1 flex items-center gap-2 text-xs font-semibold">
+        <div className={`rounded-xl border p-3.5 ${agentClass}`} style={{
+          backgroundColor: 'var(--agent-bg)',
+          color: 'var(--agent-fg)',
+          borderColor: 'var(--agent-border)',
+        }}>
+          <div className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold">
             <AgentIcon agent={event.agent} />
             <span>{AGENT_NAMES[event.agent] || event.agent}</span>
-            <span className="rounded bg-white/50 px-1.5 py-0.5 text-[10px] font-medium">{event.action}</span>
+            <span className="rounded-md bg-foreground/5 px-1.5 py-0.5 text-[10px] font-medium">{event.action}</span>
           </div>
-          <CollapsibleContent content={event.content} />
+          <div className="text-foreground">
+            <CollapsibleContent content={event.content} />
+          </div>
         </div>
       );
     }
 
-    // Status change events (thinking, done) show as inline indicators
     return (
-      <div className="flex items-center gap-2 py-1 text-xs text-gray-500">
-        <AgentIcon agent={event.agent} />
+      <div className="flex items-center gap-2 py-1.5 text-[11px] text-muted-foreground/50">
+        <AgentIcon agent={event.agent} className="h-3 w-3" />
         <span className="font-medium">{AGENT_NAMES[event.agent] || event.agent}</span>
         <span>
           {event.action === 'thinking'
@@ -137,29 +145,29 @@ function StreamEventCard({ event }: { event: StreamEvent }) {
 
   if (event.type === 'tool') {
     const ToolIcon = event.tool === 'web_search' ? Globe : BookOpen;
-    const toolLabel = event.tool === 'web_search' ? 'Web Search' : event.tool === 'arxiv_search' ? 'arXiv' : event.tool === 'scholar_search' ? 'Scholar' : event.tool;
+    const toolLabel = event.tool === 'web_search' ? 'Web' : event.tool === 'arxiv_search' ? 'arXiv' : event.tool === 'scholar_search' ? 'Scholar' : event.tool;
     return (
-      <div className="flex items-start gap-2 rounded-md border border-dashed border-cyan-300 bg-cyan-50/50 px-3 py-2 text-xs">
-        <ToolIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-600" />
+      <div className="flex items-start gap-2.5 rounded-xl border border-dashed border-border bg-card/40 px-3.5 py-2.5 text-[11px]">
+        <ToolIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 font-medium text-cyan-800">
+          <div className="flex items-center gap-2 font-medium text-foreground/70">
             <span>{AGENT_NAMES[event.agent] || event.agent}</span>
-            <span className="rounded bg-cyan-200/60 px-1.5 py-0.5 text-[10px] font-semibold">{toolLabel}</span>
+            <span className="rounded-md border border-border/60 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">{toolLabel}</span>
             {event.success ? (
-              <CheckCircle className="h-3 w-3 text-green-500" />
+              <CheckCircle className="h-3 w-3 text-[var(--color-warm)]" />
             ) : (
-              <AlertTriangle className="h-3 w-3 text-red-500" />
+              <AlertTriangle className="h-3 w-3 text-destructive" />
             )}
           </div>
-          <p className="mt-0.5 text-cyan-700 truncate">
+          <p className="mt-0.5 text-muted-foreground/60 truncate">
             {event.query}
-            {event.result_count > 0 && <span className="ml-1 text-cyan-500">({event.result_count} results)</span>}
+            {event.result_count > 0 && <span className="ml-1 text-muted-foreground/40">({event.result_count} results)</span>}
           </p>
           {event.result_preview && (
-            <p className="mt-0.5 text-cyan-600/80 line-clamp-2">{event.result_preview}</p>
+            <p className="mt-0.5 text-muted-foreground/40 line-clamp-2">{event.result_preview}</p>
           )}
           {event.error && (
-            <p className="mt-0.5 text-red-500">{event.error}</p>
+            <p className="mt-0.5 text-destructive/80">{event.error}</p>
           )}
         </div>
       </div>
@@ -168,14 +176,14 @@ function StreamEventCard({ event }: { event: StreamEvent }) {
 
   if (event.type === 'vote') {
     return (
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-        <div className="mb-1 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs font-semibold text-amber-800">
+      <div className="rounded-xl border border-[var(--color-warm)]/20 bg-[var(--color-warm)]/5 p-3.5">
+        <div className="mb-1.5 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-[11px] font-semibold text-[var(--color-warm)]">
             <Trophy className="h-3.5 w-3.5" />
             <span>#{event.rank}</span>
-            <span className="font-normal text-amber-600">来自 {AGENT_NAMES[event.author] || event.author}</span>
+            <span className="font-normal text-muted-foreground">{AGENT_NAMES[event.author] || event.author}</span>
           </div>
-          <span className="rounded bg-amber-200 px-2 py-0.5 text-xs font-bold text-amber-900">
+          <span className="rounded-md border border-[var(--color-warm)]/20 bg-[var(--color-warm)]/10 px-2 py-0.5 text-[11px] font-bold text-[var(--color-warm)]" style={{ fontFamily: 'var(--font-mono)' }}>
             Elo {event.elo_score}
           </span>
         </div>
@@ -186,37 +194,36 @@ function StreamEventCard({ event }: { event: StreamEvent }) {
 
   if (event.type === 'done') {
     return (
-      <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-center">
+      <div className="rounded-xl border border-[var(--color-warm)]/20 bg-[var(--color-warm)]/5 p-4 text-center">
         <div className="flex items-center justify-center gap-2">
-          <CheckCircle className="h-4 w-4 text-green-600" />
-          <p className="text-sm font-semibold text-green-800">
-            创意生成完成！共产出 {event.top_ideas?.length || 0} 个 Top 创意
+          <CheckCircle className="h-4 w-4 text-[var(--color-warm)]" />
+          <p className="text-sm font-semibold" style={{ fontFamily: 'var(--font-display)' }}>
+            生成完成
           </p>
         </div>
-        {event.cost_usd > 0 && (
-          <p className="mt-1 text-xs text-green-600">总费用: ${event.cost_usd}</p>
-        )}
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          共产出 {event.top_ideas?.length || 0} 个 Top 创意
+          {event.cost_usd > 0 && <span className="ml-2">费用: ${event.cost_usd}</span>}
+        </p>
       </div>
     );
   }
 
   if (event.type === 'error') {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-        <div className="flex items-center gap-2 text-xs font-semibold text-red-700">
+      <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3.5">
+        <div className="flex items-center gap-2 text-[11px] font-semibold text-destructive">
           <AlertTriangle className="h-3.5 w-3.5" />
           <span>错误</span>
         </div>
-        <p className="mt-1 text-sm text-red-600">{event.message || event.error || 'Unknown error'}</p>
+        <p className="mt-1 text-sm text-destructive/80">{event.message || event.error || 'Unknown error'}</p>
       </div>
     );
   }
 
-  // Unknown event types are hidden
   return null;
 }
 
-/** Threshold in characters — content longer than this starts collapsed */
 const COLLAPSE_THRESHOLD = 300;
 
 function CollapsibleContent({ content }: { content: string }) {
@@ -225,22 +232,16 @@ function CollapsibleContent({ content }: { content: string }) {
 
   return (
     <div>
-      <div
-        className={
-          expanded
-            ? ''
-            : 'relative max-h-28 overflow-hidden'
-        }
-      >
+      <div className={expanded ? '' : 'relative max-h-28 overflow-hidden'}>
         <MarkdownViewer content={content} compact />
         {!expanded && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-white/80 to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[var(--agent-bg)] to-transparent" />
         )}
       </div>
       {isLong && (
         <button
           onClick={() => setExpanded(!expanded)}
-          className="mt-1 text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline"
+          className="mt-1.5 text-[11px] font-medium text-[var(--color-warm)] hover:underline"
         >
           {expanded ? '收起' : '展开全文'}
         </button>
