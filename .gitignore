@@ -62,6 +62,9 @@ CLAUDE.md
 # --- Serena MCP ---
 .serena/
 
+# --- Playwright MCP ---
+.playwright-mcp/
+
 # --- 杂项 ---
 *.log
 *.bak
