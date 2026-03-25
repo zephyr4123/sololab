@@ -35,6 +35,8 @@ MODEL_PRICING: Dict[str, tuple[float, float]] = {
     "qwen-plus": (0.80, 2.0),
     "qwen-turbo": (0.30, 0.60),
     "qwen-max": (2.40, 9.60),
+    # 阿里通义 Qwen3.5（0.8/4.8 CNY per M tokens ≈ 0.11/0.67 USD）
+    "qwen3.5-plus": (0.11, 0.67),
     # Google Gemini (通过兼容 API)
     "gemini-2.0-flash": (0.10, 0.40),
     "gemini-2.5-flash-preview-05-20": (0.15, 0.60),

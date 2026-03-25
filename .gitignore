@@ -53,6 +53,9 @@ htmlcov/
 test-results/
 playwright-report/
 
+# --- Benchmark 运行结果（数据量大，不入库）---
+benchmark_results*/
+
 # --- Claude Code ---
 CLAUDE.md
 

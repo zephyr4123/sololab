@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     embedding_api_key: str = "sk-xxx"
     embedding_model: str = "text-embedding-3-small"
 
+    # Judge LLM 配置（Benchmark 评测专用，可独立于主 LLM）
+    judge_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    judge_api_key: str = "sk-xxx"
+    judge_model: str = "qwen3.5-plus"
+
     # 存储
     storage_path: str = "./storage"
 
