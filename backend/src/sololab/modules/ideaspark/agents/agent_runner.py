@@ -318,6 +318,11 @@ class AgentRunner:
         if not clean_content:
             clean_content = content.strip()
 
+        # 自动附加搜索来源引用（兜底机制，确保即使 LLM 忘记引用也有来源记录）
+        citations = self._collect_citations()
+        if citations and "**参考文献**" not in clean_content and "**参考来源**" not in clean_content:
+            clean_content += "\n\n---\n**参考来源（工具检索）**\n" + citations
+
         return [
             Message(
                 id=str(uuid.uuid4()),
@@ -326,6 +331,36 @@ class AgentRunner:
                 msg_type=msg_type,
             )
         ]
+
+    def _collect_citations(self) -> str:
+        """从工具调用事件中提取论文引用，格式化为参考文献列表。"""
+        seen_titles = set()
+        citation_lines = []
+
+        for event in self.tool_events:
+            if not event.get("success"):
+                continue
+            tool_name = event.get("tool", "")
+            results = event.get("results", [])
+
+            for r in results:
+                title = r.get("title", "").strip()
+                if not title or title in seen_titles:
+                    continue
+                seen_titles.add(title)
+
+                url = r.get("url", "")
+                # 格式化引用条目
+                if "arxiv.org" in url:
+                    citation_lines.append(f"- {title} ({url})")
+                elif "semanticscholar.org" in url or tool_name == "scholar_search":
+                    citation_lines.append(f"- {title} ({url})" if url else f"- {title}")
+                elif url:
+                    citation_lines.append(f"- {title} ({url})")
+                else:
+                    citation_lines.append(f"- {title}")
+
+        return "\n".join(citation_lines[:10])  # 最多保留 10 条
 
     def _detect_msg_type(self, content: str) -> MessageType:
         """从输出内容检测消息类型。"""

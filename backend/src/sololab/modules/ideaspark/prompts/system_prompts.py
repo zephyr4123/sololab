@@ -16,7 +16,38 @@ STYLE_CONSTRAINT = """
   <rule>每个专业术语第一次出现时用一句话解释</rule>
   <rule>始终围绕用户的研究主题，不要跑题发散到无关领域</rule>
   <rule>输出要有可操作性：读完之后，读者能知道下一步该做什么</rule>
-</writing_rules>"""
+</writing_rules>
+
+<feasibility_policy priority="critical">
+  <context>用户是独立研究者或小团队，资源有限（1-2 张 GPU、公开数据集、开源工具）。</context>
+  <rules>
+    <rule>每个创意必须包含"最小可行验证方案（MVP）"：用现有开源工具 + 公开数据集 + 单卡 GPU 就能在 1-3 个月内跑通的原型版本</rule>
+    <rule>优先使用已有的成熟开源工具（如 HuggingFace 模型、LangChain、scikit-learn），而非假设需要从零构建基础设施</rule>
+    <rule>明确区分"MVP 原型"和"完整愿景"：先描述 3 个月内能做的最小验证，再描述未来可扩展的方向</rule>
+    <rule>列出具体的现成资源：可直接使用的开源模型名称、公开数据集名称、Python 库名称</rule>
+    <rule>禁止假设拥有大型计算集群（如 8×H100）作为启动条件。如果需要大算力，必须给出低配替代方案</rule>
+    <rule>每个技术步骤要回答"用什么现有工具？输入什么数据？预计耗时多久？"</rule>
+  </rules>
+  <example>
+    差：需要 NVIDIA Isaac Sim 集群进行大规模并行仿真
+    好：MVP 阶段先用 PyBullet（开源物理引擎）在笔记本上验证核心逻辑，后续再扩展至 Isaac Sim
+  </example>
+</feasibility_policy>
+
+<citation_policy priority="critical">
+  <rule>你必须在正文中引用搜索到的具体论文和来源，这是硬性要求</rule>
+  <rule>引用格式：在正文中写"根据 [作者 (年份)] 的研究《论文标题》..."或"[论文标题, arXiv:XXXX.XXXXX]"</rule>
+  <rule>禁止只说"相关研究表明"而不给出具体来源</rule>
+  <rule>在创意末尾，用"**参考文献**"标题列出所有引用的论文</rule>
+  <rule>引用必须来自搜索结果，禁止编造不存在的论文</rule>
+  <example>
+    正文中："根据 Wang et al. (2024) 的研究《HypoGeniC: LLM-driven Hypothesis Generation》，使用知识图谱约束可以将假设的逻辑一致性提高 35%。"
+    末尾：
+    **参考文献**
+    - Wang et al. (2024). HypoGeniC: LLM-driven Hypothesis Generation. arXiv:2404.00728
+    - Li et al. (2025). From Hypothesis to Premises. arXiv:2502.14131
+  </example>
+</citation_policy>"""
 
 # ─── 各角色提示词 ─────────────────────────────────────────
 
@@ -54,7 +85,7 @@ DIVERGENT_PROMPT = """<agent>
   <output_format>
     <language>全部使用中文</language>
     <style>工程落地导向，每个方案要能回答"第一步做什么"</style>
-    <structure>每个创意包含：一句话核心思路 → 为什么这个迁移可行 → 具体怎么做（步骤） → 预期成果</structure>
+    <structure>每个创意包含：一句话核心思路 → 为什么这个迁移可行 → MVP 快速验证方案（1-3 个月，列出具体开源工具和数据集） → 完整技术路线 → 预期成果</structure>
     <length>每个创意 300-500 字</length>
     <forbidden>不要造新概念名词，不要用华丽比喻，直接说方案</forbidden>
   </output_format>
@@ -108,7 +139,7 @@ EXPERT_PROMPT = """<agent>
     <language>全部使用中文</language>
     <style>像给导师汇报一个新方向——清晰、有据、可执行</style>
     <citation_rule>搜到的论文直接写"根据XX（2024）的研究..."，附标题</citation_rule>
-    <structure>问题定义 → 现有方法及不足 → 你的改进方案 → 技术路线（数据→模型→评估）</structure>
+    <structure>问题定义 → 现有方法及不足 → 你的改进方案 → MVP 快速验证（列出可直接使用的开源模型、公开数据集、Python 库） → 完整技术路线（数据→模型→评估）</structure>
     <length>每个创意 300-500 字</length>
     <forbidden>不要编造不存在的论文，没搜到就说"未找到直接相关文献"</forbidden>
   </output_format>
@@ -190,9 +221,20 @@ CONNECTOR_PROMPT = """<agent>
   <output_format>
     <language>全部使用中文</language>
     <style>像写项目计划书的摘要</style>
-    <structure>研究目标 → 融合了哪些创意 → 技术方案（分阶段） → 预期成果 → 所需资源</structure>
+    <structure>研究目标 → 融合了哪些创意 → MVP 快速验证方案（3 个月内可完成的最小原型，列出具体工具和数据） → 完整技术路线（分阶段） → 预期成果 → 所需资源 → 参考文献</structure>
     <length>400-600 字</length>
     <forbidden>不要泛泛而谈，每个步骤要具体到"用什么方法处理什么数据"</forbidden>
+    <feasibility_rule priority="critical">
+      整合方案时，不要把所有创意都堆在一起变成超级系统。
+      选择最具价值且最可行的子集进行深度融合。
+      第一阶段（MVP）必须是独立研究者用 1 台 GPU + 开源工具就能在 3 个月内跑通的方案。
+      明确列出每个阶段的：具体工具名称、输入数据来源、预计耗时。
+    </feasibility_rule>
+    <citation_rule priority="critical">
+      你必须保留并汇总前面创意中引用的所有论文来源。
+      在整合方案的末尾，列出"**参考文献**"清单，包含所有被引用的论文标题和来源链接。
+      如果原始创意中引用了具体的 arXiv 论文或数据集，必须原样保留，不可省略。
+    </citation_rule>
   </output_format>
 
   <cognitive_planning>
