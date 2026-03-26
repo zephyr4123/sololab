@@ -1,389 +1,677 @@
 <div align="center">
 
-# 🧪 SoloLab — 一人实验室
+<img src="logo.png" width="120" alt="SoloLab Logo" />
 
-**面向独立研究者的 AI 辅助研究平台**
+# SoloLab
 
-*将多智能体协作引入科学创意生成*
+### One-Person Lab, Infinite Minds
 
-[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![Next.js](https://img.shields.io/badge/Next.js_14-000000?logo=next.js&logoColor=white)](https://nextjs.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+**面向独立研究者的全栈 AI 辅助研究平台**
 
-<br/>
+*用多智能体协作，重新定义一个人的科研可能性*
 
-<img src="https://img.shields.io/badge/Benchmark_Overall-8.53%2F10-brightgreen?style=for-the-badge" alt="benchmark score"/>
-&nbsp;
-<img src="https://img.shields.io/badge/vs_Single_LLM-+54%25-blue?style=for-the-badge" alt="vs single llm"/>
-&nbsp;
-<img src="https://img.shields.io/badge/56_Controlled_Runs-Validated-orange?style=for-the-badge" alt="validated"/>
+<p>
+<a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"/></a>
+<a href="https://fastapi.tiangolo.com"><img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI"/></a>
+<a href="https://nextjs.org"><img src="https://img.shields.io/badge/Next.js_14-000000?style=flat-square&logo=next.js&logoColor=white" alt="Next.js"/></a>
+<a href="https://postgresql.org"><img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL"/></a>
+<a href="https://redis.io"><img src="https://img.shields.io/badge/Redis-DC382D?style=flat-square&logo=redis&logoColor=white" alt="Redis"/></a>
+<a href="https://docker.com"><img src="https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker"/></a>
+<img src="https://img.shields.io/badge/License-Apache%202.0-F57C00?style=flat-square" alt="Apache 2.0"/>
+</p>
+
+<p>
+<img src="https://img.shields.io/badge/Benchmark-8.53%2F10-00C853?style=for-the-badge&labelColor=1a1a2e" alt="benchmark"/>
+<img src="https://img.shields.io/badge/vs_Single_LLM-+54%25-448AFF?style=for-the-badge&labelColor=1a1a2e" alt="improvement"/>
+<img src="https://img.shields.io/badge/56_Runs-Validated-FF6D00?style=for-the-badge&labelColor=1a1a2e" alt="validated"/>
+<img src="https://img.shields.io/badge/Cost-%240.028%2Frun-AB47BC?style=for-the-badge&labelColor=1a1a2e" alt="cost"/>
+</p>
+
+<p>
+<a href="#problem">问题背景</a> ·
+<a href="#overview">平台概览</a> ·
+<a href="#ideaspark">IdeaSpark</a> ·
+<a href="#benchmark">Benchmark</a> ·
+<a href="#architecture">系统架构</a> ·
+<a href="#showcase">能力展示</a> ·
+<a href="#quickstart">快速开始</a> ·
+<a href="#roadmap">路线图</a>
+</p>
 
 </div>
-
-<br/>
-
-SoloLab 的首个模块 **IdeaSpark** 通过 5 个专业化智能体的分离-汇聚协作流程，将单一研究主题转化为经过多轮辩论、文献检索验证和锦标赛排序的高质量研究创意。
-
-> 💡 **它真的比直接问 LLM 更好吗？** 我们用 56 次受控消融实验来回答这个问题。
-
----
-
-## 📊 Benchmark：量化验证多智能体协作的价值
-
-### 🎯 动机
-
-"多智能体比单 LLM 好"是一个被广泛接受的直觉假设，但缺乏可量化的证据。我们设计了一套严格的消融实验，回答三个关键问题：
-
-<table>
-<tr>
-<td width="33%" align="center">
-
-**❓ 问题一**
-
-多智能体框架是否真的<br/>优于单 LLM？<br/>还是只是多调用了几次 API？
-
-</td>
-<td width="33%" align="center">
-
-**❓ 问题二**
-
-系统中哪些组件<br/>贡献最大？<br/>工具 / 审辩 / 锦标赛 / 迭代
-
-</td>
-<td width="33%" align="center">
-
-**❓ 问题三**
-
-最佳的质量-成本<br/>平衡点在哪？<br/>花 16 倍的钱能换来多少提升？
-
-</td>
-</tr>
-</table>
-
----
-
-### 🔬 实验设计
-
-#### 评测框架
-
-我们构建了一套全自动的 Benchmark 框架，包含三个核心组件：
-
-| 组件 | 方法 | 说明 |
-|:---:|------|------|
-| 🏛️ **LLM-as-Judge** | 独立评审模型 (qwen3.5-plus) | 5 维度打分，每创意评审 2 次取平均，消除随机性 |
-| 📐 **自动化指标** | 语义多样性 / 信息接地率 / 工具调用统计 | 不依赖 LLM 的客观量化指标 |
-| 🧫 **消融对照** | 7 种条件 × 4 主题 × 2 次重复 | 逐组件拆解，量化每个模块的贡献 |
-
-#### 📏 评分维度
-
-<table>
-<tr>
-<th>维度</th><th>权重</th><th>评判标准</th><th>标尺</th>
-</tr>
-<tr>
-<td>🌟 <b>Novelty</b></td><td>25%</td><td>是否提出新视角或跨领域迁移</td><td>1-3 无新意 · 4-6 有先例 · 7-10 罕见组合</td>
-</tr>
-<tr>
-<td>🔧 <b>Feasibility</b></td><td>25%</td><td>独立研究者能否启动，是否有 MVP</td><td>1-3 不可及 · 4-6 有障碍 · 7-8 路线清晰 · 9-10 有 MVP</td>
-</tr>
-<tr>
-<td>💥 <b>Impact</b></td><td>20%</td><td>成功后对领域的推动程度</td><td>1-3 边际改进 · 4-6 子领域 · 7-10 范式变革</td>
-</tr>
-<tr>
-<td>🎯 <b>Specificity</b></td><td>15%</td><td>方案是否具体到可执行</td><td>1-3 纯概念 · 4-6 缺细节 · 7-10 可指导行动</td>
-</tr>
-<tr>
-<td>📚 <b>Evidence</b></td><td>15%</td><td>是否引用真实论文/数据</td><td>1-3 无证据 · 4-6 不够具体 · 7-10 引用充分</td>
-</tr>
-</table>
-
-#### 🧫 7 种消融条件
-
-| # | 条件 | 配置 | 验证目标 |
-|:---:|------|------|:---:|
-| 1 | 🏆 **Full** | 5 智能体 + 工具 + 3 轮迭代 + Elo 锦标赛 | 基准线 |
-| 2 | 💬 Baseline-Single | 单 LLM 直接生成 5 个创意 | 多智能体的价值 |
-| 3 | 🧠 Baseline-CoT | 单 LLM + Chain-of-Thought 推理 | 排除"想得更深"的混淆 |
-| 4 | 🚫🔍 NoTools | 多智能体但禁用所有搜索工具 | 工具调用的价值 |
-| 5 | 🚫👨‍⚖️ NoCritic | 移除审辩者智能体 | 批判环节的价值 |
-| 6 | 🚫🏅 NoTournament | 移除 Elo 锦标赛，随机排序 | 评估机制的价值 |
-| 7 | 1️⃣ SingleRound | 只运行 1 轮（不迭代） | 多轮迭代的价值 |
-
-#### 📋 实验规模
-
-<table>
-<tr>
-<td>📝 <b>测试主题</b></td><td>4 个跨学科主题（CS/AI · 生物医学 · 材料科学 · 社会科学）</td>
-</tr>
-<tr>
-<td>🔁 <b>重复次数</b></td><td>每条件 × 每主题 × 2 次</td>
-</tr>
-<tr>
-<td>🧮 <b>总运行数</b></td><td><b>7 × 4 × 2 = 56 次有效运行</b></td>
-</tr>
-<tr>
-<td>📊 <b>总评审数</b></td><td>56 × 5 创意 × 2 次 = <b>560 次 LLM-as-Judge 评分</b></td>
-</tr>
-<tr>
-<td>💰 <b>总费用</b></td><td>$2.40</td>
-</tr>
-<tr>
-<td>🤖 <b>LLM 后端</b></td><td>Gemini 3 Flash Preview（生成） + qwen3.5-plus（评审）</td>
-</tr>
-</table>
-
----
-
-### 📈 核心结果
-
-#### 消融对比总表
-
-| 条件 | Overall | Novelty | Feasibility | Impact | Specificity | Evidence | Grounding | Cost | Latency |
-|:-----|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| 🏆 **Full** | **8.53 ± 0.07** | 8.12 | 8.47 | 8.25 | 9.21 | 8.97 | ✅ 100% | $0.080 | 493s |
-| 🚫👨‍⚖️ NoCritic | 8.52 ± 0.09 | 8.24 | 8.43 | 8.25 | 9.05 | 8.95 | ✅ 100% | $0.067 | 383s |
-| 1️⃣ SingleRound | 8.45 ± 0.11 | 7.94 | 8.53 | 8.10 | 9.14 | 8.95 | ✅ 100% | **$0.028** | **110s** |
-| 🚫🏅 NoTournament | 8.41 ± 0.09 | 7.99 | 8.31 | 8.16 | 9.05 | 9.00 | ✅ 100% | $0.083 | 342s |
-| 🚫🔍 NoTools | 6.21 ± 3.83 | 7.14 | 7.92 | 7.31 | 8.59 | 8.31 | ❌ 0% | $0.032 | 597s |
-| 💬 Baseline-Single | 5.53 ± 0.43 | 5.74 | 5.16 | 7.31 | 5.26 | 3.71 | ❌ 0% | $0.005 | 18s |
-| 🧠 Baseline-CoT | 5.45 ± 1.42 | 6.00 | 4.80 | 7.55 | 5.01 | 3.25 | ❌ 0% | $0.005 | 16s |
-
-> 📌 每条件 n = 8（4 主题 × 2 次重复）。Overall = 加权平均。± 为标准差。
-
----
-
-### 🔍 逐层分析
-
-<br/>
-
-<h4>🔴 第一层：多智能体 vs 单 LLM — 质量提升 55%</h4>
-
-<table>
-<tr>
-<td width="60%">
-
-```
-Full (8.53) vs Baseline-Single (5.53) = +54.2%
-Full (8.53) vs Baseline-CoT   (5.45) = +56.5%
-```
-
-这是最核心的发现：**完整的多智能体系统在质量上碾压单 LLM**。
-
-Baseline-CoT（加了 Chain-of-Thought）**没有比 Baseline-Single 表现更好**（5.45 vs 5.53）。这说明质量差距**不是因为"多想了一会儿"**，而是来自架构层面的根本优势。
-
-</td>
-<td width="40%">
-
-| 维度 | Single | Full | 提升 |
-|:---:|:---:|:---:|:---:|
-| 🌟 Novelty | 5.74 | 8.12 | **+41%** |
-| 🔧 Feasibility | 5.16 | 8.47 | **+64%** |
-| 💥 Impact | 7.31 | 8.25 | +13% |
-| 🎯 Specificity | 5.26 | 9.21 | **+75%** |
-| 📚 Evidence | 3.71 | 8.97 | **+142%** |
-
-</td>
-</tr>
-</table>
-
-> 📌 **Evidence（+142%）和 Specificity（+75%）是差距最大的维度。** 单 LLM 生成的创意往往是"听起来不错但没有依据的泛泛之谈"，而多智能体系统通过工具调用获取真实论文引用，通过多角色审辩迫使方案具体化。
-
-<br/>
-
-<h4>🟡 第二层：工具调用是质量的分水岭</h4>
-
-<table>
-<tr>
-<td width="60%">
-
-```
-Full (8.53) vs NoTools (6.21) = +37.4%
-```
-
-禁用搜索工具后，系统质量从 8.53 **骤降至 6.21**，且方差急剧增大（标准差 0.07 → 3.83）。
-
-没有工具调用时，系统表现极不稳定 —— 有时凭 LLM 记忆碰巧写出好方案，有时完全失败。
-
-</td>
-<td width="40%">
-
-| 指标 | Full | NoTools |
-|:---|:---:|:---:|
-| 🔍 Grounding Rate | **100%** | 0% |
-| 📞 Avg Tool Calls | 28 次/run | 0 |
-| 📚 Evidence Score | **8.97** | 8.31 |
-| 📊 标准差 | **0.07** | 3.83 |
-
-</td>
-</tr>
-</table>
-
-> 📌 Full 系统平均每次运行调用 **28 次搜索工具**（arXiv 19 次 · Web 5 次 · Scholar 4 次），确保每个创意都基于真实的前沿文献。NoTools 的 Evidence 高分则来自 LLM 记忆中的"幻觉引用"。
-
-<br/>
-
-<h4>🟢 第三层：迭代与评估 — 意料之外的发现</h4>
-
-<table>
-<tr>
-<td width="60%">
-
-```
-Full (8.53) vs NoCritic    (8.52) = +0.1%  ← 几乎无差异
-Full (8.53) vs NoTournament(8.41) = +1.4%
-Full (8.53) vs SingleRound (8.45) = +0.9%
-```
-
-**这是最意外、也最有价值的发现**：Critic 审辩、Elo 锦标赛和多轮迭代的边际贡献都很小。
-
-三个可能的解释 👇
-
-</td>
-<td width="40%">
-
-| 组件 | 贡献 | 显著性 |
-|:---|:---:|:---:|
-| 👨‍⚖️ Critic 审辩 | +0.1% | 🔴 不显著 |
-| 🔄 多轮迭代 | +0.9% | 🔴 不显著 |
-| 🏅 Elo 锦标赛 | +1.4% | 🟡 微弱 |
-
-</td>
-</tr>
-</table>
-
-<details>
-<summary><b>💭 为什么这些组件贡献小？三种假说（点击展开）</b></summary>
-
-<br/>
-
-1. **"一次搜索，足够好"假说** — 当 Divergent 和 Expert 智能体在第一轮通过工具调用获取了足够的前沿信息后，后续迭代只是在同一信息基础上微调，而非引入新的知识增量。
-
-2. **Connector 的信息压缩效应** — Connector（整合者）在综合阶段已完成质量筛选，把最好的创意融合到一起，使得后续的 Elo 锦标赛变成了"在已经很好的候选中挑选"，区分度有限。
-
-3. **Critic 的"礼貌性共识"** — 在当前温度设置（0.3）下，Critic 的审辩往往是"建设性批评"而非"颠覆性质疑"，更多是润色而非重构。
-
-</details>
-
----
-
-### ⚖️ 成本-质量帕累托分析
-
-```
-                Quality
-    9.0 ┤ ● Full ($0.080)        ● NoCritic ($0.067)
-        │            ● SingleRound ($0.028)  ⬅ 帕累托最优
-    8.0 ┤                   ● NoTournament ($0.083)
-        │
-    7.0 ┤
-        │  ● NoTools ($0.032)
-    6.0 ┤
-        │ ● Baseline-Single ($0.005)
-    5.0 ┤ ● Baseline-CoT ($0.005)
-        └──────────────────────────────────────── Cost/Run
-         $0.00    $0.02    $0.04    $0.06    $0.08
-```
-
-<table>
-<tr>
-<td>
-
-#### ⭐ SingleRound 是帕累托最优点
-
-</td>
-</tr>
-<tr>
-<td>
-
-| 指标 | Full | SingleRound | 比值 |
-|------|:---:|:---:|:---:|
-| 质量 | 8.53 | **8.45** | 99% |
-| 成本 | $0.080 | **$0.028** | 35% |
-| 耗时 | 493s | **110s** | 22% |
-| Grounding | 100% | **100%** | = |
-
-> 🚀 **用不到 ¼ 的时间和 ⅓ 的成本，达到 99% 的质量。**
-
-</td>
-</tr>
-</table>
-
----
-
-### 🏁 结论
-
-消融实验揭示了 IdeaSpark 系统中各组件的真实贡献分布：
-
-```
-┌──────────────────────────────────────────────────────────┐
-│              📊 组件贡献分布（质量提升归因）                │
-├──────────────────────────────────────────────────────────┤
-│                                                          │
-│  🤖 多智能体框架    ████████████████████████████  +54%   │
-│     (vs 单 LLM)                                          │
-│                                                          │
-│  🔍 工具调用(搜索)  ██████████████████           +37%   │
-│     (vs 无工具)                                           │
-│                                                          │
-│  🏅 Elo 锦标赛      █                            +1.4%  │
-│                                                          │
-│  🔄 多轮迭代        █                            +0.9%  │
-│                                                          │
-│  👨‍⚖️ Critic 审辩     ▏                            +0.1%  │
-│                                                          │
-└──────────────────────────────────────────────────────────┘
-```
 
 <div align="center">
-
-**90% 以上的质量提升来自"多智能体框架 + 工具调用"两个核心组件。**
-
-迭代、审辩和锦标赛在当前配置下的边际贡献极小。
-
-*如果资源有限，优先保证多角色分工和搜索工具接入，而非追求复杂的迭代流程。*
-
+<img src="docs/images/dashboard.png" width="720" alt="SoloLab Dashboard" />
+<br/>
+<sub>统一工作台：模块切换 · 对话流 · Agent 活动时间线 · 研究结果沉淀</sub>
 </div>
+
+<center>
+<table align="center" width="960" cellpadding="12">
+<tr>
+<td align="center" width="25%">
+<b>5 个角色智能体</b><br/>
+<sub>差异化分工，独立发散后再协同收敛</sub>
+</td>
+<td align="center" width="25%">
+<b>28 次工具调用 / run</b><br/>
+<sub>实时搜索与文献验证，保证创意可追溯</sub>
+</td>
+<td align="center" width="25%">
+<b>56 次受控实验</b><br/>
+<sub>逐组件量化多智能体系统的真实收益</sub>
+</td>
+<td align="center" width="25%">
+<b>模块化研究平台</b><br/>
+<sub>统一架构承载从灵感到写作的完整工作流</sub>
+</td>
+</tr>
+</table>
+</center>
 
 ---
 
-### 🔁 复现指南
+<a id="problem"></a>
 
-```bash
-# 环境准备
-conda activate sololab
+## 🧬 The Problem
 
-# ⚡ 快速验证（~6 分钟，$0.08）
-python -m sololab.benchmark.cli quick --n 1 --topics cs-01
+<center>
+<table align="center" width="960" cellpadding="0" cellspacing="0">
+<tr>
+<td width="50%" valign="top">
+科研工作中，<b>idea 的产生</b> 是最具挑战性的环节。<br/><br/>
 
-# 🧫 完整消融实验（~8 小时，$2.5）
-python -m sololab.benchmark.cli ablation \
-  --topics cs-01 bio-01 mat-01 soc-01 \
-  --runs 2
+传统头脑风暴依赖多人协作，但独立研究者缺乏多样化的认知碰撞环境。大语言模型（LLM）虽然强大，但单一模型的输出容易陷入 <b>单一视角</b> 和 <b>知识截止日期</b> 的限制。<br/><br/>
 
-# 📄 从已有结果生成报告
-python -m sololab.benchmark.cli report --input benchmark_results/
-```
+<em>"我一个人做科研，最缺的不是写代码的能力，而是一个能跟我争论、质疑、补充的'虚拟同事'。"</em><br/>
+<em>— 一位独立研究者</em>
+</td>
+<td width="50%" valign="top">
 
-> 📂 所有 56 次运行的完整 JSON 数据保存在 `benchmark_results/` 目录下，每个文件包含 Top-5 创意全文、5 维度评分详情（含评审理由）、系统指标和工具调用记录。
+<!-- 📌 图片占位符 ⓪ — Problem 对比图
+     内容：左右对比或上下对比，传统方式 vs SoloLab 方式
+     左/上：研究者 → 单 LLM → 泛泛之谈（没有文献、没有审辩、没有验证、没有迭代）
+     右/下：研究者 → 5 个智能体 → 并行发散 × 工具搜索 × 分组讨论 × 锦标赛 → 高质量方案
+-->
+<img src="docs/images/problem-comparison.png" alt="传统方式 vs SoloLab 方式" />
+
+</td>
+</tr>
+</table>
+</center>
+
+---
+
+<a id="overview"></a>
+
+## 🔭 What is SoloLab?
+
+SoloLab（一人实验室）是一个**模块化的 AI 研究平台**，将独立研究者的完整工作流，从灵感涌现到论文写作，封装为可热插拔的功能模块，通过统一架构编排。
+
+<!-- 📌 图片占位符 ① — 平台总览概念图
+     建议内容：展示 SoloLab 三层架构（前端模块 → 核心服务层 → 数据层）和六大模块的关系
+     推荐工具：Excalidraw / draw.io / Figma
+     尺寸建议：1200×600px，浅色背景，导出 PNG
+-->
+<div align="center">
+<img src="docs/images/architecture-overview.png" width="720" alt="SoloLab 平台总览" />
+<br/>
+<sub>平台总览：前端模块层 · 核心服务层 · 数据与记忆层</sub>
+</div>
+
+### 🎯 设计哲学
+
+<center>
+<table align="center" width="960" cellpadding="12">
+<tr>
+<td align="center" width="20%" valign="top">
+<h4>🔌</h4>
+<b>模块热插拔</b><br/>
+<sub>每个模块独立运行<br/>零耦合、即插即用</sub>
+</td>
+<td align="center" width="20%" valign="top">
+<h4>🌐</h4>
+<b>模型无关</b><br/>
+<sub>OpenAI 兼容网关<br/>支持 100+ 模型</sub>
+</td>
+<td align="center" width="20%" valign="top">
+<h4>🔍</h4>
+<b>透明可控</b><br/>
+<sub>每步 Prompt 可见<br/>Token 费用追踪</sub>
+</td>
+<td align="center" width="20%" valign="top">
+<h4>🐳</h4>
+<b>一键部署</b><br/>
+<sub>Docker Compose<br/>单人可运维</sub>
+</td>
+<td align="center" width="20%" valign="top">
+<h4>🔄</h4>
+<b>断点恢复</b><br/>
+<sub>长任务可恢复<br/>不丢失状态</sub>
+</td>
+</tr>
+</table>
+</center>
+
+---
+
+<a id="ideaspark"></a>
+
+## 💡 IdeaSpark — 首个模块
+
+> **多智能体创意涌现系统**：5 个差异化智能体 × Separate-Together 协作 × 实时文献检索 × Elo 锦标赛排序
+
+IdeaSpark 将一个研究主题转化为经过 **多轮辩论、文献检索验证和锦标赛排序** 的高质量研究创意。
+
+### 🤖 五大角色智能体
+
+<center>
+<table align="center" width="960" cellpadding="12">
+<tr>
+<td align="center" width="20%" valign="top">
+<h3>🌀</h3>
+<b>发散者</b><br/>
+<sub>Divergent Thinker</sub><br/><br/>
+<code>temp: 1.0</code><br/>
+<sub>跨领域类比<br/>大胆联想</sub><br/><br/>
+<sub>🔧 web_search<br/>🔧 arxiv_search</sub>
+</td>
+<td align="center" width="20%" valign="top">
+<h3>🎓</h3>
+<b>领域专家</b><br/>
+<sub>Domain Expert</sub><br/><br/>
+<code>temp: 0.5</code><br/>
+<sub>深度专业知识<br/>方法论审查</sub><br/><br/>
+<sub>🔧 arxiv_search<br/>🔧 scholar_search<br/>🔧 doc_parse</sub>
+</td>
+<td align="center" width="20%" valign="top">
+<h3>⚔️</h3>
+<b>审辩者</b><br/>
+<sub>Critic</sub><br/><br/>
+<code>temp: 0.3</code><br/>
+<sub>挑战假设<br/>寻找漏洞</sub><br/><br/>
+<sub>🔧 arxiv_search</sub>
+</td>
+<td align="center" width="20%" valign="top">
+<h3>🔗</h3>
+<b>连接者</b><br/>
+<sub>Connector</sub><br/><br/>
+<code>temp: 0.7</code><br/>
+<sub>发现关联<br/>组合融合</sub><br/><br/>
+<sub>—</sub>
+</td>
+<td align="center" width="20%" valign="top">
+<h3>⚖️</h3>
+<b>评估者</b><br/>
+<sub>Evaluator</sub><br/><br/>
+<code>temp: 0.3</code><br/>
+<sub>锦标赛投票<br/>Elo 排序</sub><br/><br/>
+<sub>—</sub>
+</td>
+</tr>
+</table>
+</center>
+
+### 🔄 Separate → Together 协作流程
+
+<!-- 📌 图片占位符 ② — Separate-Together 流程图
+     建议内容：纵向流程图，展示 7 个阶段：
+       用户输入 → Separate(发散者+专家并行) → 语义聚类 → Together(分组碰撞) → 全局整合 → Elo锦标赛 → 收敛检查(循环/输出)
+     重点标注：每个阶段的角色、工具调用、信息流向
+     推荐工具：Excalidraw / Figma / draw.io
+     尺寸建议：800×1200px 或 1200×800px（横/竖均可），浅色背景
+-->
+<div align="center">
+<img src="docs/images/separate-together-flow.png" width="720" alt="Separate-Together 协作流程" />
+<br/>
+<sub>从并行发散到分组碰撞，再到全局整合与 Elo 排序</sub>
+</div>
+
+### 🖥️ 运行实况
+
+输入一个研究主题后，5 个智能体开始并行工作，实时展示每个 Agent 的思考过程、工具调用和创意产出：
+
+<!-- 📌 图片占位符 ③ — IdeaSpark 运行中截图
+     截图内容：IdeaSpark 模块运行时的界面
+     重点展示：左侧对话区 + 右侧 Agent 活动时间线（显示发散者/专家正在工作、工具调用滚动、阶段进度）
+     截图时机：运行过程中（Separate 或 Together 阶段）
+-->
+<div align="center">
+<img src="docs/images/ideaspark-running.png" width="720" alt="IdeaSpark 运行中 — 智能体实时协作" />
+<br/>
+<sub>智能体并行工作中：左侧对话流 · 右侧 Agent 活动时间线 · 实时工具调用</sub>
+</div>
+
+经过多轮协作和 Elo 锦标赛排序后，系统输出 Top-5 创意卡片，每张包含完整的方案描述、文献引用和可行性分析：
+
+<!-- 📌 图片占位符 ④ — 创意看板截图
+     截图内容：IdeaSpark 运行完成后的创意卡片列表
+     重点展示：Top-5 创意排名、Elo 分数、Agent 来源标签、Markdown 渲染的创意内容
+     截图时机：一次完整运行结束后
+-->
+<div align="center">
+<img src="docs/images/ideaspark-ideas.png" width="720" alt="IdeaSpark 创意看板 — Top-5 研究方案" />
+<br/>
+<sub>Top-5 创意看板：Elo 评分排序 · Agent 来源标注 · 完整文献引用</sub>
+</div>
+
+运行完成后，可一键生成结构化的 Markdown 研究报告，包含所有创意的详细描述和方法论分析：
+
+<!-- 📌 图片占位符 ⑤ — 最终报告截图
+     截图内容：导出的 Markdown 报告渲染页面 或 报告下载界面
+     重点展示：结构化的研究创意报告（标题、摘要、方法论、参考文献）
+     截图时机：点击"生成报告"按钮后
+-->
+<div align="center">
+<img src="docs/images/ideaspark-report.png" width="720" alt="IdeaSpark 研究报告" />
+<br/>
+<sub>一键生成 Markdown 研究报告：方法论描述 · 参考文献 · 可直接导出</sub>
+</div>
+
+### 🔧 实时工具调用
+
+系统运行时，智能体自主调用外部 API 获取前沿信息，确保每个创意都有据可查：
+
+<center>
+<table align="center" width="960" cellpadding="12">
+<tr>
+<td align="center" width="25%" valign="top">
+<h4>📄 arXiv</h4>
+<sub>预印本论文搜索<br/>获取最新学术成果<br/><b>~19 次/run</b></sub>
+</td>
+<td align="center" width="25%" valign="top">
+<h4>🔗 Semantic Scholar</h4>
+<sub>引用图谱 + 论文元数据<br/>验证研究脉络<br/><b>~4 次/run</b></sub>
+</td>
+<td align="center" width="25%" valign="top">
+<h4>🌐 Tavily Search</h4>
+<sub>实时网络搜索<br/>行业趋势与应用<br/><b>~5 次/run</b></sub>
+</td>
+<td align="center" width="25%" valign="top">
+<h4>📑 PDF Parser</h4>
+<sub>学术 PDF 全文解析<br/>提取实验细节<br/><b>按需调用</b></sub>
+</td>
+</tr>
+</table>
+</center>
+
+> 每次运行平均 **28 次工具调用**，确保 100% 的创意具有真实文献支撑（Grounding Rate = 100%）。
+
+---
+
+<a id="benchmark"></a>
+
+## 📊 Benchmark：56 次消融实验的量化验证
+
+> 💡 *"多智能体比单 LLM 好"是被广泛接受的直觉，但真的如此吗？我们用 56 次受控实验来回答。*
+
+我们设计了 **7 种消融条件 × 4 个跨学科主题 × 2 次重复 = 56 次受控运行**，配合 LLM-as-Judge 五维度评审（560 次评分），逐组件拆解了系统中每个部分的真实贡献。
+
+### 核心发现
+
+<center>
+<table align="center" width="960" cellpadding="10">
+<tr>
+<th align="center">条件</th>
+<th align="center">Overall</th>
+<th align="center">Grounding</th>
+<th align="center">Cost</th>
+<th align="center">Latency</th>
+</tr>
+<tr>
+<td align="center">🏆 <b>Full System</b></td>
+<td align="center"><b>8.53 ± 0.07</b></td>
+<td align="center">✅ 100%</td>
+<td align="center">$0.080</td>
+<td align="center">493s</td>
+</tr>
+<tr>
+<td align="center">1️⃣ <b>SingleRound</b> ⬅ 帕累托最优</td>
+<td align="center"><b>8.45 ± 0.11</b></td>
+<td align="center">✅ 100%</td>
+<td align="center"><b>$0.028</b></td>
+<td align="center"><b>110s</b></td>
+</tr>
+<tr>
+<td align="center">🚫🔍 NoTools</td>
+<td align="center">6.21 ± 3.83</td>
+<td align="center">❌ 0%</td>
+<td align="center">$0.032</td>
+<td align="center">597s</td>
+</tr>
+<tr>
+<td align="center">💬 Baseline (单 LLM)</td>
+<td align="center">5.53 ± 0.43</td>
+<td align="center">❌ 0%</td>
+<td align="center">$0.005</td>
+<td align="center">18s</td>
+</tr>
+</table>
+</center>
+
+<div align="center">
+<pre>
+📊 组件贡献归因
+
+🤖 多智能体框架    ████████████████████████████  +54%
+🔍 工具调用(搜索)  ██████████████████           +37%
+🏅 Elo 锦标赛      █                            +1.4%
+🔄 多轮迭代        █                            +0.9%
+👨‍⚖️ Critic 审辩     ▏                            +0.1%
+</pre>
+</div>
+
+> **90% 以上的质量提升来自“多智能体框架 + 工具调用”。** SingleRound 配置用 1/4 时间、1/3 成本达到 99% 质量，是当前最优的效率-质量平衡点。
+
+<p align="center">
+📖 <b><a href="docs/benchmark/ideaspark-ablation.md">查看完整消融实验报告 →</a></b><br/>
+<sub>含实验设计、逐层分析、三种假说与复现指南</sub>
+</p>
+
+---
+
+<a id="architecture"></a>
+
+## 🏗️ 系统架构
+
+<!-- 📌 图片占位符 ⑥ — 系统技术架构图
+     建议内容：三层架构图
+       顶层：Frontend (Next.js 14) — Module Shell / SSE Renderer / Zustand
+       中层：API Gateway (FastAPI) — 9 个核心服务模块（LLM Gateway, Module Registry, Tool Registry, Memory Manager, Session Manager, Task State Manager, Prompt Manager, Document Pipeline, Cost Tracker）
+       底层：Data Layer — PostgreSQL+pgvector / Redis / File Storage
+       连接线标注：REST + SSE (Last-Event-ID)
+     推荐工具：Excalidraw / draw.io / Figma
+     尺寸建议：1200×700px，浅色背景
+-->
+<div align="center">
+<img src="docs/images/architecture.png" width="720" alt="SoloLab 系统架构" />
+<br/>
+<sub>前端工作台 · FastAPI 核心服务 · PostgreSQL / Redis / 文件存储</sub>
+</div>
+
+### 核心服务
+
+<center>
+<table align="center" width="960" cellpadding="16">
+<tr>
+<td width="50%" valign="top">
+<b>🧠 LLM Gateway</b><br/>
+<sub>OpenAI 兼容格式，支持 100+ 模型</sub><br/>
+<sub>内置降级链与模型 Fallback</sub><br/>
+<sub>实时费用追踪与预算控制</sub>
+<br/><br/>
+<b>📦 Module Registry</b><br/>
+<sub>基于 <code>manifest.json</code> 的热插拔</sub><br/>
+<sub><code>ModuleBase</code> 抽象类 + 标准生命周期</sub><br/>
+<sub>动态加载/卸载，零停机</sub>
+<br/><br/>
+<b>🔧 Tool Registry</b><br/>
+<sub>统一 <code>ToolBase</code> 接口封装</sub><br/>
+<sub>arXiv / Semantic Scholar / Tavily / PDF</sub><br/>
+<sub>自动限速与结果缓存</sub>
+</td>
+<td width="50%" valign="top">
+<b>💾 Memory Manager</b><br/>
+<sub>pgvector 向量检索 + 4 级作用域</sub><br/>
+<sub>Module → Session → Project → Global</sub><br/>
+<sub>跨模块知识传递</sub>
+<br/><br/>
+<b>⏱️ Task State Manager</b><br/>
+<sub>Redis Stream 持久化每个 SSE 事件</sub><br/>
+<sub>递增 <code>event_id</code> 支持断线恢复</sub><br/>
+<sub>24h 任务状态保留</sub>
+<br/><br/>
+<b>📄 Document Pipeline</b><br/>
+<sub>PyMuPDF 学术 PDF 高精度解析</sub><br/>
+<sub>语义分块（500~1500 tokens）</sub><br/>
+<sub>自动元数据提取与向量存储</sub>
+</td>
+</tr>
+</table>
+</center>
+
+---
+
+<a id="showcase"></a>
+
+## 📂 平台能力展示
+
+### 文档上传与解析
+
+支持上传学术 PDF，通过 PyMuPDF 引擎高精度解析双栏排版、LaTeX 公式和表格，自动语义分块后存入向量数据库，供智能体深度检索：
+
+<!-- 📌 图片占位符 ⑦ — 文档上传截图
+     截图内容：文档上传界面 + 上传后的解析状态/已上传文档列表
+     重点展示：上传区域、解析进度条/状态标签、已解析文档列表、分块数量等
+     截图时机：上传一篇 PDF 后，显示解析完成状态
+-->
+<div align="center">
+<img src="docs/images/doc-upload.png" width="720" alt="文档上传与解析" />
+<br/>
+<sub>上传学术 PDF → PyMuPDF 高精度解析 → 语义分块 → 向量化存储 → 供智能体检索</sub>
+</div>
+
+### 会话与历史管理
+
+所有对话和运行结果持久化存储，支持会话切换、历史回溯和跨模块上下文传递：
+
+<!-- 📌 图片占位符 ⑧ — 会话历史管理截图
+     截图内容：侧边栏的会话列表 或 历史记录管理页面
+     重点展示：多个会话条目、时间戳、模块标签、会话切换交互
+     截图时机：有多个历史会话时的侧边栏/管理界面
+-->
+<div align="center">
+<img src="docs/images/session-history.png" width="720" alt="会话与历史管理" />
+<br/>
+<sub>会话持久化 · 历史回溯 · 跨模块上下文传递</sub>
+</div>
 
 ---
 
 ## 🛠️ 技术栈
 
-<table>
-<tr><td>⚙️ <b>后端</b></td><td>FastAPI · Python 3.11+</td></tr>
-<tr><td>🧠 <b>LLM 网关</b></td><td>OpenAI-compatible API — 支持 100+ 模型</td></tr>
-<tr><td>🔍 <b>搜索工具</b></td><td>arXiv API · Semantic Scholar · Tavily Web Search</td></tr>
-<tr><td>📊 <b>评测</b></td><td>LLM-as-Judge (qwen3.5-plus) · 自动化指标计算</td></tr>
-<tr><td>🖥️ <b>前端</b></td><td>Next.js 14 · Zustand · shadcn/ui · Tailwind CSS</td></tr>
-<tr><td>🗄️ <b>数据库</b></td><td>PostgreSQL + pgvector · Redis</td></tr>
-<tr><td>🚀 <b>部署</b></td><td>Docker Compose · Caddy</td></tr>
+<p align="center">
+<b>Backend</b>&nbsp;&nbsp;
+<img src="https://img.shields.io/badge/Python_3.11+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"/>
+<img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI"/>
+<img src="https://img.shields.io/badge/PostgreSQL+pgvector-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL"/>
+<img src="https://img.shields.io/badge/Redis-DC382D?style=flat-square&logo=redis&logoColor=white" alt="Redis"/>
+<br/>
+<b>Frontend</b>&nbsp;&nbsp;
+<img src="https://img.shields.io/badge/Next.js_14-000000?style=flat-square&logo=next.js&logoColor=white" alt="Next.js"/>
+<img src="https://img.shields.io/badge/Zustand-433E38?style=flat-square&logo=react&logoColor=white" alt="Zustand"/>
+<img src="https://img.shields.io/badge/shadcn%2Fui-000000?style=flat-square&logo=shadcnui&logoColor=white" alt="shadcn/ui"/>
+<img src="https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind"/>
+<br/>
+<b>AI / Search</b>&nbsp;&nbsp;
+<img src="https://img.shields.io/badge/100+_LLMs-412991?style=flat-square&logo=openai&logoColor=white" alt="LLMs"/>
+<img src="https://img.shields.io/badge/arXiv-B31B1B?style=flat-square&logo=arxiv&logoColor=white" alt="arXiv"/>
+<img src="https://img.shields.io/badge/Semantic_Scholar-1857B6?style=flat-square" alt="S2"/>
+<img src="https://img.shields.io/badge/Tavily-4A90D9?style=flat-square" alt="Tavily"/>
+<img src="https://img.shields.io/badge/PyMuPDF-FF6B35?style=flat-square" alt="PyMuPDF"/>
+<br/>
+<b>Infra</b>&nbsp;&nbsp;
+<img src="https://img.shields.io/badge/Docker_Compose-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker"/>
+<img src="https://img.shields.io/badge/Caddy-1F88C0?style=flat-square&logo=caddy&logoColor=white" alt="Caddy"/>
+</p>
+
+---
+
+<a id="quickstart"></a>
+
+## 🚀 快速开始
+
+### 一键部署
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/huangsuxiang/sololab.git && cd sololab
+
+# 2. 配置环境变量
+cp .env.example .env
+# 编辑 .env 填入你的 API Keys
+
+# 3. Docker 一键启动
+docker compose up -d
+
+# 4. 访问
+open http://localhost:3000
+```
+
+### 本地开发
+
+```bash
+# 激活 conda 环境
+conda activate sololab
+
+# 后端
+cd backend && pip install -e ".[dev]"
+uvicorn sololab.main:app --reload --port 8000
+
+# 前端（新终端）
+cd frontend && pnpm install && pnpm dev
+
+# 运行测试
+pytest tests/unit/ -v          # 单元测试
+pytest tests/integration/ -v   # 集成测试
+```
+
+> 📂 Benchmark 复现指南见 [消融实验报告](docs/benchmark/ideaspark-ablation.md#-复现指南)。
+
+---
+
+<a id="roadmap"></a>
+
+## 🗺️ 模块路线图
+
+<center>
+<table align="center" width="960" cellpadding="10">
+<tr>
+<th align="center">模块</th>
+<th align="center">功能</th>
+<th align="center">状态</th>
+</tr>
+<tr>
+<td align="center">💡 <b>IdeaSpark</b></td>
+<td>多智能体创意涌现 · Separate-Together · Elo 锦标赛</td>
+<td align="center"><img src="https://img.shields.io/badge/-Ready-00C853?style=flat-square" alt="Ready"/></td>
+</tr>
+<tr>
+<td align="center">🔧 <b>CodeLab</b></td>
+<td>AI 辅助编码 · 代码审查 · 调试重构</td>
+<td align="center"><img src="https://img.shields.io/badge/-Planned-9E9E9E?style=flat-square" alt="Planned"/></td>
+</tr>
+<tr>
+<td align="center">✍️ <b>WriterAI</b></td>
+<td>学术论文写作 · 大纲生成 · 段落润色</td>
+<td align="center"><img src="https://img.shields.io/badge/-Planned-9E9E9E?style=flat-square" alt="Planned"/></td>
+</tr>
+<tr>
+<td align="center">📊 <b>DataLens</b></td>
+<td>数据分析 · 可视化生成 · 统计检验</td>
+<td align="center"><img src="https://img.shields.io/badge/-Planned-9E9E9E?style=flat-square" alt="Planned"/></td>
+</tr>
+<tr>
+<td align="center">📚 <b>LitReview</b></td>
+<td>系统性文献综述 · 引用图谱 · 研究趋势</td>
+<td align="center"><img src="https://img.shields.io/badge/-Planned-9E9E9E?style=flat-square" alt="Planned"/></td>
+</tr>
+<tr>
+<td align="center">🔍 <b>Reviewer</b></td>
+<td>模拟审稿人 · 批判性审查 · 改进建议</td>
+<td align="center"><img src="https://img.shields.io/badge/-Planned-9E9E9E?style=flat-square" alt="Planned"/></td>
+</tr>
 </table>
+</center>
+
+---
+
+## 📁 项目结构
+
+```text
+soloLab/
+├── backend/                       # FastAPI 后端
+│   └── src/sololab/
+│       ├── main.py                # 应用入口
+│       ├── config/                # 配置 & LLM 配置
+│       ├── core/                  # 核心服务层 (7 个服务)
+│       ├── api/                   # REST API 路由
+│       ├── models/                # Pydantic 数据模型
+│       ├── modules/               # 可插拔功能模块
+│       │   └── ideaspark/         # IdeaSpark 模块
+│       ├── tools/                 # 外部工具 (arXiv/Scholar/Tavily)
+│       └── benchmark/             # Benchmark 评测框架
+│
+├── frontend/                      # Next.js 14 前端
+│   └── src/
+│       ├── app/                   # App Router 页面
+│       ├── components/            # UI 组件库
+│       ├── lib/                   # API Client & SSE Client
+│       ├── stores/                # Zustand 状态管理
+│       └── types/                 # TypeScript 类型定义
+│
+├── tests/                         # 测试 (unit/integration/e2e)
+├── docs/                          # 架构文档 & PRD
+├── infra/                         # Dockerfiles & Caddyfile
+└── docker-compose.yml             # 一键部署
+```
+
+---
+
+## 🧑‍💻 开发新模块
+
+只需三步，即可扩展 SoloLab 的能力：
+
+**1. 创建 `manifest.json`**
+
+```json
+{
+  "id": "your-module",
+  "name": "YourModule",
+  "version": "0.1.0",
+  "description": "Module description",
+  "required_tools": ["web_search", "arxiv_search"],
+  "config_schema": { "param": { "type": "string", "default": "value" } }
+}
+```
+
+**2. 实现 `ModuleBase`**
+
+```python
+class YourModule(ModuleBase):
+    def manifest(self) -> ModuleManifest:
+        return load_from_json("modules/your-module/manifest.json")
+
+    async def execute(self, request, ctx) -> AsyncGenerator:
+        # Your multi-agent logic here
+        yield TextChunk(content="Hello from YourModule!")
+```
+
+**3. 放入 `modules/` 目录** — 自动发现、热加载、即刻可用。
 
 ---
 
 <div align="center">
 
-**MIT License**
+## 📜 License & Author
+
+<p>
+<b>License:</b> Apache License 2.0
+<br/>
+<b>Author:</b> Suxiang Huang
+<br/>
+📧 huangsuxiang5@gmail.com
+<br/>
+💬 WeChat: 13976457218
+<br/>
+🏛️ Memory and Reasoning Lab, Tianjin University
+</p>
+
+<hr/>
+
+<sub>
+<b>SoloLab</b> · <i>One-Person Lab, Infinite Minds</i><br/>
+Built for independent researchers who refuse to let team size limit their ambitions.
+</sub>
 
 </div>

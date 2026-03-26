@@ -48,6 +48,7 @@ class Settings(BaseSettings):
 
     # 外部 API 密钥
     tavily_api_key: Optional[str] = None
+    s2_api_key: Optional[str] = None  # Semantic Scholar API Key
 
     # API 认证
     api_keys: Optional[str] = None  # 逗号分隔的 API Keys，为空则禁用认证

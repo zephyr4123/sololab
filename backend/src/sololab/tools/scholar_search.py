@@ -31,10 +31,10 @@ class SemanticScholarTool(ToolBase):
         if not query:
             return ToolResult(success=False, data={}, error="Query is required")
 
-        # 限速：两次调用间隔至少 6 秒（免费 API 约 1 req/5s + 余量）
+        # 限速：两次调用间隔至少 1.1 秒（已申请 API Key，限速 1 req/s + 余量）
         import time
         now = time.monotonic()
-        wait = 6.0 - (now - _last_call_time)
+        wait = 1.1 - (now - _last_call_time)
         if wait > 0:
             await asyncio.sleep(wait)
         _last_call_time = time.monotonic()
