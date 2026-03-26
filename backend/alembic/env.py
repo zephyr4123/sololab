@@ -1,6 +1,7 @@
 """Alembic 迁移环境配置（异步模式）。"""
 
 import asyncio
+import os
 from logging.config import fileConfig
 
 from alembic import context
@@ -8,6 +9,11 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 config = context.config
+
+# 支持 DATABASE_URL 环境变量覆盖 alembic.ini 中的连接地址
+if os.environ.get("DATABASE_URL"):
+    config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
+
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 

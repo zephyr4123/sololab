@@ -1,0 +1,70 @@
+# 环境变量（绝不进入镜像，通过 env_file 或 environment 挂载）
+.env
+.env.local
+.env.*.local
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# Python 缓存
+__pycache__
+*.py[cod]
+*.egg-info
+dist
+build
+.eggs
+.venv
+venv
+
+# Node.js
+node_modules
+.next
+out
+.turbo
+
+# 测试和报告
+htmlcov
+.coverage
+.pytest_cache
+test-results
+playwright-report
+benchmark_results*
+tests
+
+# 存储和数据（运行时挂载）
+storage
+
+# 文档（根目录级别）
+docs
+*.md
+LICENSE
+!backend/README.md
+
+# 脚本（部署后不需要）
+scripts
+
+# Docker
+docker-compose.override.yml
+
+# Claude / Serena / Playwright
+.claude
+.serena
+.playwright-mcp
+
+# 杂项
+*.log
+*.bak
+*.tmp
+*.tsbuildinfo
