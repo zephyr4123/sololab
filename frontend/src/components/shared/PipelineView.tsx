@@ -37,16 +37,16 @@ const AGENT_ICONS: Record<string, typeof Brain> = {
 };
 
 const AGENT_COLORS: Record<string, string> = {
-  divergent: 'border-purple-200 bg-purple-50/50',
-  expert: 'border-blue-200 bg-blue-50/50',
-  critic: 'border-red-200 bg-red-50/50',
-  connector: 'border-green-200 bg-green-50/50',
-  evaluator: 'border-amber-200 bg-amber-50/50',
+  divergent: 'border-purple-200 bg-purple-50/50 dark:border-purple-700/50 dark:bg-purple-950/30',
+  expert: 'border-blue-200 bg-blue-50/50 dark:border-blue-700/50 dark:bg-blue-950/30',
+  critic: 'border-red-200 bg-red-50/50 dark:border-red-700/50 dark:bg-red-950/30',
+  connector: 'border-green-200 bg-green-50/50 dark:border-green-700/50 dark:bg-green-950/30',
+  evaluator: 'border-amber-200 bg-amber-50/50 dark:border-amber-700/50 dark:bg-amber-950/30',
 };
 
 const AGENT_ACCENT: Record<string, string> = {
-  divergent: 'text-purple-700', expert: 'text-blue-700', critic: 'text-red-700',
-  connector: 'text-green-700', evaluator: 'text-amber-700',
+  divergent: 'text-purple-700 dark:text-purple-400', expert: 'text-blue-700 dark:text-blue-400', critic: 'text-red-700 dark:text-red-400',
+  connector: 'text-green-700 dark:text-green-400', evaluator: 'text-amber-700 dark:text-amber-400',
 };
 
 // ─── Phase grouping logic ────────────────────────────────────
@@ -271,8 +271,8 @@ function SeparatePhaseView({ events }: { events: StreamEvent[] }) {
 
 function AgentColumn({ agent, events }: { agent: string; events: StreamEvent[] }) {
   const Icon = AGENT_ICONS[agent] || Bot;
-  const color = AGENT_COLORS[agent] || 'border-gray-200 bg-gray-50/50';
-  const accent = AGENT_ACCENT[agent] || 'text-gray-700';
+  const color = AGENT_COLORS[agent] || 'border-gray-200 bg-gray-50/50 dark:border-gray-700/50 dark:bg-gray-800/30';
+  const accent = AGENT_ACCENT[agent] || 'text-gray-700 dark:text-gray-300';
 
   const tools = events.filter(e => e.type === 'tool');
   const ideas = events.filter(e => e.type === 'idea');
@@ -283,7 +283,7 @@ function AgentColumn({ agent, events }: { agent: string; events: StreamEvent[] }
       <div className={`flex items-center gap-2 text-xs font-semibold ${accent}`}>
         <Icon className="h-4 w-4" />
         <span>{AGENT_NAMES[agent] || agent}</span>
-        {doneEvent && <CheckCircle className="ml-auto h-3.5 w-3.5 text-green-500" />}
+        {doneEvent && <CheckCircle className="ml-auto h-3.5 w-3.5 text-green-500 dark:text-green-400" />}
       </div>
 
       {/* Tool calls */}
@@ -297,7 +297,7 @@ function AgentColumn({ agent, events }: { agent: string; events: StreamEvent[] }
 
       {/* Ideas */}
       {ideas.map((idea, i) => (
-        <div key={i} className="rounded-md bg-white/60 p-2">
+        <div key={i} className="rounded-md bg-white/60 dark:bg-white/5 p-2">
           <MarkdownViewer content={idea.content} compact />
         </div>
       ))}
@@ -311,7 +311,7 @@ function ClusterPhaseView({ events }: { events: StreamEvent[] }) {
   return (
     <div className="text-center text-sm text-muted-foreground">
       <div className="inline-flex items-center gap-2 rounded-full bg-muted/50 px-4 py-1.5">
-        <div className="h-2 w-2 rounded-full bg-blue-400" />
+        <div className="h-2 w-2 rounded-full bg-blue-400 dark:bg-blue-500" />
         创意已按语义相似度完成聚类
       </div>
     </div>
@@ -360,8 +360,8 @@ function TogetherPhaseView({ events }: { events: StreamEvent[] }) {
             )}
 
             {critiques.map((c, i) => (
-              <div key={`c-${i}`} className="rounded-md border border-red-200/60 bg-red-50/30 p-2.5">
-                <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-red-700">
+              <div key={`c-${i}`} className="rounded-md border border-red-200/60 bg-red-50/30 dark:border-red-700/40 dark:bg-red-950/20 p-2.5">
+                <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-red-700 dark:text-red-400">
                   <MessageSquare className="h-3 w-3" />
                   审辩者
                 </div>
@@ -370,8 +370,8 @@ function TogetherPhaseView({ events }: { events: StreamEvent[] }) {
             ))}
 
             {syntheses.map((s, i) => (
-              <div key={`s-${i}`} className="rounded-md border border-green-200/60 bg-green-50/30 p-2.5">
-                <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-green-700">
+              <div key={`s-${i}`} className="rounded-md border border-green-200/60 bg-green-50/30 dark:border-green-700/40 dark:bg-green-950/20 p-2.5">
+                <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-green-700 dark:text-green-400">
                   <Brain className="h-3 w-3" />
                   整合者
                 </div>
@@ -393,8 +393,8 @@ function SynthesizePhaseView({ events }: { events: StreamEvent[] }) {
   return (
     <div className="space-y-2">
       {syntheses.map((s, i) => (
-        <div key={i} className="rounded-md border border-green-200/60 bg-green-50/30 p-2.5">
-          <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-green-700">
+        <div key={i} className="rounded-md border border-green-200/60 bg-green-50/30 dark:border-green-700/40 dark:bg-green-950/20 p-2.5">
+          <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-green-700 dark:text-green-400">
             <Brain className="h-3 w-3" />
             全局整合
           </div>
@@ -439,11 +439,11 @@ function EvaluatePhaseView({ events }: { events: StreamEvent[] }) {
           <div
             key={i}
             className={`rounded-lg border p-3 transition-all ${
-              isTop ? 'border-amber-300 bg-amber-50/50' : 'border-border/60'
+              isTop ? 'border-amber-300 bg-amber-50/50 dark:border-amber-600/50 dark:bg-amber-950/30' : 'border-border/60'
             }`}
           >
             <div className="mb-1.5 flex items-center gap-2">
-              <span className={`text-sm font-bold ${isTop ? 'text-amber-600' : 'text-muted-foreground'}`}>
+              <span className={`text-sm font-bold ${isTop ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}>
                 #{v.rank}
               </span>
               <span className="text-xs text-muted-foreground">
@@ -456,7 +456,7 @@ function EvaluatePhaseView({ events }: { events: StreamEvent[] }) {
             {/* Elo bar */}
             <div className="mb-2 h-1.5 rounded-full bg-muted/50 overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all ${isTop ? 'bg-amber-400' : 'bg-primary/30'}`}
+                className={`h-full rounded-full transition-all ${isTop ? 'bg-amber-400 dark:bg-amber-500' : 'bg-primary/30'}`}
                 style={{ width: `${barWidth}%` }}
               />
             </div>
@@ -496,49 +496,49 @@ function ToolCallCard({ event }: { event: StreamEvent }) {
   const results: Array<{ title: string; url: string; snippet: string }> = event.results || [];
 
   return (
-    <div className="rounded-lg border border-cyan-200/60 bg-cyan-50/40 overflow-hidden">
+    <div className="rounded-lg border border-cyan-200/60 bg-cyan-50/40 dark:border-cyan-700/40 dark:bg-cyan-950/20 overflow-hidden">
       {/* Header */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-[11px] hover:bg-cyan-100/30 transition-colors"
+        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-[11px] hover:bg-cyan-100/30 dark:hover:bg-cyan-900/20 transition-colors"
       >
-        <ToolIcon className="h-3.5 w-3.5 shrink-0 text-cyan-600" />
-        <span className="font-semibold text-cyan-800">{toolLabel}</span>
-        <span className="flex-1 truncate text-left text-cyan-600/80">{event.query}</span>
+        <ToolIcon className="h-3.5 w-3.5 shrink-0 text-cyan-600 dark:text-cyan-400" />
+        <span className="font-semibold text-cyan-800 dark:text-cyan-300">{toolLabel}</span>
+        <span className="flex-1 truncate text-left text-cyan-600/80 dark:text-cyan-400/60">{event.query}</span>
         {event.success ? (
-          <CheckCircle className="h-3 w-3 shrink-0 text-green-500" />
+          <CheckCircle className="h-3 w-3 shrink-0 text-green-500 dark:text-green-400" />
         ) : (
-          <AlertTriangle className="h-3 w-3 shrink-0 text-red-500" />
+          <AlertTriangle className="h-3 w-3 shrink-0 text-red-500 dark:text-red-400" />
         )}
         {event.result_count > 0 && (
-          <span className="shrink-0 rounded-full bg-cyan-200/60 px-1.5 py-0.5 text-[10px] font-medium text-cyan-700">
+          <span className="shrink-0 rounded-full bg-cyan-200/60 dark:bg-cyan-800/40 px-1.5 py-0.5 text-[10px] font-medium text-cyan-700 dark:text-cyan-300">
             {event.result_count}
           </span>
         )}
-        {expanded ? <ChevronDown className="h-3 w-3 shrink-0 text-cyan-400" /> : <ChevronRight className="h-3 w-3 shrink-0 text-cyan-400" />}
+        {expanded ? <ChevronDown className="h-3 w-3 shrink-0 text-cyan-400 dark:text-cyan-500" /> : <ChevronRight className="h-3 w-3 shrink-0 text-cyan-400 dark:text-cyan-500" />}
       </button>
 
       {/* Results list */}
       {expanded && results.length > 0 && (
-        <div className="border-t border-cyan-200/40 px-2.5 py-1.5 space-y-1">
+        <div className="border-t border-cyan-200/40 dark:border-cyan-700/30 px-2.5 py-1.5 space-y-1">
           {results.map((r, i) => (
             <div key={i} className="flex items-start gap-2 text-[11px]">
-              <span className="shrink-0 mt-0.5 text-cyan-400 font-mono">{i + 1}.</span>
+              <span className="shrink-0 mt-0.5 text-cyan-400 dark:text-cyan-500 font-mono">{i + 1}.</span>
               <div className="min-w-0 flex-1">
                 {r.url ? (
                   <a
                     href={r.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-medium text-cyan-700 hover:underline line-clamp-1"
+                    className="font-medium text-cyan-700 dark:text-cyan-300 hover:underline line-clamp-1"
                   >
                     {r.title || r.url}
                   </a>
                 ) : (
-                  <span className="font-medium text-cyan-700 line-clamp-1">{r.title}</span>
+                  <span className="font-medium text-cyan-700 dark:text-cyan-300 line-clamp-1">{r.title}</span>
                 )}
                 {r.snippet && (
-                  <p className="text-cyan-600/60 line-clamp-2 mt-0.5">{r.snippet}</p>
+                  <p className="text-cyan-600/60 dark:text-cyan-400/40 line-clamp-2 mt-0.5">{r.snippet}</p>
                 )}
               </div>
             </div>
@@ -548,7 +548,7 @@ function ToolCallCard({ event }: { event: StreamEvent }) {
 
       {/* Error */}
       {expanded && event.error && (
-        <div className="border-t border-red-200/40 px-2.5 py-1.5 text-[11px] text-red-500">
+        <div className="border-t border-red-200/40 dark:border-red-700/30 px-2.5 py-1.5 text-[11px] text-red-500 dark:text-red-400">
           {event.error}
         </div>
       )}
@@ -561,20 +561,20 @@ function ToolCallCard({ event }: { event: StreamEvent }) {
 function DocContextSection({ event }: { event: StreamEvent }) {
   const [expanded, setExpanded] = useState(false);
   return (
-    <div className="rounded-xl border border-indigo-200/60 bg-indigo-50/30 p-3">
+    <div className="rounded-xl border border-indigo-200/60 bg-indigo-50/30 dark:border-indigo-700/40 dark:bg-indigo-950/20 p-3">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-2 text-xs font-medium text-indigo-700"
+        className="flex w-full items-center gap-2 text-xs font-medium text-indigo-700 dark:text-indigo-400"
       >
         <FileText className="h-3.5 w-3.5" />
         <span>参考文献已注入</span>
-        <span className="rounded-full bg-indigo-200/60 px-1.5 py-0.5 text-[10px]">
+        <span className="rounded-full bg-indigo-200/60 dark:bg-indigo-800/40 px-1.5 py-0.5 text-[10px]">
           {event.chunk_count || 0} 个相关分块
         </span>
         {expanded ? <ChevronDown className="ml-auto h-3 w-3" /> : <ChevronRight className="ml-auto h-3 w-3" />}
       </button>
       {expanded && event.preview && (
-        <div className="mt-2 rounded-md bg-white/60 p-2 text-[11px] text-indigo-600/80 whitespace-pre-wrap line-clamp-6">
+        <div className="mt-2 rounded-md bg-white/60 dark:bg-white/5 p-2 text-[11px] text-indigo-600/80 dark:text-indigo-400/60 whitespace-pre-wrap line-clamp-6">
           {event.preview}
         </div>
       )}
@@ -586,15 +586,15 @@ function DocContextSection({ event }: { event: StreamEvent }) {
 
 function DoneSection({ event }: { event: StreamEvent }) {
   return (
-    <div className="rounded-xl border border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 p-4 text-center">
+    <div className="rounded-xl border border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 dark:border-green-700/40 dark:from-green-950/30 dark:to-emerald-950/30 p-4 text-center">
       <div className="flex items-center justify-center gap-2">
-        <CheckCircle className="h-5 w-5 text-green-600" />
-        <p className="text-sm font-semibold text-green-800">
+        <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+        <p className="text-sm font-semibold text-green-800 dark:text-green-300">
           创意生成完成！共产出 {event.top_ideas?.length || 0} 个 Top 创意
         </p>
       </div>
       {event.cost_usd > 0 && (
-        <p className="mt-1 text-xs text-green-600">总费用: ${event.cost_usd}</p>
+        <p className="mt-1 text-xs text-green-600 dark:text-green-400">总费用: ${event.cost_usd}</p>
       )}
     </div>
   );
@@ -602,12 +602,12 @@ function DoneSection({ event }: { event: StreamEvent }) {
 
 function ErrorSection({ event }: { event: StreamEvent }) {
   return (
-    <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-      <div className="flex items-center gap-2 text-sm font-semibold text-red-700">
+    <div className="rounded-xl border border-red-200 bg-red-50 dark:border-red-700/40 dark:bg-red-950/20 p-4">
+      <div className="flex items-center gap-2 text-sm font-semibold text-red-700 dark:text-red-400">
         <AlertTriangle className="h-4 w-4" />
         错误
       </div>
-      <p className="mt-1 text-sm text-red-600">{event.message || event.error || 'Unknown error'}</p>
+      <p className="mt-1 text-sm text-red-600 dark:text-red-400">{event.message || event.error || 'Unknown error'}</p>
     </div>
   );
 }

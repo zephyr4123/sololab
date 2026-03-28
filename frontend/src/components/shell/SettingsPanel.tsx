@@ -49,7 +49,7 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
               <button
                 onClick={toggleTheme}
                 className={`relative h-6 w-11 rounded-full transition-colors ${
-                  theme === 'dark' ? 'bg-primary' : 'bg-gray-300'
+                  theme === 'dark' ? 'bg-primary' : 'bg-muted-foreground/40'
                 }`}
               >
                 <span
@@ -92,7 +92,7 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                 {health.services && Object.entries(health.services).map(([name, ok]) => (
                   <div key={name} className="flex justify-between">
                     <span className="text-muted-foreground capitalize">{name}</span>
-                    <span className={ok ? 'text-green-600' : 'text-red-500'}>
+                    <span className={ok ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}>
                       {ok ? '在线' : '离线'}
                     </span>
                   </div>

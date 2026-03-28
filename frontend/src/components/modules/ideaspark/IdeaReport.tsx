@@ -80,7 +80,7 @@ export function IdeaReport() {
           <button
             onClick={generateReport}
             disabled={loading || !topIdeas.length}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 disabled:opacity-50"
           >
             {loading ? '生成中...' : '生成 Markdown 报告'}
           </button>
@@ -88,19 +88,19 @@ export function IdeaReport() {
           <>
             <button
               onClick={downloadReport}
-              className="rounded-md bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700"
+              className="rounded-md bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
             >
               下载报告
             </button>
             <button
               onClick={() => setReport(null)}
-              className="rounded-md border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              className="rounded-md border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-accent"
             >
               返回
             </button>
           </>
         )}
-        {error && <span className="text-sm text-red-600">{error}</span>}
+        {error && <span className="text-sm text-red-600 dark:text-red-400">{error}</span>}
       </div>
 
       {/* 报告预览 */}

@@ -36,13 +36,13 @@ export default function CostDashboard() {
   if (loading) {
     return (
       <div className="flex h-40 items-center justify-center">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-warm border-t-transparent" />
       </div>
     );
   }
 
   if (!data) {
-    return <p className="text-sm text-gray-500">费用数据不可用</p>;
+    return <p className="text-sm text-muted-foreground">费用数据不可用</p>;
   }
 
   const totalTokens = data.total_prompt_tokens + data.total_completion_tokens;
@@ -51,13 +51,13 @@ export default function CostDashboard() {
     <div className="space-y-6">
       {/* 时间段选择 */}
       <div className="flex items-center gap-2">
-        <span className="text-sm text-gray-600">统计周期：</span>
+        <span className="text-sm text-muted-foreground">统计周期：</span>
         {[7, 30, 90].map((d) => (
           <button
             key={d}
             onClick={() => setPeriod(d)}
             className={`rounded-md px-3 py-1 text-sm ${
-              period === d ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              period === d ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-accent"
             }`}
           >
             {d}天
@@ -76,20 +76,20 @@ export default function CostDashboard() {
       {/* 按模型统计 */}
       {data.by_model.length > 0 && (
         <div>
-          <h3 className="mb-2 text-sm font-medium text-gray-700">按模型分布</h3>
+          <h3 className="mb-2 text-sm font-medium text-foreground">按模型分布</h3>
           <div className="space-y-2">
             {data.by_model.map((item) => {
               const pct = data.total_cost_usd > 0 ? (item.cost_usd / data.total_cost_usd) * 100 : 0;
               return (
                 <div key={item.model} className="flex items-center gap-3">
-                  <span className="w-40 truncate text-sm text-gray-600">{item.model}</span>
+                  <span className="w-40 truncate text-sm text-muted-foreground">{item.model}</span>
                   <div className="flex-1">
-                    <div className="h-2 rounded-full bg-gray-100">
-                      <div className="h-2 rounded-full bg-blue-500" style={{ width: `${pct}%` }} />
+                    <div className="h-2 rounded-full bg-muted">
+                      <div className="h-2 rounded-full bg-warm" style={{ width: `${pct}%` }} />
                     </div>
                   </div>
-                  <span className="w-20 text-right text-sm text-gray-700">${item.cost_usd.toFixed(4)}</span>
-                  <span className="w-16 text-right text-xs text-gray-500">{item.calls} 次</span>
+                  <span className="w-20 text-right text-sm text-foreground">${item.cost_usd.toFixed(4)}</span>
+                  <span className="w-16 text-right text-xs text-muted-foreground">{item.calls} 次</span>
                 </div>
               );
             })}
@@ -100,7 +100,7 @@ export default function CostDashboard() {
       {/* 每日趋势 */}
       {data.daily.length > 0 && (
         <div>
-          <h3 className="mb-2 text-sm font-medium text-gray-700">每日费用趋势</h3>
+          <h3 className="mb-2 text-sm font-medium text-foreground">每日费用趋势</h3>
           <div className="flex items-end gap-1" style={{ height: 80 }}>
             {data.daily.map((day) => {
               const maxCost = Math.max(...data.daily.map((d) => d.cost_usd), 0.001);
@@ -108,7 +108,7 @@ export default function CostDashboard() {
               return (
                 <div
                   key={day.date}
-                  className="flex-1 rounded-t bg-blue-400 transition-all hover:bg-blue-600"
+                  className="flex-1 rounded-t bg-warm/60 transition-all hover:bg-warm"
                   style={{ height: `${Math.max(height, 2)}%` }}
                   title={`${day.date?.split("T")[0]}: $${day.cost_usd.toFixed(4)} (${day.calls} 次)`}
                 />
@@ -123,9 +123,9 @@ export default function CostDashboard() {
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border bg-white p-4">
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-gray-900">{value}</p>
+    <div className="rounded-lg border bg-card p-4">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-foreground">{value}</p>
     </div>
   );
 }

@@ -69,14 +69,14 @@ export function IdeaBoard() {
             <div
               key={idea.id}
               className={`rounded-xl border p-4 space-y-2 transition-all ${
-                isTop ? 'border-amber-300 bg-amber-50/30' : 'hover:border-primary/40'
+                isTop ? 'border-amber-300 bg-amber-50/30 dark:border-amber-600/50 dark:bg-amber-900/20' : 'hover:border-primary/40'
               }`}
             >
               {/* Top bar: rank + author + Elo */}
               <div className="flex items-center gap-2">
                 {idea.rank && (
                   <div className={`flex items-center gap-1 text-xs font-bold ${
-                    idx === 0 ? 'text-amber-600' : idx === 1 ? 'text-gray-500' : 'text-orange-500'
+                    idx === 0 ? 'text-amber-600 dark:text-amber-400' : idx === 1 ? 'text-gray-500 dark:text-gray-400' : 'text-orange-500 dark:text-orange-400'
                   }`}>
                     <Trophy className="h-3.5 w-3.5" />
                     #{idea.rank}
