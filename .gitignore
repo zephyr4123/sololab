@@ -65,6 +65,12 @@ CLAUDE.md
 # --- Playwright MCP ---
 .playwright-mcp/
 
+# --- OpenCode / CodeLab 引擎 ---
+opencode/node_modules/
+opencode/.opencode/data/
+opencode/bun.lock
+opencode/packages/opencode/test/tool/fixtures/large-image.png
+
 # --- 杂项 ---
 *.log
 *.bak
