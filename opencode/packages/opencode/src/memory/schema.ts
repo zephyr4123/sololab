@@ -16,13 +16,9 @@ export const MemoryID = Schema.String.pipe(
 export type MemoryID = Schema.Schema.Type<typeof MemoryID>
 
 export const MemoryType = z.enum([
-  "architecture",
-  "pattern",
-  "preference",
-  "discovery",
-  "correction",
-  "file_knowledge",
-  "decision",
-  "general",
+  "discovery",      // Things learned about the codebase/project
+  "preference",     // User preferences, instructions, corrections
+  "file_knowledge", // Files modified, key locations
+  "general",        // Everything else
 ])
 export type MemoryType = z.infer<typeof MemoryType>

@@ -19,6 +19,7 @@ import { ModelID, ProviderID } from "@/provider/schema"
 import { Cause, Effect, Exit, Layer, ServiceMap } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 import { isOverflow as overflow } from "./overflow"
+import { CompactionLevels } from "./compaction-levels"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -35,6 +36,50 @@ export namespace SessionCompaction {
   export const PRUNE_MINIMUM = 20_000
   export const PRUNE_PROTECT = 40_000
   const PRUNE_PROTECTED_TOOLS = ["skill"]
+
+  /**
+   * Apply Level 2 compression to session messages.
+   * Returns token savings achieved.
+   */
+  export async function compressL2(input: { sessionID: SessionID }): Promise<number> {
+    const msgs = await Session.messages({ sessionID: input.sessionID }).catch(() => undefined)
+    if (!msgs) return 0
+
+    const { totalSaved } = CompactionLevels.applyL2(msgs, PRUNE_PROTECT)
+
+    // Persist compressed outputs
+    if (totalSaved > 0) {
+      for (const msg of msgs) {
+        for (const part of msg.parts) {
+          if (part.type === "tool" && (part.state as any).l2Compressed) {
+            await Session.updatePart(part)
+            delete (part.state as any).l2Compressed
+          }
+        }
+      }
+      log.info("L2 compressed", { saved: totalSaved })
+    }
+
+    return totalSaved
+  }
+
+  /**
+   * Pre-emptive compaction: check usage and apply appropriate level.
+   * Called during the prompt loop to prevent overflow before it happens.
+   */
+  export function preemptive(input: {
+    tokens: MessageV2.Assistant["tokens"]
+    model: Provider.Model
+  }): CompactionLevels.TriggerDecision {
+    const context = input.model.limit.context
+    if (context === 0) return { action: "none", usage: 0, threshold: 0 }
+
+    const count =
+      input.tokens.total || input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
+
+    const reserved = Math.min(20_000, input.model.limit.output ?? 4096)
+    return CompactionLevels.decideTrigger(count, context, reserved)
+  }
 
   export interface Interface {
     readonly isOverflow: (input: {

@@ -13,8 +13,6 @@ import { fn } from "@/util/fn"
 export namespace Memory {
   const log = Log.create({ service: "memory" })
 
-  // Decay: confidence drops ~5% per week of non-access
-  const DECAY_RATE_PER_WEEK = 0.05
   const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000
   // Minimum confidence before auto-pruning
   const MIN_CONFIDENCE = 10
@@ -65,24 +63,20 @@ export namespace Memory {
     }
   }
 
-  /** Compute decayed confidence based on time since last access */
+  /** Compute decayed confidence: lose ~2 points per week of non-access */
   export function decayedConfidence(info: {
     confidence: number
     timeAccessed?: number
     timeCreated: number
   }): number {
     const lastActive = info.timeAccessed ?? info.timeCreated
-    const elapsed = Date.now() - lastActive
-    const weeks = elapsed / MS_PER_WEEK
-    return Math.max(0, info.confidence * Math.pow(1 - DECAY_RATE_PER_WEEK, weeks))
+    const weeks = (Date.now() - lastActive) / MS_PER_WEEK
+    return Math.max(0, info.confidence - weeks * 2)
   }
 
-  /** Relevance score combining confidence, access frequency, and recency */
+  /** Relevance score: just decayed confidence (simple is better) */
   export function relevanceScore(info: Info): number {
-    const decayed = decayedConfidence(info)
-    // log(accessCount + 1) for diminishing returns on repeated access
-    const accessBoost = Math.log2(info.accessCount + 1)
-    return decayed * (1 + accessBoost * 0.1)
+    return decayedConfidence(info)
   }
 
   /** Jaccard similarity between two tag sets */
@@ -98,33 +92,15 @@ export namespace Memory {
     return union === 0 ? 1 : intersection / union
   }
 
-  /** Extract keyword tags from content */
+  /** Extract keyword tags from content — keep it simple */
   export function extractTags(content: string): string[] {
-    // Remove common stop words, extract meaningful tokens
-    const stopWords = new Set([
-      "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-      "have", "has", "had", "do", "does", "did", "will", "would", "could",
-      "should", "may", "might", "shall", "can", "to", "of", "in", "for",
-      "on", "with", "at", "by", "from", "as", "into", "through", "during",
-      "before", "after", "above", "below", "between", "this", "that",
-      "these", "those", "it", "its", "and", "or", "but", "not", "no",
-      "if", "then", "than", "so", "up", "out", "about", "just", "also",
-      "very", "when", "what", "which", "who", "how", "all", "each",
-      "every", "both", "few", "more", "most", "other", "some", "such",
-      "only", "own", "same", "too", "here", "there", "where", "why",
-      "的", "了", "在", "是", "和", "与", "或", "但", "不", "也",
-      "就", "都", "会", "对", "中", "上", "下", "把", "被", "让",
-    ])
-
     const words = content
       .toLowerCase()
       .replace(/[^\w\u4e00-\u9fff\-\.\/]/g, " ")
       .split(/\s+/)
-      .filter((w) => w.length > 2 && !stopWords.has(w))
+      .filter((w) => w.length > 2)
 
-    // Deduplicate and limit
-    const unique = [...new Set(words)]
-    return unique.slice(0, 20)
+    return [...new Set(words)].slice(0, 15)
   }
 
   // --- CRUD Operations ---
@@ -435,7 +411,7 @@ export namespace Memory {
     const sections: Record<string, MemoryType> = {
       "## Discoveries": "discovery",
       "## Relevant files": "file_knowledge",
-      "## Instructions": "preference",
+      "## Instructions": "general",
     }
 
     for (const [header, type] of Object.entries(sections)) {

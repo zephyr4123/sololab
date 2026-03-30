@@ -576,6 +576,16 @@ export namespace SessionPrompt {
         continue
       }
 
+      // Pre-emptive compaction: apply L1+L2 before reaching overflow
+      if (lastFinished && lastFinished.summary !== true) {
+        const trigger = SessionCompaction.preemptive({ tokens: lastFinished.tokens, model })
+        if (trigger.action === "l1+l2") {
+          // Apply L1 (prune) + L2 (compress) without LLM
+          await SessionCompaction.prune({ sessionID })
+          await SessionCompaction.compressL2({ sessionID })
+        }
+      }
+
       // normal processing — auto-route agent if user didn't explicitly specify
       let agentName = lastUser.agent
       const userExplicitlyChoseAgent = msgs.findLast((m) => m.info.role === "user")

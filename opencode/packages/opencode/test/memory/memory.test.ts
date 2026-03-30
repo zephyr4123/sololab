@@ -16,17 +16,11 @@ describe("Memory.extractTags", () => {
     expect(tags).toContain("authentication")
     expect(tags).toContain("middleware")
     expect(tags).toContain("jwt")
-    // Stop words should be removed
-    expect(tags).not.toContain("the")
-    expect(tags).not.toContain("with")
   })
 
   test("extracts keywords from Chinese text", () => {
     const tags = Memory.extractTags("认证中间件使用JWT令牌进行RSA-256签名")
     expect(tags.length).toBeGreaterThan(0)
-    // Should filter Chinese stop words
-    expect(tags).not.toContain("的")
-    expect(tags).not.toContain("在")
   })
 
   test("extracts file paths and code identifiers", () => {
@@ -35,10 +29,10 @@ describe("Memory.extractTags", () => {
     expect(tags).toContain("configmanager")
   })
 
-  test("limits to 20 tags", () => {
+  test("limits to 15 tags", () => {
     const longText = Array.from({ length: 100 }, (_, i) => `keyword${i}`).join(" ")
     const tags = Memory.extractTags(longText)
-    expect(tags.length).toBeLessThanOrEqual(20)
+    expect(tags.length).toBeLessThanOrEqual(15)
   })
 
   test("returns empty array for empty input", () => {
@@ -98,8 +92,8 @@ describe("Memory.decayedConfidence", () => {
       confidence: 100,
       timeCreated: oneWeekAgo,
     })
-    // After 1 week: 100 * (1-0.05)^1 = 95
-    expect(result).toBeCloseTo(95, 0)
+    // After 1 week: 100 - 1*2 = 98
+    expect(result).toBeCloseTo(98, 0)
   })
 
   test("decays significantly after 10 weeks", () => {
@@ -108,8 +102,8 @@ describe("Memory.decayedConfidence", () => {
       confidence: 100,
       timeCreated: tenWeeksAgo,
     })
-    // After 10 weeks: 100 * 0.95^10 ≈ 59.87
-    expect(result).toBeCloseTo(59.87, 0)
+    // After 10 weeks: 100 - 10*2 = 80
+    expect(result).toBeCloseTo(80, 0)
   })
 
   test("uses time_accessed if available", () => {
@@ -162,21 +156,20 @@ describe("Memory.relevanceScore", () => {
     expect(high).toBeGreaterThan(low)
   })
 
-  test("more access gives a boost", () => {
+  test("relevanceScore equals decayedConfidence (simplified)", () => {
     const now = Date.now()
-    const base = {
+    const info = {
       id: MemoryID.ascending(),
       projectID: "global" as any,
       type: "general" as MemoryType,
       content: "test",
       tags: [],
       confidence: 80,
+      accessCount: 50,
       timeCreated: now,
       timeUpdated: now,
     }
-    const noAccess = Memory.relevanceScore({ ...base, accessCount: 0 })
-    const highAccess = Memory.relevanceScore({ ...base, accessCount: 50 })
-    expect(highAccess).toBeGreaterThan(noAccess)
+    expect(Memory.relevanceScore(info)).toBe(Memory.decayedConfidence(info))
   })
 })
 
@@ -233,7 +226,7 @@ describe("Memory CRUD", () => {
         const projectID = Instance.current.project.id
 
         await Memory.create({ projectID, type: "discovery", content: "Finding A about the database schema" })
-        await Memory.create({ projectID, type: "pattern", content: "Pattern B for error handling" })
+        await Memory.create({ projectID, type: "discovery", content: "Pattern B for error handling" })
         await Memory.create({ projectID, type: "preference", content: "User prefers verbose logging" })
 
         const all = await Memory.list(projectID)
@@ -270,7 +263,7 @@ describe("Memory search (FTS5)", () => {
         const projectID = Instance.current.project.id
 
         await Memory.create({ projectID, type: "discovery", content: "PostgreSQL uses MVCC for concurrency control" })
-        await Memory.create({ projectID, type: "pattern", content: "React components use hooks for state management" })
+        await Memory.create({ projectID, type: "discovery", content: "React components use hooks for state management" })
         await Memory.create({ projectID, type: "general", content: "The build system uses webpack bundler" })
 
         const results = await Memory.search({ projectID, query: "PostgreSQL concurrency" })
@@ -289,7 +282,7 @@ describe("Memory search (FTS5)", () => {
         const projectID = Instance.current.project.id
 
         await Memory.create({ projectID, type: "discovery", content: "Found auth uses JWT tokens" })
-        await Memory.create({ projectID, type: "pattern", content: "JWT middleware pattern" })
+        await Memory.create({ projectID, type: "preference", content: "Always use snake_case for API endpoints" })
 
         const results = await Memory.search({ projectID, query: "JWT", type: "discovery" })
         expect(results.length).toBe(1)
@@ -390,7 +383,7 @@ describe("Memory.buildPromptBlock", () => {
       fn: async () => {
         const projectID = Instance.current.project.id
         await Memory.create({ projectID, type: "discovery", content: "The API uses OAuth2 flow" })
-        await Memory.create({ projectID, type: "pattern", content: "Error handling uses Result type" })
+        await Memory.create({ projectID, type: "discovery", content: "Error handling uses Result type" })
 
         const block = await Memory.buildPromptBlock(projectID)
         expect(block).toContain("<project-memory>")

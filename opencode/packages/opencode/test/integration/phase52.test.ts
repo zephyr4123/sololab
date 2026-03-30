@@ -29,7 +29,7 @@ describe("Phase 5.2 Integration: Cross-session memory lifecycle", () => {
         })
         await Memory.create({
           projectID,
-          type: "architecture",
+          type: "general",
           content: "API gateway is implemented with FastAPI middleware pattern",
           sourceSession: "ses_sessionA" as any,
         })
@@ -173,9 +173,8 @@ Implement user authentication module
           timeCreated: Date.now() - 20 * 7 * 24 * 60 * 60 * 1000,
         })
 
-        // After 20 weeks: 80 * 0.95^20 ≈ 28.6
-        expect(decayed).toBeLessThan(30)
-        expect(decayed).toBeGreaterThan(25)
+        // After 20 weeks: 80 - 20*2 = 40
+        expect(decayed).toBe(40)
       },
     })
   })
