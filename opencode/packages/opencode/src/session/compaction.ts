@@ -10,6 +10,7 @@ import { Token } from "../util/token"
 import { Log } from "../util/log"
 import { SessionProcessor } from "./processor"
 import { fn } from "@/util/fn"
+import { Memory } from "@/memory"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
@@ -334,7 +335,33 @@ When constructing the summary, try to stick to this template:
         }
 
         if (processor.message.error) return "stop"
-        if (result === "continue") yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
+        if (result === "continue") {
+          // Extract memories from compaction summary (non-blocking)
+          Effect.promise(async () => {
+            try {
+              const msgs = await Session.messages({ sessionID: input.sessionID })
+              const summaryMsg = msgs?.findLast((m) => (m.info as any).summary === true)
+              const summaryText = summaryMsg?.parts.find((p) => p.type === "text")?.text ?? ""
+              if (!summaryText) return
+              const sessionInfo = await Session.get(input.sessionID)
+              const entries = Memory.extractFromCompaction(summaryText)
+              for (const entry of entries) {
+                await Memory.create({
+                  projectID: sessionInfo.projectID,
+                  type: entry.type,
+                  content: entry.content,
+                  sourceSession: input.sessionID,
+                  confidence: 90,
+                })
+              }
+              if (entries.length > 0) log.info("extracted memories from compaction", { count: entries.length })
+            } catch (e) {
+              log.warn("failed to extract memories from compaction", { error: e })
+            }
+          }).pipe(Effect.runPromise).catch(() => {})
+
+          yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
+        }
         return result
       })
 

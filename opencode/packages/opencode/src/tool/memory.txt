@@ -1,0 +1,15 @@
+Manage project memories that persist across sessions. Use this tool to save important discoveries, patterns, preferences, and knowledge learned during the current session so future sessions can benefit from this context.
+
+Actions:
+- **list**: Show all project memories
+- **add**: Save a new memory entry
+- **update**: Modify an existing memory
+- **delete**: Remove a memory entry
+- **search**: Search memories by keyword
+
+When to save memories:
+- Architectural patterns or conventions discovered in the codebase
+- User preferences or corrections
+- Important file knowledge (what files do what)
+- Key decisions made during the session
+- Debugging discoveries that would help in future sessions

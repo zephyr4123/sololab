@@ -49,6 +49,8 @@ import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
+import { Memory } from "@/memory"
+import { AgentRouter } from "@/agent/router"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -574,8 +576,26 @@ export namespace SessionPrompt {
         continue
       }
 
-      // normal processing
-      const agent = await Agent.get(lastUser.agent)
+      // normal processing — auto-route agent if user didn't explicitly specify
+      let agentName = lastUser.agent
+      const userExplicitlyChoseAgent = msgs.findLast((m) => m.info.role === "user")
+        ?.parts.some((p) => p.type === "agent")
+      if (!userExplicitlyChoseAgent && step === 1) {
+        const userText = msgs.findLast((m) => m.info.role === "user")
+          ?.parts.find((p) => p.type === "text")?.text ?? ""
+        const available = await Agent.list().then((agents) =>
+          agents.filter((a) => a.mode !== "subagent" || a.name === "explore").map((a) => a.name),
+        )
+        const routed = AgentRouter.route({
+          prompt: userText,
+          availableAgents: available,
+        })
+        if (routed.autoRouted) {
+          agentName = routed.agent
+        }
+      }
+
+      const agent = await Agent.get(agentName)
       if (!agent) {
         const available = await Agent.list().then((agents) => agents.filter((a) => !a.hidden).map((a) => a.name))
         const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
@@ -685,6 +705,17 @@ export namespace SessionPrompt {
         ...(skills ? [skills] : []),
         ...(await InstructionPrompt.system()),
       ]
+
+      // Inject cross-session memories into system prompt
+      try {
+        const userText = msgs.findLast((m) => m.info.role === "user")
+          ?.parts.find((p) => p.type === "text")?.text
+        const memoryBlock = await Memory.buildPromptBlock(session.projectID, userText)
+        if (memoryBlock) system.push(memoryBlock)
+      } catch {
+        // Non-critical: memory injection failure should not block the session
+      }
+
       const format = lastUser.format ?? { type: "text" }
       if (format.type === "json_schema") {
         system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)

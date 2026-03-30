@@ -70,7 +70,7 @@ export namespace Filesystem {
     // Check if target file exists and is not writable
     // (rename can overwrite read-only files on POSIX if dir is writable)
     const existing = stat(p)
-    if (existing && !(existing.mode & 0o200)) {
+    if (existing && !(Number(existing.mode) & 0o200)) {
       // Attempt direct write — this will throw EACCES as expected
       await writeFile(p, content, mode ? { mode } : undefined)
       return

@@ -12,6 +12,124 @@ import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { Permission } from "@/permission"
 
+export interface SubtaskResult {
+  summary: string
+  findings: string[]
+  filesRead: string[]
+  filesModified: string[]
+  decisions: string[]
+  errors: string[]
+}
+
+/** Extract structured result from a subtask session's messages */
+export function extractSubtaskResult(resultMsg: MessageV2.WithParts, allMessages?: MessageV2.WithParts[]): SubtaskResult {
+  const findings: string[] = []
+  const filesRead = new Set<string>()
+  const filesModified = new Set<string>()
+  const decisions: string[] = []
+  const errors: string[] = []
+
+  const messagesToScan = allMessages ?? [resultMsg]
+
+  for (const msg of messagesToScan) {
+    for (const part of msg.parts) {
+      if (part.type === "tool" && part.state.status === "completed") {
+        const tool = part.tool
+        const input = part.state.input as Record<string, any>
+
+        // Track file operations
+        if (tool === "read" || tool === "glob" || tool === "grep") {
+          const filePath = input?.file_path || input?.path || input?.pattern
+          if (filePath) filesRead.add(String(filePath))
+        }
+        if (tool === "edit" || tool === "write") {
+          const filePath = input?.file_path || input?.filepath
+          if (filePath) filesModified.add(String(filePath))
+        }
+        if (tool === "bash") {
+          const cmd = input?.command
+          if (cmd && typeof cmd === "string") {
+            // Detect file-modifying bash commands
+            if (/\b(mv|cp|rm|mkdir|touch|chmod)\b/.test(cmd)) {
+              filesModified.add(`[bash] ${cmd.slice(0, 80)}`)
+            }
+          }
+        }
+      }
+
+      // Collect errors
+      if (part.type === "tool" && part.state.status === "error") {
+        const errMsg = "error" in part.state ? String(part.state.error) : "Tool execution failed"
+        errors.push(`[${part.tool}] ${errMsg.slice(0, 200)}`)
+      }
+    }
+  }
+
+  // Extract summary from last text part
+  const lastText = resultMsg.parts.findLast((p) => p.type === "text")?.text ?? ""
+
+  // Extract findings: lines that start with discovery markers
+  const findingPatterns = /(?:^|\n)\s*[-*]\s*(found|discovered|noticed|learned|important|note|key finding|observation)[:\s](.+)/gi
+  let match: RegExpExecArray | null
+  while ((match = findingPatterns.exec(lastText)) !== null) {
+    findings.push(match[2].trim())
+  }
+
+  // Extract decisions: lines with decision markers
+  const decisionPatterns = /(?:^|\n)\s*[-*]\s*(decided|chose|selected|will use|using|approach|solution|recommendation)[:\s](.+)/gi
+  while ((match = decisionPatterns.exec(lastText)) !== null) {
+    decisions.push(match[2].trim())
+  }
+
+  return {
+    summary: lastText.slice(0, 500),
+    findings,
+    filesRead: [...filesRead],
+    filesModified: [...filesModified],
+    decisions,
+    errors,
+  }
+}
+
+/** Format SubtaskResult as structured XML for parent agent */
+export function formatSubtaskResult(result: SubtaskResult, sessionId: string): string {
+  const parts: string[] = [
+    `task_id: ${sessionId} (for resuming to continue this task if needed)`,
+    "",
+    "<task_result>",
+    `<summary>${result.summary}</summary>`,
+  ]
+
+  if (result.findings.length > 0) {
+    parts.push("<findings>")
+    for (const f of result.findings) parts.push(`  <finding>${f}</finding>`)
+    parts.push("</findings>")
+  }
+
+  if (result.filesRead.length > 0) {
+    parts.push(`<files_read>${result.filesRead.join(", ")}</files_read>`)
+  }
+
+  if (result.filesModified.length > 0) {
+    parts.push(`<files_modified>${result.filesModified.join(", ")}</files_modified>`)
+  }
+
+  if (result.decisions.length > 0) {
+    parts.push("<decisions>")
+    for (const d of result.decisions) parts.push(`  <decision>${d}</decision>`)
+    parts.push("</decisions>")
+  }
+
+  if (result.errors.length > 0) {
+    parts.push("<errors>")
+    for (const e of result.errors) parts.push(`  <error>${e}</error>`)
+    parts.push("</errors>")
+  }
+
+  parts.push("</task_result>")
+  return parts.join("\n")
+}
+
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
   prompt: z.string().describe("The task for the agent to perform"),
@@ -143,21 +261,23 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         parts: promptParts,
       })
 
-      const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
+      // Extract structured result from subtask
+      let allMessages: MessageV2.WithParts[] | undefined
+      try {
+        allMessages = await Session.messages({ sessionID: session.id }) ?? undefined
+      } catch {
+        // Fallback: use only the result message
+      }
 
-      const output = [
-        `task_id: ${session.id} (for resuming to continue this task if needed)`,
-        "",
-        "<task_result>",
-        text,
-        "</task_result>",
-      ].join("\n")
+      const structured = extractSubtaskResult(result, allMessages)
+      const output = formatSubtaskResult(structured, session.id)
 
       return {
         title: params.description,
         metadata: {
           sessionId: session.id,
           model,
+          structured,
         },
         output,
       }

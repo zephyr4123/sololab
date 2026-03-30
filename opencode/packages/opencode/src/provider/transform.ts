@@ -1,5 +1,6 @@
 import type { ModelMessage } from "ai"
 import { mergeDeep, unique } from "remeda"
+import { Token } from "../util/token"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import type { JSONSchema } from "zod/v4/core"
 import type { Provider } from "./provider"
@@ -189,9 +190,50 @@ export namespace ProviderTransform {
     return msgs
   }
 
+  /** Score a message for cache point priority.
+   *  Higher score = more valuable to cache.
+   *  stability (0-1) × log(tokenCount + 1) */
+  export function scoreCacheMessage(msg: ModelMessage, index: number, total: number): number {
+    let stability = 0.5 // default for recent messages
+
+    // System messages are always stable
+    if (msg.role === "system") stability = 1.0
+    // Compaction summaries (marked with summary=true on info) are stable
+    else if ((msg as any).summary === true || (msg as any).info?.summary === true) stability = 1.0
+    // Messages older than the last 2 are relatively stable
+    else if (index < total - 2) stability = 0.9
+
+    // Estimate token count from message content
+    const text =
+      typeof msg.content === "string"
+        ? msg.content
+        : Array.isArray(msg.content)
+          ? msg.content
+              .map((p: any) => (typeof p === "string" ? p : p?.text ?? ""))
+              .join("")
+          : ""
+    const tokens = Token.estimate(text)
+
+    return stability * Math.log(tokens + 1)
+  }
+
+  /** Max cache points per provider */
+  function maxCachePoints(model: Provider.Model): number {
+    if (model.providerID === "anthropic" || model.api.npm === "@ai-sdk/anthropic") return 4
+    if (model.providerID.includes("bedrock") || model.api.npm === "@ai-sdk/amazon-bedrock") return 4
+    return 2
+  }
+
   function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
-    const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
-    const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
+    const limit = maxCachePoints(model)
+
+    // Score all messages and select top-N
+    const scored = msgs
+      .map((msg, idx) => ({ msg, idx, score: scoreCacheMessage(msg, idx, msgs.length) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+
+    const selected = new Set(scored.map((s) => s.msg))
 
     const providerOptions = {
       anthropic: {
@@ -211,7 +253,7 @@ export namespace ProviderTransform {
       },
     }
 
-    for (const msg of unique([...system, ...final])) {
+    for (const msg of selected) {
       const useMessageLevelOptions =
         model.providerID === "anthropic" ||
         model.providerID.includes("bedrock") ||
