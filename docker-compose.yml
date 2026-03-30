@@ -45,6 +45,32 @@ services:
         max-file: "3"
 
   # ==================== 应用服务 ====================
+  opencode:
+    build:
+      context: .
+      dockerfile: infra/docker/opencode.Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${OPENCODE_PORT:-3100}:3100"
+    env_file: .env
+    environment:
+      OPENCODE_SERVER_PASSWORD: "${OPENCODE_SERVER_PASSWORD:-}"
+      OPENCODE_SERVER_USERNAME: "${OPENCODE_SERVER_USERNAME:-opencode}"
+    volumes:
+      - ./opencode:/app/opencode-src:ro
+      - opencode_data:/root/.local/share/opencode
+    healthcheck:
+      test: ["CMD", "bun", "--eval", "fetch('http://localhost:3100/session').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   backend:
     build:
       context: .
@@ -57,6 +83,7 @@ services:
       # 容器内部通过服务名连接，覆盖 .env 中的 localhost
       DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-sololab}:${POSTGRES_PASSWORD:-sololab}@postgres:5432/${POSTGRES_DB:-sololab}"
       REDIS_URL: "redis://:${REDIS_PASSWORD:-sololab}@redis:6379/0"
+      OPENCODE_URL: "http://opencode:3100"
     volumes:
       - ./backend:/app/backend
       - ./storage:/app/storage
@@ -64,6 +91,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      opencode:
         condition: service_healthy
     command: ["--reload"]
     logging:
@@ -112,5 +141,6 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  opencode_data:
   caddy_data:
   caddy_config:

@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     tavily_api_key: Optional[str] = None
     s2_api_key: Optional[str] = None  # Semantic Scholar API Key
 
+    # OpenCode 引擎（CodeLab 模块）
+    opencode_url: str = "http://localhost:3100"
+    opencode_server_password: Optional[str] = None
+    opencode_server_username: str = "opencode"
+
     # API 认证
     api_keys: Optional[str] = None  # 逗号分隔的 API Keys，为空则禁用认证
 

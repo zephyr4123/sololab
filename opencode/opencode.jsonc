@@ -1,0 +1,36 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // SoloLab CodeLab 模块 — OpenCode 引擎配置
+  // 环境变量通过 {env:XXX} 语法从 SoloLab .env 读取
+
+  "server": {
+    "port": 3100,
+    "hostname": "127.0.0.1"
+  },
+
+  // Provider 配置：Google Gemini 中转
+  "provider": {
+    "google": {
+      "options": {
+        "apiKey": "{env:GOOGLE_API_KEY}",
+        "baseURL": "{env:GOOGLE_BASE_URL}"
+      }
+    }
+  },
+
+  // 默认模型
+  "model": "google/gemini-3-flash-preview",
+
+  // 权限配置：保护关键文件
+  "permission": {
+    "edit": {
+      "packages/opencode/migration/*": "deny"
+    }
+  },
+
+  // 禁用不需要的工具
+  "tools": {
+    "github-triage": false,
+    "github-pr-search": false
+  }
+}
