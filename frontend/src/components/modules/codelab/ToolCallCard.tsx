@@ -32,6 +32,10 @@ export function ToolCallCard({ toolCall }: { toolCall: CodeLabToolCall }) {
   const isRunning = toolCall.status === 'running';
   const fp = inp?.file_path || inp?.path || inp?.filepath || '';
 
+  // Hide ghost entries: completed with no file path, no output, and generic title
+  const hasContent = fp || toolCall.output || (toolCall.title && toolCall.title !== toolCall.tool);
+  if (!isRunning && !hasContent) return null;
+
   // Tool-specific display
   const t = toolCall.tool;
   const out = toolCall.output || '';

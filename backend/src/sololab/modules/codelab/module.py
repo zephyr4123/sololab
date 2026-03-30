@@ -123,6 +123,10 @@ class CodeLabModule(ModuleBase):
             yield await self._handle_permission(request)
             return
 
+        if action == "messages":
+            yield await self._handle_messages(request)
+            return
+
         # 默认: chat
         async for event in self._handle_chat(request, ctx):
             yield event
@@ -168,6 +172,18 @@ class CodeLabModule(ModuleBase):
             return {"type": "error", "error": "permission_id is required"}
         await self._bridge.reply_permission(permission_id, allowed)
         return {"type": "permission_replied", "permission_id": permission_id, "allowed": allowed}
+
+    async def _handle_messages(self, request: ModuleRequest) -> dict:
+        """获取会话消息历史（从 OpenCode 获取）。"""
+        session_id = self._resolve_oc_sid(request.params.get("session_id"))
+        if not session_id:
+            return {"type": "messages", "messages": []}
+        try:
+            messages = await self._bridge.get_messages(session_id)
+            return {"type": "messages", "messages": messages}
+        except Exception as e:
+            logger.warning("获取消息历史失败: %s", e)
+            return {"type": "messages", "messages": [], "error": str(e)}
 
     async def _handle_browse(self, request: ModuleRequest) -> dict:
         """Browse host filesystem directories (mounted at /host-home)."""

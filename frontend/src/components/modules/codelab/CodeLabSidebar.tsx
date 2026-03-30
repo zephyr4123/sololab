@@ -7,7 +7,9 @@ import {
   DollarSign, ArrowLeftRight,
 } from 'lucide-react';
 import { useCodeLabStore } from '@/stores/module-stores/codelab-store';
+import type { CodeLabMessage, MessagePart } from '@/stores/module-stores/codelab-store';
 import { useSessionStore } from '@/stores/session-store';
+import { api } from '@/lib/api-client';
 
 function timeAgo(dateStr: string | null): string {
   if (!dateStr) return '';
@@ -47,6 +49,7 @@ export function CodeLabSidebar({ moduleId }: { moduleId: string }) {
   } = useSessionStore();
 
   const [showProjectSwitcher, setShowProjectSwitcher] = useState(false);
+  const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
 
   // Fetch sessions when directory changes
   useEffect(() => {
@@ -54,6 +57,80 @@ export function CodeLabSidebar({ moduleId }: { moduleId: string }) {
       fetchSessions(moduleId);
     }
   }, [workingDirectory, moduleId, fetchSessions]);
+
+  // Load CodeLab session history from OpenCode
+  const loadCodeLabHistory = async (sid: string) => {
+    setLoadingSessionId(sid);
+    try {
+      // Resolve SoloLab session ID → OpenCode session ID via localStorage mapping
+      let ocSid = sid;
+      try { ocSid = localStorage.getItem(`codelab_oc_${sid}`) || sid; } catch {}
+
+      const raw: any = await api.modules.run(moduleId, '', { action: 'messages', session_id: ocSid });
+      // Backend wraps in { module_id, results: [...] }
+      const result = raw?.results?.[0] ?? raw;
+      const rawMessages: any[] = result?.messages || [];
+
+      // OpenCode message format: { info: { role, id, time }, parts: [{ type, text }] }
+      const msgs: CodeLabMessage[] = rawMessages
+        .filter((m: any) => {
+          const role = m.info?.role;
+          return role === 'user' || role === 'assistant';
+        })
+        .map((m: any) => {
+          const role = m.info.role as 'user' | 'assistant';
+          const ocParts: any[] = m.parts || [];
+
+          // Extract text content from OpenCode parts
+          const textContent = ocParts
+            .filter((p: any) => p.type === 'text')
+            .map((p: any) => p.text || '')
+            .join('');
+
+          // Convert to our MessagePart format
+          const parts: MessagePart[] = [];
+          for (const p of ocParts) {
+            if (p.type === 'text' && p.text) {
+              parts.push({ kind: 'text', content: p.text });
+            } else if (p.type === 'tool') {
+              parts.push({
+                kind: 'tool',
+                toolCall: {
+                  id: p.id || `tc_${Date.now()}`,
+                  tool: p.tool || 'unknown',
+                  input: p.state?.input || {},
+                  output: p.state?.output || '',
+                  status: 'completed',
+                  title: p.state?.title || p.tool || 'unknown',
+                  timestamp: Date.now(),
+                },
+              });
+            }
+          }
+
+          return {
+            id: m.info.id || `msg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            role,
+            content: textContent,
+            parts,
+            toolCalls: parts.filter((p): p is Extract<MessagePart, {kind:'tool'}> => p.kind === 'tool').map(p => p.toolCall),
+            timestamp: m.info.time?.created || Date.now(),
+          };
+        });
+      useCodeLabStore.getState().setMessages(msgs);
+      useCodeLabStore.getState().setSessionId(sid);
+      useCodeLabStore.getState().setFiles([]);
+      useCodeLabStore.getState().clearToolCalls();
+      useSessionStore.getState().setCurrentSession(sid);
+    } catch (e) {
+      // Fallback: just switch session ID, show empty chat
+      useCodeLabStore.getState().setMessages([]);
+      useCodeLabStore.getState().setSessionId(sid);
+      useSessionStore.getState().setCurrentSession(sid);
+    } finally {
+      setLoadingSessionId(null);
+    }
+  };
 
   const modifiedFiles = files.filter((f) => f.status !== 'read');
   const dirName = workingDirectory?.split('/').filter(Boolean).pop() ?? '';
@@ -174,9 +251,8 @@ export function CodeLabSidebar({ moduleId }: { moduleId: string }) {
               >
                 <button
                   onClick={() => {
-                    if (!isLoadingHistory && session.session_id !== currentSessionId) {
-                      loadHistory(session.session_id);
-                      setSessionId(session.session_id);
+                    if (!loadingSessionId && session.session_id !== currentSessionId) {
+                      loadCodeLabHistory(session.session_id);
                     }
                   }}
                   className="flex flex-1 items-start gap-2 text-left min-w-0"
@@ -191,7 +267,7 @@ export function CodeLabSidebar({ moduleId }: { moduleId: string }) {
                       {session.title || 'Untitled'}
                     </p>
                     <span className="text-[10px] text-muted-foreground/35">
-                      {timeAgo(session.updated_at || session.created_at)}
+                      {loadingSessionId === session.session_id ? 'Loading...' : timeAgo(session.updated_at || session.created_at)}
                     </span>
                   </div>
                 </button>

@@ -217,57 +217,41 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input area */}
-      <div className="border-t border-border/40 bg-background/80 backdrop-blur-sm px-3 py-3">
-        {/* Uploaded document tags */}
-        {uploadedDocs.length > 0 && (
-          <div className="mb-2.5 flex flex-wrap gap-1.5">
-            {uploadedDocs.map((doc) => (
-              <div
-                key={doc.filename}
-                className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                  doc.status === 'completed'
-                    ? 'border-[var(--color-warm)]/20 bg-[var(--color-warm)]/5 text-[var(--color-warm)]'
-                    : doc.status === 'failed'
-                      ? 'border-destructive/20 bg-destructive/5 text-destructive'
-                      : 'border-border bg-muted/50 text-muted-foreground'
-                }`}
-              >
-                {doc.status === 'completed' ? (
-                  <CheckCircle className="h-3 w-3" />
-                ) : doc.status === 'failed' ? (
-                  <X className="h-3 w-3" />
-                ) : (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                )}
-                <FileText className="h-3 w-3" />
-                <span className="max-w-[100px] truncate">{doc.filename}</span>
-                <button onClick={() => removeDoc(doc.filename)} className="ml-0.5 rounded-full p-0.5 hover:bg-foreground/10">
-                  <X className="h-2.5 w-2.5" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+      {/* Input area — unified container */}
+      <div className="bg-background/80 backdrop-blur-sm px-3 py-3">
+        <div className="rounded-2xl border border-border/50 bg-card/50 transition-all duration-200 focus-within:border-[var(--color-warm)]/30 focus-within:bg-card/80 focus-within:shadow-[0_0_0_1px_var(--color-warm)]/10">
+          {/* Uploaded document tags — inside the container */}
+          {uploadedDocs.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 px-3 pt-2.5">
+              {uploadedDocs.map((doc) => (
+                <div
+                  key={doc.filename}
+                  className={`flex items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                    doc.status === 'completed'
+                      ? 'border-[var(--color-warm)]/20 bg-[var(--color-warm)]/5 text-[var(--color-warm)]'
+                      : doc.status === 'failed'
+                        ? 'border-destructive/20 bg-destructive/5 text-destructive'
+                        : 'border-border bg-muted/50 text-muted-foreground'
+                  }`}
+                >
+                  {doc.status === 'completed' ? (
+                    <CheckCircle className="h-2.5 w-2.5" />
+                  ) : doc.status === 'failed' ? (
+                    <X className="h-2.5 w-2.5" />
+                  ) : (
+                    <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                  )}
+                  <FileText className="h-2.5 w-2.5" />
+                  <span className="max-w-[100px] truncate">{doc.filename}</span>
+                  <button onClick={() => removeDoc(doc.filename)} className="ml-0.5 rounded-full p-0.5 hover:bg-foreground/10">
+                    <X className="h-2 w-2" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
-        <div className="flex items-end gap-2">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/60 text-muted-foreground/50 transition-all duration-200 hover:bg-foreground/[0.04] hover:text-foreground hover:border-border"
-            title="上传参考文献 (PDF)"
-            disabled={isStreaming}
-          >
-            <Paperclip className="h-4 w-4" />
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf,.md,.docx"
-            multiple
-            className="hidden"
-            onChange={(e) => handleFileUpload(e.target.files)}
-          />
-
+          {/* Textarea */}
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -279,27 +263,48 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
             }}
             placeholder="输入研究主题..."
             rows={1}
-            className="max-h-32 min-h-[40px] flex-1 resize-none rounded-xl border border-border/60 bg-transparent px-4 py-2.5 text-sm leading-relaxed placeholder:text-muted-foreground/35 focus:outline-none focus:border-[var(--color-warm)]/40 focus:ring-1 focus:ring-[var(--color-warm)]/20 transition-all duration-200"
+            className="w-full max-h-32 min-h-[40px] resize-none bg-transparent px-4 pt-3 pb-1 text-sm leading-relaxed placeholder:text-muted-foreground/35 focus:outline-none"
             disabled={isStreaming}
           />
-          {isStreaming ? (
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.md,.docx"
+            multiple
+            className="hidden"
+            onChange={(e) => handleFileUpload(e.target.files)}
+          />
+
+          {/* Bottom bar — attach left, send right */}
+          <div className="flex items-center justify-between px-3 pb-2.5">
             <button
-              onClick={handleStop}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-foreground/10 text-foreground/60 transition-all duration-200 hover:bg-foreground/15"
-              title="Stop"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground/35 transition-colors hover:text-muted-foreground/70 hover:bg-foreground/[0.04]"
+              title="上传参考文献 (PDF)"
+              disabled={isStreaming}
             >
-              <Square className="h-3.5 w-3.5" />
+              <Paperclip className="h-4 w-4" />
             </button>
-          ) : (
-            <button
-              onClick={handleSend}
-              disabled={!input.trim()}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-warm)] text-[var(--color-warm-foreground)] transition-all duration-200 hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed"
-              title="Send"
-            >
-              <Send className="h-4 w-4" />
-            </button>
-          )}
+
+            {isStreaming ? (
+              <button
+                onClick={handleStop}
+                className="flex h-7 w-7 items-center justify-center rounded-lg bg-foreground/8 text-foreground/50 transition-colors hover:bg-foreground/12"
+                title="Stop"
+              >
+                <Square className="h-3 w-3" />
+              </button>
+            ) : (
+              <button
+                onClick={handleSend}
+                disabled={!input.trim()}
+                className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--color-warm)]/15 text-[var(--color-warm)] transition-all hover:bg-[var(--color-warm)]/25 disabled:opacity-20"
+                title="Send (Enter)"
+              >
+                <Send className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -129,6 +129,10 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
 
         store.setAgent(store.currentAgent, 'tool_call');
 
+        // Check if this event has meaningful content (file path, command, pattern, etc.)
+        const hasInput = !!(toolInput?.file_path || toolInput?.path || toolInput?.command || toolInput?.pattern);
+        const hasTitle = title !== toolName; // title is not just the tool name fallback
+
         // Attach tool calls to the current assistant message's parts (in order)
         const lastMsg = useCodeLabStore.getState().messages.at(-1);
         const match = lastMsg?.toolCalls?.find(
@@ -139,6 +143,10 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
           store.updateToolCallInLastMessage(match.id, {
             status: status as any, title, input: toolInput, output,
           });
+        } else if (status === 'running' && !hasInput && !hasTitle) {
+          // Skip empty running events (no file path, no command, generic title).
+          // The completed event will carry the real data and create the entry.
+          return;
         } else {
           store.addToolCallToLastMessage({
             id: `tc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -167,6 +175,15 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
         store.finalizeLastMessageToolCalls();
         store.clearToolCalls();
         if (costUsd !== undefined) store.setCostUsd(store.costUsd + costUsd);
+
+        // Persist SoloLab→OpenCode session ID mapping for history loading
+        // Must read CURRENT state (not the stale snapshot from send() scope)
+        const ocSid = sseClient.getSessionId();
+        const slSid = useSessionStore.getState().currentSessionId;
+        if (slSid && ocSid && slSid !== ocSid) {
+          try { localStorage.setItem(`codelab_oc_${slSid}`, ocSid); } catch {}
+        }
+
         session.fetchSessions(moduleId);
       },
       onError(msg) {
@@ -306,9 +323,10 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
         <div ref={endRef} />
       </div>
 
-      {/* Input area */}
-      <div className="shrink-0 border-t border-border/40 pt-3 pb-1">
-        <div className="relative flex items-end gap-2 rounded-xl border border-border/60 bg-card/60 px-3 py-2 transition-colors focus-within:border-[var(--color-warm)]/40 focus-within:bg-card">
+      {/* Input area — unified container */}
+      <div className="shrink-0 pt-3 pb-1 px-1">
+        <div className="rounded-2xl border border-border/50 bg-card/50 transition-all duration-200 focus-within:border-[var(--color-warm)]/30 focus-within:bg-card/80 focus-within:shadow-[0_0_0_1px_var(--color-warm)]/10">
+          {/* Textarea */}
           <textarea
             ref={textareaRef}
             value={input}
@@ -316,44 +334,46 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
             onKeyDown={handleKeyDown}
             placeholder="描述你的编码需求..."
             rows={1}
-            className="flex-1 resize-none bg-transparent text-sm leading-relaxed outline-none placeholder:text-muted-foreground/40"
+            className="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground/35"
             disabled={store.isStreaming}
           />
 
-          {store.isStreaming ? (
-            <button
-              onClick={stop}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive transition-colors hover:bg-destructive/20"
-              title="Stop"
-            >
-              <Square className="h-3.5 w-3.5" />
-            </button>
-          ) : (
-            <button
-              onClick={send}
-              disabled={!input.trim()}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--color-warm)]/10 text-[var(--color-warm)] transition-all hover:bg-[var(--color-warm)]/20 disabled:opacity-30 disabled:hover:bg-transparent"
-              title="Send"
-            >
-              <Send className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
+          {/* Bottom bar — status left, button right */}
+          <div className="flex items-center justify-between px-3 pb-2">
+            <div className="text-[11px] text-muted-foreground/40">
+              {store.isStreaming && (
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-warm)] animate-pulse" />
+                  {store.agentStatus === 'thinking' && '思考中...'}
+                  {store.agentStatus === 'tool_call' && '调用工具...'}
+                  {store.agentStatus === 'writing' && '生成中...'}
+                </span>
+              )}
+              {!store.isStreaming && store.costUsd > 0 && (
+                <span>${store.costUsd.toFixed(4)}</span>
+              )}
+            </div>
 
-        {/* Status bar */}
-        {(store.isStreaming || store.costUsd > 0) && (
-          <div className="mt-1.5 flex items-center gap-3 px-1 text-[11px] text-muted-foreground/50">
-            {store.isStreaming && (
-              <span className="flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-warm)] animate-pulse" />
-                {store.agentStatus === 'thinking' && '思考中...'}
-                {store.agentStatus === 'tool_call' && '调用工具...'}
-                {store.agentStatus === 'writing' && '生成中...'}
-              </span>
+            {store.isStreaming ? (
+              <button
+                onClick={stop}
+                className="flex h-7 w-7 items-center justify-center rounded-lg bg-destructive/10 text-destructive transition-colors hover:bg-destructive/20"
+                title="Stop"
+              >
+                <Square className="h-3 w-3" />
+              </button>
+            ) : (
+              <button
+                onClick={send}
+                disabled={!input.trim()}
+                className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--color-warm)]/15 text-[var(--color-warm)] transition-all hover:bg-[var(--color-warm)]/25 disabled:opacity-20"
+                title="Send (Enter)"
+              >
+                <Send className="h-3.5 w-3.5" />
+              </button>
             )}
-            {store.costUsd > 0 && <span>${store.costUsd.toFixed(4)}</span>}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

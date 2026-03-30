@@ -16,8 +16,8 @@ export const MarkdownViewer = memo(function MarkdownViewer({ content, compact = 
     <div
       className={
         compact
-          ? 'prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_h1]:text-base [&_h1]:my-2 [&_h2]:text-sm [&_h2]:my-1.5 [&_h3]:text-sm [&_h3]:my-1 [&_p]:my-1.5 [&_p]:leading-relaxed [&_ul]:my-1.5 [&_ol]:my-1.5 [&_li]:my-0.5 [&_pre]:my-2 [&_pre]:text-xs [&_blockquote]:my-2 [&_hr]:my-3'
-          : 'prose prose-sm dark:prose-invert max-w-none'
+          ? 'prose prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_h1]:text-base [&_h1]:my-2 [&_h2]:text-[0.9rem] [&_h2]:my-1.5 [&_h3]:text-[0.85rem] [&_h3]:my-1 [&_p]:my-1.5 [&_p]:leading-[1.7] [&_ul]:my-1.5 [&_ol]:my-1.5 [&_li]:my-0.5 [&_pre]:my-2.5 [&_pre]:text-xs [&_blockquote]:my-2 [&_hr]:my-3'
+          : 'prose prose-sm max-w-none'
       }
     >
       <ReactMarkdown
