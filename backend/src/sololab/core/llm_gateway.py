@@ -41,6 +41,7 @@ MODEL_PRICING: Dict[str, tuple[float, float]] = {
     "gemini-2.0-flash": (0.10, 0.40),
     "gemini-2.5-flash-preview-05-20": (0.15, 0.60),
     "gemini-2.5-pro-preview-05-06": (1.25, 10.0),
+    "gemini-3-flash-preview": (0.332, 3.0),
     # OpenRouter 模型（带 provider 前缀）
     "google/gemini-3-flash-preview": (0.332, 3.0),
     "google/gemini-2.5-flash-preview": (0.15, 0.60),
@@ -167,10 +168,19 @@ class LLMGateway:
                         for tc in message.tool_calls
                     ]
 
+                # 保留原始 assistant message 字典，供多轮工具调用时原样传回
+                # 部分模型（如 Gemini 3 Flash thinking mode）需要完整消息结构
+                raw_assistant_msg = {"role": "assistant", "content": message.content or None}
+                if message.tool_calls:
+                    raw_assistant_msg["tool_calls"] = [
+                        tc.model_dump(exclude_none=True) for tc in message.tool_calls
+                    ]
+
                 return {
                     "content": message.content or "",
                     "model": response.model,
                     "tool_calls": tool_calls,
+                    "raw_assistant_message": raw_assistant_msg,
                     "usage": {
                         "prompt_tokens": prompt_tok,
                         "completion_tokens": completion_tok,

@@ -86,19 +86,23 @@ class AgentRunner:
                 break
 
             # LLM 请求调用工具 —— 执行并注入结果
-            # 先把 assistant 的 tool_calls 消息加入上下文
-            messages.append({
-                "role": "assistant",
-                "content": result["content"] or None,
-                "tool_calls": [
-                    {
-                        "id": tc["id"],
-                        "type": "function",
-                        "function": tc["function"],
-                    }
-                    for tc in tool_calls
-                ],
-            })
+            # 使用原始 assistant message 保留完整结构（含 thinking 签名等）
+            raw_msg = result.get("raw_assistant_message")
+            if raw_msg:
+                messages.append(raw_msg)
+            else:
+                messages.append({
+                    "role": "assistant",
+                    "content": result["content"] or None,
+                    "tool_calls": [
+                        {
+                            "id": tc["id"],
+                            "type": "function",
+                            "function": tc["function"],
+                        }
+                        for tc in tool_calls
+                    ],
+                })
 
             for tc in tool_calls:
                 tool_result = await self._execute_tool_call(tc)

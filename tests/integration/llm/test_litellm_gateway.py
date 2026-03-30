@@ -14,7 +14,7 @@ class TestLiteLLMGateway:
         gw = LLMGateway(real_llm_config)
         result = await gw.generate(
             messages=[{"role": "user", "content": "说你好"}],
-            max_tokens=20,
+            max_tokens=100,
         )
         assert isinstance(result["content"], str)
         assert len(result["content"]) > 0

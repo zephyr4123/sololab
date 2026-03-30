@@ -108,11 +108,11 @@ class MemoryManager:
             scope_filter = ", ".join(f"'{s}'" for s in scopes_to_search)
             sql = text(f"""
                 SELECT id, content, scope, scope_id, metadata_json, created_at,
-                       1 - (embedding <=> :embedding::vector) AS similarity
+                       1 - (embedding <=> CAST(:embedding AS vector)) AS similarity
                 FROM memories
                 WHERE scope IN ({scope_filter})
                   AND embedding IS NOT NULL
-                ORDER BY embedding <=> :embedding::vector
+                ORDER BY embedding <=> CAST(:embedding AS vector)
                 LIMIT :top_k
             """)
 

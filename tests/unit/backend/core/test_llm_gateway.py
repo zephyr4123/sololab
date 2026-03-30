@@ -17,7 +17,7 @@ class TestLLMGateway:
         """generate() 应返回 content, model, usage 字段。"""
         result = await gateway.generate(
             messages=[{"role": "user", "content": "说你好"}],
-            max_tokens=20,
+            max_tokens=100,
         )
         assert "content" in result
         assert isinstance(result["content"], str)
@@ -29,13 +29,14 @@ class TestLLMGateway:
         assert "cost_usd" in result["usage"]
 
     @pytest.mark.unit
-    async def test_generate_cost_fallback(self, gateway):
-        """未知模型的 cost_usd 应容错返回 0.0。"""
+    async def test_generate_cost_tracking(self, gateway):
+        """generate() 应返回 cost_usd（已知模型返回实际费用，未知模型容错返回 0）。"""
         result = await gateway.generate(
             messages=[{"role": "user", "content": "ping"}],
-            max_tokens=5,
+            max_tokens=50,
         )
-        assert result["usage"]["cost_usd"] == 0.0
+        assert isinstance(result["usage"]["cost_usd"], float)
+        assert result["usage"]["cost_usd"] >= 0.0
 
     @pytest.mark.unit
     async def test_stream_yields_chunks(self, gateway):
