@@ -1,10 +1,24 @@
-Performs exact string replacements in files. 
+<description>
+Performs exact string replacements in files. This is the PREFERRED tool for modifying existing files.
+</description>
 
-Usage:
-- You must use your `Read` tool at least once in the conversation before editing. This tool will error if you attempt an edit without reading the file. 
-- When editing text from Read tool output, ensure you preserve the exact indentation (tabs/spaces) as it appears AFTER the line number prefix. The line number prefix format is: line number + colon + space (e.g., `1: `). Everything after that space is the actual file content to match. Never include any part of the line number prefix in the oldString or newString.
-- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
-- Only use emojis if the user explicitly requests it. Avoid adding emojis to files unless asked.
-- The edit will FAIL if `oldString` is not found in the file with an error "oldString not found in content".
-- The edit will FAIL if `oldString` is found multiple times in the file with an error "Found multiple matches for oldString. Provide more surrounding lines in oldString to identify the correct match." Either provide a larger string with more surrounding context to make it unique or use `replaceAll` to change every instance of `oldString`. 
-- Use `replaceAll` for replacing and renaming strings across the file. This parameter is useful if you want to rename a variable for instance.
+<critical-rules>
+<rule>You MUST use Read at least once before editing a file. The tool will error if you haven't read the file first.</rule>
+<rule>This tool is ALWAYS preferred over Write for modifying existing files. Use Edit, not Write, to change existing content.</rule>
+<rule>Only use emojis if the user explicitly requests it.</rule>
+</critical-rules>
+
+<usage>
+<item>Preserve exact indentation (tabs/spaces) as it appears AFTER the line number prefix in Read output. The prefix format is: line number + colon + space (e.g., "1: "). Never include the prefix in oldString or newString.</item>
+<item>The edit will FAIL if oldString is not found — error: "oldString not found in content".</item>
+<item>The edit will FAIL if oldString matches multiple locations — error: "Found multiple matches". Provide more surrounding context to make it unique, or use replaceAll.</item>
+<item>Use replaceAll for renaming variables or replacing all occurrences of a string across the file.</item>
+</usage>
+
+<when-edit-fails>
+If Edit fails due to oldString not matching:
+1. Re-read the file to get the current content
+2. Copy the exact text from the Read output (after the line number prefix)
+3. Retry with the corrected oldString
+Do NOT fall back to Write — always fix the Edit call instead.
+</when-edit-fails>
