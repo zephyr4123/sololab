@@ -2,21 +2,20 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { Lightbulb, Code, PenTool, BarChart3, BookOpen, Search, Lock } from 'lucide-react';
+import {
+  Lightbulb, Code, PenTool, BarChart3, BookOpen, Search, Lock,
+} from 'lucide-react';
 import { useAppStore } from '@/stores/app-store';
+import { getAllModules } from '@/lib/module-loader';
 
-const modules = [
-  { id: 'ideaspark', name: 'IdeaSpark', icon: Lightbulb, ready: true },
-  { id: 'codelab', name: 'CodeLab', icon: Code, ready: false },
-  { id: 'writer', name: 'WriterAI', icon: PenTool, ready: false },
-  { id: 'datalens', name: 'DataLens', icon: BarChart3, ready: false },
-  { id: 'litreview', name: 'LitReview', icon: BookOpen, ready: false },
-  { id: 'reviewer', name: 'Reviewer', icon: Search, ready: false },
-];
+const ICON_MAP: Record<string, typeof Lightbulb> = {
+  Lightbulb, Code, PenTool, BarChart3, BookOpen, Search,
+};
 
 export function Sidebar() {
   const currentModule = useAppStore((s) => s.currentModule);
   const setCurrentModule = useAppStore((s) => s.setCurrentModule);
+  const modules = getAllModules();
 
   return (
     <aside className="flex h-full w-16 flex-col border-r border-border/50 bg-card/40 backdrop-blur-md lg:w-60">
@@ -30,7 +29,7 @@ export function Sidebar() {
         </div>
       </Link>
 
-      {/* Divider with warm accent */}
+      {/* Divider */}
       <div className="mx-4 mb-3 h-px bg-gradient-to-r from-border via-border/60 to-transparent" />
 
       {/* Navigation label */}
@@ -40,15 +39,16 @@ export function Sidebar() {
 
       <nav className="flex flex-1 flex-col gap-0.5 px-2.5">
         {modules.map((mod) => {
-          const Icon = mod.icon;
+          const Icon = ICON_MAP[mod.icon] ?? Code;
           const isActive = currentModule === mod.id;
+          const isReady = mod.status === 'ready';
 
-          if (!mod.ready) {
+          if (!isReady) {
             return (
               <div
                 key={mod.id}
                 className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-muted-foreground/30 cursor-not-allowed"
-                title="Coming soon"
+                title={mod.description ?? 'Coming soon'}
               >
                 <Icon className="h-[18px] w-[18px] shrink-0" />
                 <span className="hidden flex-1 lg:block">{mod.name}</span>

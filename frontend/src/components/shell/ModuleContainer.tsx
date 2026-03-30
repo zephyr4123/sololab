@@ -1,46 +1,62 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { MessageSquare, Lightbulb, FileText } from 'lucide-react';
-import { ChatPanel } from '@/components/shared/ChatPanel';
-import { ConversationHistory } from '@/components/shared/ConversationHistory';
-import { DocumentManager } from '@/components/shared/DocumentManager';
-import { IdeaBoard } from '@/components/modules/ideaspark/IdeaBoard';
-import { IdeaReport } from '@/components/modules/ideaspark/IdeaReport';
+import { useState, useCallback, useMemo } from 'react';
+import {
+  MessageSquare, Lightbulb, FileText, FolderOpen, Terminal,
+  Code, Eye, Map, Wrench, Cpu, Search,
+} from 'lucide-react';
+import '@/lib/register-modules';
+import { getModulePlugin } from '@/lib/module-loader';
+
+/** Map icon names → Lucide components */
+const ICON_MAP: Record<string, typeof MessageSquare> = {
+  MessageSquare, Lightbulb, FileText, FolderOpen, Terminal,
+  Code, Eye, Map, Wrench, Cpu, Search,
+};
 
 interface ModuleContainerProps {
   moduleId: string;
 }
 
-type TabId = 'chat' | 'board' | 'report';
-
-const tabs: { id: TabId; label: string; icon: typeof MessageSquare }[] = [
-  { id: 'chat', label: '对话', icon: MessageSquare },
-  { id: 'board', label: '创意', icon: Lightbulb },
-  { id: 'report', label: '报告', icon: FileText },
-];
-
 export function ModuleContainer({ moduleId }: ModuleContainerProps) {
-  const [activeTab, setActiveTab] = useState<TabId>('chat');
-  const [visited, setVisited] = useState<Set<TabId>>(new Set<TabId>(['chat']));
+  const plugin = useMemo(() => getModulePlugin(moduleId), [moduleId]);
+  const tabs = plugin?.tabs ?? [];
+  const defaultTab = tabs[0]?.id ?? 'chat';
 
-  const switchTab = useCallback((id: TabId) => {
-    setActiveTab(id);
-    setVisited(prev => {
-      if (prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.add(id);
-      return next;
-    });
-  }, []);
+  const [activeTab, setActiveTab] = useState(defaultTab);
+  const [visited, setVisited] = useState<Set<string>>(new Set([defaultTab]));
+
+  const switchTab = useCallback(
+    (id: string) => {
+      setActiveTab(id);
+      setVisited((prev) => {
+        if (prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.add(id);
+        return next;
+      });
+    },
+    [],
+  );
+
+  if (!plugin) {
+    return (
+      <div className="flex h-full items-center justify-center text-muted-foreground">
+        <p>Module &ldquo;{moduleId}&rdquo; not found or not registered.</p>
+      </div>
+    );
+  }
+
+  const SidebarComponent = plugin.sidebar?.component;
 
   return (
     <div className="flex h-full min-h-0 gap-5">
+      {/* Main content area */}
       <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
-        {/* Tab bar — elegant underline style */}
+        {/* Tab bar */}
         <div className="mb-4 flex items-center gap-1 border-b border-border/50">
           {tabs.map((tab) => {
-            const Icon = tab.icon;
+            const Icon = ICON_MAP[tab.icon] ?? Code;
             const isActive = activeTab === tab.id;
             return (
               <button
@@ -54,7 +70,6 @@ export function ModuleContainer({ moduleId }: ModuleContainerProps) {
               >
                 <Icon className="h-3.5 w-3.5" />
                 {tab.label}
-                {/* Active indicator — warm underline */}
                 {isActive && (
                   <span className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-[var(--color-warm)]" />
                 )}
@@ -63,29 +78,32 @@ export function ModuleContainer({ moduleId }: ModuleContainerProps) {
           })}
         </div>
 
-        {/* Tab content */}
-        <div className={activeTab === 'chat' ? 'flex flex-1 flex-col min-h-0' : 'hidden'}>
-          <ChatPanel moduleId={moduleId} />
-        </div>
-        {visited.has('board') && (
-          <div className={activeTab === 'board' ? 'flex-1 min-h-0 overflow-y-auto p-2' : 'hidden'}>
-            <IdeaBoard />
-          </div>
-        )}
-        {visited.has('report') && (
-          <div className={activeTab === 'report' ? 'flex-1 min-h-0 overflow-y-auto p-2' : 'hidden'}>
-            <IdeaReport />
-          </div>
-        )}
+        {/* Tab content — lazy rendering via visited set */}
+        {tabs.map((tab) => {
+          const Component = tab.component;
+          const isActive = activeTab === tab.id;
+          const isFirstTab = tab.id === defaultTab;
+
+          // Always render first tab; other tabs render after first visit
+          if (!isFirstTab && !visited.has(tab.id)) return null;
+
+          return (
+            <div
+              key={tab.id}
+              className={isActive ? 'flex flex-1 flex-col min-h-0' : 'hidden'}
+            >
+              <Component moduleId={moduleId} />
+            </div>
+          );
+        })}
       </div>
 
       {/* Right sidebar */}
-      <aside className="hidden w-72 min-h-0 overflow-y-auto border-l border-border/40 pl-5 xl:block space-y-6">
-        <ConversationHistory moduleId={moduleId} />
-        <div className="border-t border-border/30 pt-5">
-          <DocumentManager />
-        </div>
-      </aside>
+      {SidebarComponent && (
+        <aside className="hidden w-72 min-h-0 overflow-y-auto border-l border-border/40 pl-5 xl:block space-y-6">
+          <SidebarComponent moduleId={moduleId} />
+        </aside>
+      )}
     </div>
   );
 }

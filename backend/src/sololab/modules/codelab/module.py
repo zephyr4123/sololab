@@ -64,17 +64,12 @@ class CodeLabModule(ModuleBase):
         opencode_password = getattr(settings, "opencode_server_password", None) or ""
         opencode_username = getattr(settings, "opencode_server_username", None) or "opencode"
 
-        # default_directory: OpenCode 需要 workspace context，默认使用项目根目录
-        import os
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        )))
         self._bridge = OpenCodeBridge(
             base_url=opencode_url,
             username=opencode_username,
             password=opencode_password if opencode_password else None,
             timeout=300,
-            default_directory=project_root,
+            default_directory=None,
         )
         logger.info("CodeLab 模块已加载，OpenCode Server: %s", opencode_url)
 
@@ -100,6 +95,10 @@ class CodeLabModule(ModuleBase):
             raise RuntimeError("Module not loaded")
 
         action = request.params.get("action", "chat")
+
+        if action == "browse":
+            yield await self._handle_browse(request)
+            return
 
         if action == "health":
             yield await self._handle_health()
@@ -161,12 +160,83 @@ class CodeLabModule(ModuleBase):
         await self._bridge.reply_permission(permission_id, allowed)
         return {"type": "permission_replied", "permission_id": permission_id, "allowed": allowed}
 
+    async def _handle_browse(self, request: ModuleRequest) -> dict:
+        """Browse host filesystem directories (mounted at /host-home)."""
+        import os
+
+        HOST_HOME = "/host-home"
+        raw_path = request.params.get("path", "~")
+
+        try:
+            real_home = os.environ.get("REAL_HOME", os.path.expanduser("~"))
+
+            # Map paths: ~ and host paths → container /host-home/...
+            if raw_path == "~" or raw_path.startswith("~/"):
+                target = os.path.join(HOST_HOME, raw_path[2:] if raw_path.startswith("~/") else "")
+            elif raw_path.startswith(real_home):
+                # Host path like /Users/xxx/coding → /host-home/coding
+                rel = raw_path[len(real_home):]
+                target = HOST_HOME + rel
+            elif os.path.exists(raw_path):
+                target = raw_path
+            else:
+                target = HOST_HOME
+
+            target = os.path.abspath(target)
+
+            def to_host_path(container_path: str) -> str:
+                """Map /host-home/... back to real host path for display."""
+                if container_path.startswith(HOST_HOME):
+                    rel = container_path[len(HOST_HOME):]
+                    home = os.environ.get("REAL_HOME", os.path.expanduser("~"))
+                    return home + rel if rel else home
+                return container_path
+
+            entries = []
+            for name in sorted(os.listdir(target)):
+                if name.startswith("."):
+                    continue
+                full = os.path.join(target, name)
+                if os.path.isdir(full):
+                    is_project = any(
+                        os.path.exists(os.path.join(full, m))
+                        for m in [".git", "package.json", "pyproject.toml", "Cargo.toml", "go.mod", "pom.xml", "Makefile"]
+                    )
+                    entries.append({
+                        "name": name,
+                        "path": to_host_path(full),
+                        "type": "directory",
+                        "isProject": is_project,
+                    })
+
+            parent = os.path.dirname(target) if target != "/" and target != HOST_HOME else None
+
+            return {
+                "type": "browse",
+                "path": to_host_path(target),
+                "parent": to_host_path(parent) if parent else None,
+                "entries": entries,
+            }
+        except (OSError, PermissionError) as e:
+            return {"type": "browse", "path": raw_path, "parent": None, "entries": [], "error": str(e)}
+
+    @staticmethod
+    def _to_container_path(host_path: str | None) -> str | None:
+        """Map host path to OpenCode container path (/host-home/...)."""
+        if not host_path:
+            return None
+        import os
+        real_home = os.environ.get("REAL_HOME", "")
+        if real_home and host_path.startswith(real_home):
+            return "/host-home" + host_path[len(real_home):]
+        return host_path
+
     async def _handle_chat(
         self, request: ModuleRequest, ctx: ModuleContext
     ) -> AsyncGenerator[dict, None]:
         """处理编码对话：创建/复用会话 → 发送消息 → 流式返回。"""
         session_id = request.params.get("session_id")
-        directory = request.params.get("directory")
+        directory = self._to_container_path(request.params.get("directory"))
 
         # 如果没有 session_id，创建新会话
         if not session_id:

@@ -138,12 +138,12 @@ class OpenCodeBridge:
         """
         http_session = await self._get_session()
 
-        # 发送 prompt（异步模式 — 不等待完成）
+        # 发送 prompt（异步模式 — OpenCode 需要 parts 数组格式）
         params = self._dir_params()
         async with http_session.post(
             f"{self._base_url}/session/{session_id}/prompt_async",
             params=params,
-            json={"content": content},
+            json={"parts": [{"type": "text", "text": content}]},
         ) as resp:
             resp.raise_for_status()
 

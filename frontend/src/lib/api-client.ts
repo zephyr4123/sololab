@@ -185,6 +185,21 @@ export const runHistoryApi = {
 };
 
 // === Memory API ===
+export const codelabApi = {
+  browse: async (path?: string) => {
+    const raw = await api.modules.run('codelab', '', { action: 'browse', path: path ?? '~' }) as any;
+    // Backend wraps in { module_id, results: [...] }
+    const result = raw?.results?.[0] ?? raw;
+    return result as {
+      type: string;
+      path: string;
+      parent: string | null;
+      entries: Array<{ name: string; path: string; type: string; isProject: boolean }>;
+      error?: string;
+    };
+  },
+};
+
 export const memoryApi = {
   search: async (query: string, scope = "project", topK = 5) => {
     const params = new URLSearchParams({

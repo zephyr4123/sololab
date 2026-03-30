@@ -2,8 +2,8 @@ FROM oven/bun:1.3-alpine
 
 WORKDIR /app
 
-# 安装 ripgrep（OpenCode 文件搜索依赖）和 git
-RUN apk add --no-cache ripgrep git
+# 安装 ripgrep、git 和 tree-sitter 编译依赖（python3 + build tools）
+RUN apk add --no-cache ripgrep git python3 make g++
 
 # 复制 OpenCode 引擎代码
 COPY opencode/package.json opencode/bun.lock opencode/bunfig.toml ./
