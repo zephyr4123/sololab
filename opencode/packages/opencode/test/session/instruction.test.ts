@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import path from "path"
-import { InstructionPrompt } from "../../src/session/instruction"
+import fs from "fs/promises"
+import { InstructionPrompt, clearInstructionCache, invalidateInstructionCache } from "../../src/session/instruction"
 import { Instance } from "../../src/project/instance"
 import { Global } from "../../src/global"
 import { tmpdir } from "../fixture/fixture"
@@ -166,5 +167,101 @@ describe("InstructionPrompt.systemPaths OPENCODE_CONFIG_DIR", () => {
     } finally {
       ;(Global.Path as { config: string }).config = originalGlobalConfig
     }
+  })
+})
+
+describe("InstructionPrompt file cache", () => {
+  afterEach(() => {
+    clearInstructionCache()
+  })
+
+  test("caches file content on first read, returns cached on second", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "AGENTS.md"), "# Cached Instructions")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const result1 = await InstructionPrompt.system()
+        expect(result1.some((r) => r.includes("Cached Instructions"))).toBe(true)
+
+        // Second call should use cache (same content returned)
+        const result2 = await InstructionPrompt.system()
+        expect(result2.some((r) => r.includes("Cached Instructions"))).toBe(true)
+        expect(result1.length).toBe(result2.length)
+      },
+    })
+  })
+
+  test("invalidates cache when file is modified", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "AGENTS.md"), "# Version 1")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const result1 = await InstructionPrompt.system()
+        expect(result1.some((r) => r.includes("Version 1"))).toBe(true)
+
+        // Modify the file
+        const filepath = path.join(tmp.path, "AGENTS.md")
+        await fs.writeFile(filepath, "# Version 2")
+
+        // Invalidate cache (simulating FileWatcher event)
+        invalidateInstructionCache(filepath)
+
+        const result2 = await InstructionPrompt.system()
+        expect(result2.some((r) => r.includes("Version 2"))).toBe(true)
+      },
+    })
+  })
+
+  test("clearInstructionCache removes all entries", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "AGENTS.md"), "# Clear test")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        // Populate cache
+        await InstructionPrompt.system()
+
+        // Clear all caches
+        clearInstructionCache()
+
+        // Should re-read from disk (no crash, returns valid result)
+        const result = await InstructionPrompt.system()
+        expect(result.some((r) => r.includes("Clear test"))).toBe(true)
+      },
+    })
+  })
+
+  test("detects mtime change even without explicit invalidation", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "AGENTS.md"), "# Before")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await InstructionPrompt.system()
+
+        // Modify file directly (changes mtime)
+        const filepath = path.join(tmp.path, "AGENTS.md")
+        // Wait a bit to ensure mtime differs
+        await Bun.sleep(50)
+        await fs.writeFile(filepath, "# After")
+
+        const result = await InstructionPrompt.system()
+        expect(result.some((r) => r.includes("After"))).toBe(true)
+      },
+    })
   })
 })

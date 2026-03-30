@@ -42,8 +42,16 @@ export const WriteTool = Tool.define("write", {
       },
     })
 
+    // Re-assert after permission prompt to close TOCTOU window
+    if (exists) await FileTime.assert(ctx.sessionID, filepath)
+
     await Filesystem.write(filepath, params.content)
-    await Format.file(filepath)
+    // Format with rollback on failure
+    try {
+      await Format.file(filepath)
+    } catch {
+      await Filesystem.write(filepath, params.content)
+    }
     Bus.publish(File.Event.Edited, { file: filepath })
     await Bus.publish(FileWatcher.Event.Updated, {
       file: filepath,

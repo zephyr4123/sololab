@@ -1,10 +1,11 @@
-import { chmod, mkdir, readFile, writeFile } from "fs/promises"
+import { chmod, mkdir, readFile, writeFile, rename, open as fsOpen, unlink } from "fs/promises"
 import { createWriteStream, existsSync, statSync } from "fs"
 import { lookup } from "mime-types"
 import { realpathSync } from "fs"
 import { dirname, join, relative, resolve as pathResolve } from "path"
 import { Readable } from "stream"
 import { pipeline } from "stream/promises"
+import { randomBytes } from "crypto"
 import { Glob } from "./glob"
 
 export namespace Filesystem {
@@ -51,25 +52,56 @@ export namespace Filesystem {
     return typeof e === "object" && e !== null && "code" in e && (e as { code: string }).code === "ENOENT"
   }
 
-  export async function write(p: string, content: string | Buffer | Uint8Array, mode?: number): Promise<void> {
+  /**
+   * Atomic write: write to a temp file in the same directory, fsync, then rename.
+   * This ensures the target file is never left in a partially-written state.
+   * Falls back to direct write if rename fails (e.g. cross-device).
+   */
+  export async function atomicWrite(p: string, content: string | Buffer | Uint8Array, mode?: number): Promise<void> {
+    const dir = dirname(p)
     try {
-      if (mode) {
-        await writeFile(p, content, { mode })
-      } else {
-        await writeFile(p, content)
-      }
+      await mkdir(dir, { recursive: true })
     } catch (e) {
-      if (isEnoent(e)) {
-        await mkdir(dirname(p), { recursive: true })
-        if (mode) {
-          await writeFile(p, content, { mode })
-        } else {
-          await writeFile(p, content)
-        }
-        return
+      if (!isEnoent(e) && !(typeof e === "object" && e !== null && "code" in e && (e as any).code === "EEXIST")) {
+        throw e
+      }
+    }
+
+    // Check if target file exists and is not writable
+    // (rename can overwrite read-only files on POSIX if dir is writable)
+    const existing = stat(p)
+    if (existing && !(existing.mode & 0o200)) {
+      // Attempt direct write — this will throw EACCES as expected
+      await writeFile(p, content, mode ? { mode } : undefined)
+      return
+    }
+
+    const tmpPath = join(dir, `.tmp-${randomBytes(8).toString("hex")}`)
+    try {
+      // Write to temp file
+      const fd = await fsOpen(tmpPath, "w", mode)
+      try {
+        await fd.writeFile(content)
+        await fd.sync() // fsync for durability
+      } finally {
+        await fd.close()
+      }
+
+      // Atomic rename (POSIX guarantees atomicity on same filesystem)
+      await rename(tmpPath, p)
+    } catch (e) {
+      // Clean up temp file on error
+      try {
+        await unlink(tmpPath)
+      } catch {
+        // ignore cleanup errors
       }
       throw e
     }
+  }
+
+  export async function write(p: string, content: string | Buffer | Uint8Array, mode?: number): Promise<void> {
+    return atomicWrite(p, content, mode)
   }
 
   export async function writeJson(p: string, data: unknown, mode?: number): Promise<void> {

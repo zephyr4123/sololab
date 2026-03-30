@@ -36,8 +36,18 @@ import { makeRuntime } from "@/effect/run-service"
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
 
+  type InitResult = Awaited<ReturnType<Tool.Info["init"]>> & { id: string }
+
   type State = {
     custom: Tool.Info[]
+    // Cache init results keyed by "toolID::agentName"
+    initCache: Map<string, { result: InitResult; timestamp: number }>
+  }
+
+  const INIT_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+  function initCacheKey(toolID: string, agentName?: string): string {
+    return `${toolID}::${agentName ?? ""}`
   }
 
   export interface Interface {
@@ -107,7 +117,7 @@ export namespace ToolRegistry {
             }
           }
 
-          return { custom }
+          return { custom, initCache: new Map() }
         }),
       )
 
@@ -172,9 +182,20 @@ export namespace ToolRegistry {
 
           return true
         })
+
+        const now = Date.now()
+
         return yield* Effect.forEach(
           filtered,
           Effect.fnUntraced(function* (tool) {
+            const cacheKey = initCacheKey(tool.id, agent?.name)
+            const cached = state.initCache.get(cacheKey)
+
+            // Return cached init result if fresh
+            if (cached && now - cached.timestamp < INIT_CACHE_TTL) {
+              return cached.result
+            }
+
             using _ = log.time(tool.id)
             const next = yield* Effect.promise(() => tool.init({ agent }))
             const output = {
@@ -182,12 +203,17 @@ export namespace ToolRegistry {
               parameters: next.parameters,
             }
             yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)
-            return {
+            const result = {
               id: tool.id,
               ...next,
               description: output.description,
               parameters: output.parameters,
-            } as Awaited<ReturnType<Tool.Info["init"]>> & { id: string }
+            } as InitResult
+
+            // Cache the init result
+            state.initCache.set(cacheKey, { result, timestamp: now })
+
+            return result
           }),
           { concurrency: "unbounded" },
         )

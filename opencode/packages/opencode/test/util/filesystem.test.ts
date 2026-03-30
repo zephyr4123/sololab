@@ -219,6 +219,95 @@ describe("filesystem", () => {
     })
   })
 
+  describe("atomicWrite()", () => {
+    test("writes file content correctly", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "atomic.txt")
+      await Filesystem.atomicWrite(filepath, "hello world")
+      expect(await fs.readFile(filepath, "utf-8")).toBe("hello world")
+    })
+
+    test("creates parent directories if missing", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "deep", "nested", "atomic.txt")
+      await Filesystem.atomicWrite(filepath, "nested")
+      expect(await fs.readFile(filepath, "utf-8")).toBe("nested")
+    })
+
+    test("overwrites existing file atomically", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "overwrite.txt")
+      await Filesystem.atomicWrite(filepath, "first")
+      await Filesystem.atomicWrite(filepath, "second")
+      expect(await fs.readFile(filepath, "utf-8")).toBe("second")
+    })
+
+    test("preserves file mode when specified", async () => {
+      if (process.platform === "win32") return
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "mode.txt")
+      await Filesystem.atomicWrite(filepath, "exec", 0o755)
+      const stat = await fs.stat(filepath)
+      expect(stat.mode & 0o100).toBe(0o100)
+    })
+
+    test("writes Buffer content", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "buf.bin")
+      await Filesystem.atomicWrite(filepath, Buffer.from([0x48, 0x65]))
+      expect((await fs.readFile(filepath)).toString()).toBe("He")
+    })
+
+    test("writes Uint8Array content", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "u8.bin")
+      await Filesystem.atomicWrite(filepath, new Uint8Array([72, 105]))
+      expect((await fs.readFile(filepath)).toString()).toBe("Hi")
+    })
+
+    test("concurrent writes produce valid content", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "concurrent.txt")
+      const promises = Array.from({ length: 10 }, (_, i) =>
+        Filesystem.atomicWrite(filepath, `v${i}`),
+      )
+      await Promise.all(promises)
+      const content = await fs.readFile(filepath, "utf-8")
+      expect(content).toMatch(/^v\d$/)
+    })
+
+    test("handles empty content", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "empty.txt")
+      await Filesystem.atomicWrite(filepath, "")
+      expect(await fs.readFile(filepath, "utf-8")).toBe("")
+    })
+
+    test("handles large files (1MB)", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "large.txt")
+      const content = "x".repeat(1_000_000)
+      await Filesystem.atomicWrite(filepath, content)
+      expect((await fs.readFile(filepath, "utf-8")).length).toBe(1_000_000)
+    })
+
+    test("cleans up temp file on write error", async () => {
+      if (process.platform === "win32") return
+      await using tmp = await tmpdir()
+      const noPermDir = path.join(tmp.path, "noperm")
+      await fs.mkdir(noPermDir, { mode: 0o444 })
+      const filepath = path.join(noPermDir, "inner", "file.txt")
+      try {
+        await Filesystem.atomicWrite(filepath, "content")
+      } catch {
+        // expected
+      }
+      const files = await fs.readdir(noPermDir).catch(() => [])
+      expect(files.filter((f: string) => f.startsWith(".tmp-")).length).toBe(0)
+      await fs.chmod(noPermDir, 0o755)
+    })
+  })
+
   describe("writeJson()", () => {
     test("writes JSON data", async () => {
       await using tmp = await tmpdir()

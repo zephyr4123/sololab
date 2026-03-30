@@ -107,8 +107,17 @@ export const EditTool = Tool.define("edit", {
         },
       })
 
+      // Re-assert after permission prompt to close TOCTOU window
+      await FileTime.assert(ctx.sessionID, filePath)
+
       await Filesystem.write(filePath, contentNew)
-      await Format.file(filePath)
+      // Format with rollback on failure
+      try {
+        await Format.file(filePath)
+      } catch {
+        // Rollback to pre-format content on formatter failure
+        await Filesystem.write(filePath, contentNew)
+      }
       Bus.publish(File.Event.Edited, { file: filePath })
       await Bus.publish(FileWatcher.Event.Updated, {
         file: filePath,
