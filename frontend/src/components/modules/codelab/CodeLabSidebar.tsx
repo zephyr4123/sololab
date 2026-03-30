@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import {
-  FolderOpen, Plus, Trash2, Clock, MessageSquare,
-  FileEdit, FileText, FilePlus, Trash2 as FileTrash,
-  DollarSign, ArrowLeftRight, ChevronRight,
+  FolderOpen, Plus, Trash2, MessageSquare,
+  FileEdit, FileText, FilePlus,
+  DollarSign, ArrowLeftRight,
 } from 'lucide-react';
 import { useCodeLabStore } from '@/stores/module-stores/codelab-store';
 import { useSessionStore } from '@/stores/session-store';
@@ -22,7 +22,7 @@ function timeAgo(dateStr: string | null): string {
 }
 
 const FILE_STATUS_ICON: Record<string, typeof FileText> = {
-  read: FileText, modified: FileEdit, created: FilePlus, deleted: FileTrash,
+  read: FileText, modified: FileEdit, created: FilePlus, deleted: Trash2,
 };
 const FILE_STATUS_COLOR: Record<string, string> = {
   read: 'text-muted-foreground/50', modified: 'text-[var(--color-warm)]', created: 'text-emerald-500', deleted: 'text-destructive',
@@ -39,9 +39,11 @@ export function CodeLabSidebar({ moduleId }: { moduleId: string }) {
   const setSessionId = useCodeLabStore((s) => s.setSessionId);
   const setMessages = useCodeLabStore((s) => s.setMessages);
 
+  const removeRecentDirectory = useCodeLabStore((s) => s.removeRecentDirectory);
+
   const {
     sessions, currentSessionId, isLoadingSessions, isLoadingHistory,
-    fetchSessions, loadHistory, resetConversation,
+    fetchSessions, loadHistory, resetConversation, deleteSession,
   } = useSessionStore();
 
   const [showProjectSwitcher, setShowProjectSwitcher] = useState(false);
@@ -88,19 +90,27 @@ export function CodeLabSidebar({ moduleId }: { moduleId: string }) {
                   .filter((d) => d !== workingDirectory)
                   .slice(0, 5)
                   .map((dir) => (
-                    <button
-                      key={dir}
-                      onClick={() => {
-                        setWorkingDirectory(dir);
-                        setShowProjectSwitcher(false);
-                      }}
-                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-foreground/[0.04]"
-                    >
-                      <FolderOpen className="h-3 w-3 text-muted-foreground/40 shrink-0" />
-                      <span className="truncate font-mono text-[11px] text-muted-foreground">
-                        {dir.split('/').filter(Boolean).pop()}
-                      </span>
-                    </button>
+                    <div key={dir} className="group/dir flex items-center rounded-md hover:bg-foreground/[0.04] transition-colors">
+                      <button
+                        onClick={() => {
+                          setWorkingDirectory(dir);
+                          setShowProjectSwitcher(false);
+                        }}
+                        className="flex flex-1 items-center gap-2 px-2 py-1.5 text-left min-w-0"
+                      >
+                        <FolderOpen className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+                        <span className="truncate font-mono text-[11px] text-muted-foreground">
+                          {dir.split('/').filter(Boolean).pop()}
+                        </span>
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); removeRecentDirectory(dir); }}
+                        className="p-1 mr-1 rounded opacity-0 group-hover/dir:opacity-100 text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10 transition-all"
+                        title="Remove project"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
                   ))}
                 <button
                   onClick={() => { leaveDirectory(); setShowProjectSwitcher(false); }}
@@ -154,34 +164,55 @@ export function CodeLabSidebar({ moduleId }: { moduleId: string }) {
           {sessions.map((session) => {
             const isActive = session.session_id === currentSessionId;
             return (
-              <button
+              <div
                 key={session.session_id}
-                onClick={() => {
-                  if (!isLoadingHistory && session.session_id !== currentSessionId) {
-                    loadHistory(session.session_id);
-                    setSessionId(session.session_id);
-                  }
-                }}
-                className={`group flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition-all duration-150 ${
+                className={`group/sess flex w-full items-start gap-2 rounded-lg px-2.5 py-2 transition-all duration-150 ${
                   isActive
                     ? 'bg-foreground/[0.06]'
                     : 'hover:bg-foreground/[0.03]'
                 }`}
               >
-                {/* Active indicator dot */}
-                <span className={`mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 transition-colors ${
-                  isActive ? 'bg-[var(--color-warm)]' : 'bg-transparent'
-                }`} />
+                <button
+                  onClick={() => {
+                    if (!isLoadingHistory && session.session_id !== currentSessionId) {
+                      loadHistory(session.session_id);
+                      setSessionId(session.session_id);
+                    }
+                  }}
+                  className="flex flex-1 items-start gap-2 text-left min-w-0"
+                >
+                  {/* Active indicator dot */}
+                  <span className={`mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 transition-colors ${
+                    isActive ? 'bg-[var(--color-warm)]' : 'bg-transparent'
+                  }`} />
 
-                <div className="flex-1 min-w-0">
-                  <p className="text-[12px] font-medium leading-snug line-clamp-2">
-                    {session.title || 'Untitled'}
-                  </p>
-                  <span className="text-[10px] text-muted-foreground/35">
-                    {timeAgo(session.updated_at || session.created_at)}
-                  </span>
-                </div>
-              </button>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[12px] font-medium leading-snug line-clamp-2">
+                      {session.title || 'Untitled'}
+                    </p>
+                    <span className="text-[10px] text-muted-foreground/35">
+                      {timeAgo(session.updated_at || session.created_at)}
+                    </span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteSession(session.session_id);
+                    if (isActive) {
+                      useCodeLabStore.getState().setMessages([]);
+                      useCodeLabStore.getState().setSessionId(null);
+                      useCodeLabStore.getState().setFiles([]);
+                      useCodeLabStore.getState().clearToolCalls();
+                    }
+                  }}
+                  className="mt-1 p-1 rounded opacity-0 group-hover/sess:opacity-100 text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10 transition-all shrink-0"
+                  title="Delete session"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </div>
             );
           })}
         </div>

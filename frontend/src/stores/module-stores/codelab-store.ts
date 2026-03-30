@@ -65,6 +65,7 @@ interface CodeLabState {
   recentDirectories: string[];
   setWorkingDirectory: (dir: string) => void;
   leaveDirectory: () => void;
+  removeRecentDirectory: (dir: string) => void;
 
   // Actions
   setSessionId: (id: string | null) => void;
@@ -113,6 +114,16 @@ export const useCodeLabStore = create<CodeLabState>((set, get) => ({
   },
 
   leaveDirectory: () => set({ workingDirectory: null, messages: [], files: [], sessionId: null, activeToolCalls: [], costUsd: 0 }),
+
+  removeRecentDirectory: (dir) => {
+    const recent = get().recentDirectories.filter((d) => d !== dir);
+    try { localStorage.setItem('codelab_recent_dirs', JSON.stringify(recent)); } catch {}
+    const update: Partial<CodeLabState> = { recentDirectories: recent };
+    if (get().workingDirectory === dir) {
+      Object.assign(update, { workingDirectory: null, messages: [], files: [], sessionId: null, activeToolCalls: [], costUsd: 0 });
+    }
+    set(update as any);
+  },
 
   setSessionId: (id) => set({ sessionId: id }),
   setSessions: (s) => set({ sessions: s }),

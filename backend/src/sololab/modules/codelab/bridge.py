@@ -131,15 +131,17 @@ class OpenCodeBridge:
         self,
         session_id: str,
         content: str,
+        directory: Optional[str] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """发送消息并流式接收 Agent 响应。
 
         使用 prompt_async 端点发送消息，然后通过 event 端点监听响应事件。
+        directory 参数必须传递，否则 OpenCode 会回退到 process.cwd()（容器内的引擎目录）。
         """
         http_session = await self._get_session()
 
         # 发送 prompt（异步模式 — OpenCode 需要 parts 数组格式）
-        params = self._dir_params()
+        params = self._dir_params(directory)
         async with http_session.post(
             f"{self._base_url}/session/{session_id}/prompt_async",
             params=params,
@@ -148,16 +150,17 @@ class OpenCodeBridge:
             resp.raise_for_status()
 
         # 监听 SSE 事件流
-        async for event in self._stream_events(session_id):
+        async for event in self._stream_events(session_id, directory=directory):
             yield event
 
     async def _stream_events(
         self,
         session_id: str,
+        directory: Optional[str] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """监听会话的 SSE 事件流。"""
         http_session = await self._get_session()
-        params = self._dir_params()
+        params = self._dir_params(directory)
         url = f"{self._base_url}/event"
         if params:
             qs = "&".join(f"{k}={v}" for k, v in params.items())
@@ -166,8 +169,13 @@ class OpenCodeBridge:
             async with http_session.get(url, timeout=aiohttp.ClientTimeout(total=0)) as resp:
                 resp.raise_for_status()
                 buffer = ""
-                async for chunk in resp.content:
-                    buffer += chunk.decode("utf-8", errors="replace")
+                # 使用 readany() 而非 async for（后者调用 readline()，单行限制 128KB）。
+                # OpenCode 的工具输出（如写入整个文件）可超 128KB，readany() 无此限制。
+                while not resp.content.at_eof():
+                    raw = await resp.content.readany()
+                    if not raw:
+                        continue
+                    buffer += raw.decode("utf-8", errors="replace")
                     while "\n\n" in buffer:
                         event_str, buffer = buffer.split("\n\n", 1)
                         event = self._parse_sse_event(event_str)
@@ -176,10 +184,20 @@ class OpenCodeBridge:
 
                         yield event
 
-                        # 检测会话是否结束
+                        # 检测会话是否结束（OpenCode 用 session.status(idle) 表示 prompt 循环完成）
                         event_type = event.get("type", "")
-                        if event_type in ("session.complete", "session.error"):
-                            return
+                        evt_props = event.get("properties", {})
+
+                        if event_type == "session.status":
+                            evt_sid = evt_props.get("sessionID", "")
+                            evt_status = evt_props.get("status", {})
+                            if evt_sid == session_id and evt_status.get("type") == "idle":
+                                return
+
+                        if event_type == "session.error":
+                            evt_sid = evt_props.get("sessionID", "")
+                            if not evt_sid or evt_sid == session_id:
+                                return
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             logger.error("SSE 事件流断开: %s", e)
             yield {"type": "error", "error": str(e)}

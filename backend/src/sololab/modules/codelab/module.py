@@ -24,6 +24,9 @@ class CodeLabModule(ModuleBase):
 
     def __init__(self) -> None:
         self._bridge: OpenCodeBridge | None = None
+        # SoloLab session UUID → OpenCode session ID 映射
+        # 前端只知道 SoloLab 的 UUID，但 bridge 调用需要 OpenCode 的 ses_xxx ID
+        self._oc_sessions: dict[str, str] = {}
 
     def manifest(self) -> ModuleManifest:
         return ModuleManifest(
@@ -135,9 +138,15 @@ class CodeLabModule(ModuleBase):
         sessions = await self._bridge.list_sessions(directory=directory)
         return {"type": "sessions", "sessions": sessions}
 
+    def _resolve_oc_sid(self, sololab_sid: str | None) -> str | None:
+        """将 SoloLab session UUID 解析为 OpenCode session ID。"""
+        if not sololab_sid:
+            return None
+        return self._oc_sessions.get(sololab_sid, sololab_sid)
+
     async def _handle_abort(self, request: ModuleRequest) -> dict:
         """中止会话。"""
-        session_id = request.params.get("session_id")
+        session_id = self._resolve_oc_sid(request.params.get("session_id"))
         if not session_id:
             return {"type": "error", "error": "session_id is required for abort"}
         await self._bridge.abort_session(session_id)
@@ -145,7 +154,7 @@ class CodeLabModule(ModuleBase):
 
     async def _handle_diff(self, request: ModuleRequest) -> dict:
         """获取会话 diff。"""
-        session_id = request.params.get("session_id")
+        session_id = self._resolve_oc_sid(request.params.get("session_id"))
         if not session_id:
             return {"type": "error", "error": "session_id is required for diff"}
         diff = await self._bridge.get_session_diff(session_id)
@@ -234,44 +243,76 @@ class CodeLabModule(ModuleBase):
     async def _handle_chat(
         self, request: ModuleRequest, ctx: ModuleContext
     ) -> AsyncGenerator[dict, None]:
-        """处理编码对话：创建/复用会话 → 发送消息 → 流式返回。"""
-        session_id = request.params.get("session_id")
+        """处理编码对话：创建/复用会话 → 发送消息 → 流式返回。
+
+        注意两套 session ID 体系：
+        - SoloLab session ID (UUID): 前端通过 params["session_id"] 传入
+        - OpenCode session ID (ses_xxx): bridge 调用 OpenCode Server 时使用
+        通过 self._oc_sessions 维护映射关系。
+        """
+        sololab_sid = request.params.get("session_id")
         directory = self._to_container_path(request.params.get("directory"))
 
-        # 如果没有 session_id，创建新会话
-        if not session_id:
+        # 查找或创建 OpenCode 会话
+        oc_sid = self._oc_sessions.get(sololab_sid) if sololab_sid else None
+
+        if not oc_sid:
             session_data = await self._bridge.create_session(directory=directory)
-            session_id = session_data.get("id") or session_data.get("sessionID")
+            oc_sid = session_data.get("id") or session_data.get("sessionID")
+            # 建立映射（SoloLab UUID → OpenCode ses_xxx）
+            if sololab_sid:
+                self._oc_sessions[sololab_sid] = oc_sid
             yield {
                 "type": "session_created",
-                "session_id": session_id,
+                "session_id": oc_sid,
                 "session": session_data,
             }
 
-        yield {"type": "status", "phase": "sending", "session_id": session_id}
+        yield {"type": "status", "phase": "sending", "session_id": oc_sid}
 
         # 流式接收 Agent 响应，翻译 OpenCode 原生事件为前端格式
         done_sent = False
-        async for event in self._bridge.send_message(session_id, request.input):
+        total_cost = 0.0
+        async for event in self._bridge.send_message(oc_sid, request.input, directory=directory):
             if ctx.cancel_event and ctx.cancel_event.is_set():
-                await self._bridge.abort_session(session_id)
-                yield {"type": "cancelled", "session_id": session_id}
+                await self._bridge.abort_session(oc_sid)
+                yield {"type": "cancelled", "session_id": oc_sid}
                 return
+
+            # 从 message.updated 累积 cost（每条 assistant 消息完成时有 cost）
+            if event.get("type") == "message.updated":
+                info = event.get("properties", {}).get("info", {})
+                if info.get("finish") and info.get("role") == "assistant":
+                    total_cost += info.get("cost", 0)
 
             translated = self._translate_event(event)
             if translated:
-                yield translated
-                # Stop after first done event
                 if translated.get("type") == "done":
+                    # 只接受来自当前会话的 done 信号
+                    evt_sid = translated.get("session_id")
+                    if evt_sid and evt_sid != oc_sid:
+                        continue
+                    translated["cost_usd"] = total_cost
+                    translated["session_id"] = oc_sid
+                    yield translated
                     done_sent = True
                     return
 
+                yield translated
+
         if not done_sent:
-            yield {"type": "done", "session_id": session_id}
+            yield {"type": "done", "session_id": oc_sid, "cost_usd": total_cost}
 
     @staticmethod
     def _translate_event(event: dict) -> dict | None:
-        """Translate OpenCode SSE events to SoloLab frontend format."""
+        """Translate OpenCode SSE events to SoloLab frontend format.
+
+        关键：OpenCode 的 agent 循环中，一条用户消息可能产生多条 assistant 消息：
+        - 消息1: LLM 决定调用工具 → finish="tool-calls" → 循环继续
+        - 消息2: LLM 基于工具结果生成回答 → finish="stop" → 循环结束
+        因此 message.updated(finish) 不能直接映射为 done。
+        真正的完成信号是 session.status(idle)。
+        """
         etype = event.get("type", "")
         props = event.get("properties", {})
 
@@ -282,23 +323,19 @@ class CodeLabModule(ModuleBase):
                 return {"type": "text", "content": delta}
 
         # Agent / model info from message updates
+        # 注意：finish 字段不作为 done 信号，cost 在 _handle_chat 中累积
         if etype == "message.updated":
             info = props.get("info", {})
+            if info.get("role") != "assistant":
+                return None
             agent = info.get("agent", "")
             finish = info.get("finish")
-            cost = info.get("cost", 0)
-            tokens = info.get("tokens", {})
 
-            if finish:
-                # Message completed
-                return {
-                    "type": "done",
-                    "session_id": info.get("sessionID"),
-                    "cost_usd": cost,
-                    "tokens": tokens,
-                }
-            elif agent:
+            if not finish and agent:
+                # 新的 assistant 消息开始（agent 开始思考）
                 return {"type": "agent", "agent": agent, "action": "thinking"}
+            # finish 存在时不发事件（cost/tokens 在 _handle_chat 中追踪）
+            return None
 
         # Tool calls
         if etype == "message.part.updated":
@@ -329,6 +366,12 @@ class CodeLabModule(ModuleBase):
                 cost = part.get("cost", 0)
                 return {"type": "status", "phase": "step_complete", "cost_usd": cost}
 
+        # Session status — idle 表示 prompt 循环完成
+        if etype == "session.status":
+            status = props.get("status", {})
+            if status.get("type") == "idle":
+                return {"type": "done", "session_id": props.get("sessionID")}
+
         # Session title update
         if etype == "session.updated":
             info = props.get("info", {})
@@ -340,5 +383,13 @@ class CodeLabModule(ModuleBase):
         if etype == "error":
             return {"type": "error", "message": event.get("error", "Unknown error")}
 
-        # Pass through unknown events as status
+        if etype == "session.error":
+            error_obj = props.get("error", {})
+            if isinstance(error_obj, dict):
+                msg = (error_obj.get("data", {}).get("message", "")
+                       or error_obj.get("name", "Unknown error"))
+            else:
+                msg = str(error_obj)
+            return {"type": "error", "message": msg or "Unknown error"}
+
         return None
