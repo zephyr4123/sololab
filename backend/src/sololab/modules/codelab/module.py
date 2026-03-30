@@ -250,14 +250,95 @@ class CodeLabModule(ModuleBase):
 
         yield {"type": "status", "phase": "sending", "session_id": session_id}
 
-        # 流式接收 Agent 响应
+        # 流式接收 Agent 响应，翻译 OpenCode 原生事件为前端格式
+        done_sent = False
         async for event in self._bridge.send_message(session_id, request.input):
-            # 检查取消信号
             if ctx.cancel_event and ctx.cancel_event.is_set():
                 await self._bridge.abort_session(session_id)
                 yield {"type": "cancelled", "session_id": session_id}
                 return
 
-            yield event
+            translated = self._translate_event(event)
+            if translated:
+                yield translated
+                # Stop after first done event
+                if translated.get("type") == "done":
+                    done_sent = True
+                    return
 
-        yield {"type": "done", "session_id": session_id}
+        if not done_sent:
+            yield {"type": "done", "session_id": session_id}
+
+    @staticmethod
+    def _translate_event(event: dict) -> dict | None:
+        """Translate OpenCode SSE events to SoloLab frontend format."""
+        etype = event.get("type", "")
+        props = event.get("properties", {})
+
+        # Text streaming
+        if etype == "message.part.delta":
+            delta = props.get("delta", "")
+            if delta:
+                return {"type": "text", "content": delta}
+
+        # Agent / model info from message updates
+        if etype == "message.updated":
+            info = props.get("info", {})
+            agent = info.get("agent", "")
+            finish = info.get("finish")
+            cost = info.get("cost", 0)
+            tokens = info.get("tokens", {})
+
+            if finish:
+                # Message completed
+                return {
+                    "type": "done",
+                    "session_id": info.get("sessionID"),
+                    "cost_usd": cost,
+                    "tokens": tokens,
+                }
+            elif agent:
+                return {"type": "agent", "agent": agent, "action": "thinking"}
+
+        # Tool calls
+        if etype == "message.part.updated":
+            part = props.get("part", {})
+            part_type = part.get("type", "")
+
+            if part_type == "tool":
+                tool_name = part.get("tool", "unknown")
+                state = part.get("state", {})
+                status = state.get("status", "running")
+                tool_input = state.get("input", {})
+                title = state.get("title", tool_name)
+                output = state.get("output", "")
+
+                return {
+                    "type": "tool",
+                    "tool": tool_name,
+                    "status": status,
+                    "title": title,
+                    "input": tool_input,
+                    "output": output if status == "completed" else "",
+                }
+
+            if part_type == "step-start":
+                return {"type": "agent", "agent": "build", "action": "thinking"}
+
+            if part_type == "step-finish":
+                cost = part.get("cost", 0)
+                return {"type": "status", "phase": "step_complete", "cost_usd": cost}
+
+        # Session title update
+        if etype == "session.updated":
+            info = props.get("info", {})
+            title = info.get("title", "")
+            if title:
+                return {"type": "status", "phase": "session_update", "title": title}
+
+        # Errors from OpenCode
+        if etype == "error":
+            return {"type": "error", "message": event.get("error", "Unknown error")}
+
+        # Pass through unknown events as status
+        return None

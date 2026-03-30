@@ -78,16 +78,39 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
         }
       },
       onTool(event) {
-        const tool = event.tool;
+        const ev = event as any;
+        const toolName = ev.tool || 'unknown';
+        const status = ev.status || 'running';
+        const title = ev.title || toolName;
+        const input = ev.input || {};
+        const output = ev.output || '';
+
         store.setAgent(store.currentAgent, 'tool_call');
-        store.addToolCall({
-          id: `tc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-          tool,
-          input: event as any,
-          status: 'running',
-          title: tool,
-          timestamp: Date.now(),
-        });
+
+        // Find existing active tool call for this tool (by command/title match)
+        const existing = useCodeLabStore.getState().activeToolCalls;
+        const match = existing.find((tc) => tc.tool === toolName && tc.status !== 'completed');
+
+        if (match) {
+          // Update existing
+          store.updateToolCall(match.id, { status: status as any, title, input, output });
+        } else if (status !== 'completed') {
+          // Add new
+          store.addToolCall({
+            id: `tc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            tool: toolName,
+            input,
+            output,
+            status: status as any,
+            title,
+            timestamp: Date.now(),
+          });
+        }
+
+        // When completed, show output as text in the message
+        if (status === 'completed' && output) {
+          store.appendToLastMessage(`\n\`\`\`\n${output.slice(0, 2000)}\n\`\`\`\n`);
+        }
       },
       onStatus(phase) {
         if (phase === 'permission_request') {
