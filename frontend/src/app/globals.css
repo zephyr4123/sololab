@@ -221,3 +221,20 @@ html {
 .prose h1, .prose h2, .prose h3 {
   font-family: var(--font-display);
 }
+
+/* ── Thinking Indicator Dots ── */
+@keyframes thinking-dot-bounce {
+  0%, 80%, 100% {
+    opacity: 0.15;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 0.85;
+    transform: translateY(-3px);
+  }
+}
+
+.thinking-dot {
+  display: inline-block;
+  animation: thinking-dot-bounce 1.4s ease-in-out infinite;
+}

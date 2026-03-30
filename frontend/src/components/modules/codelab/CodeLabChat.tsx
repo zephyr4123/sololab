@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Square, Bot, User, Wrench, ChevronDown, ChevronRight, FolderOpen, ArrowLeft } from 'lucide-react';
+import { Send, Square, Bot, User, FolderOpen, ArrowLeft } from 'lucide-react';
 import { useCodeLabStore } from '@/stores/module-stores/codelab-store';
+import type { MessagePart } from '@/stores/module-stores/codelab-store';
 import { MarkdownViewer } from '@/components/shared/MarkdownViewer';
-import { AgentBadge } from './AgentBadge';
 import { ToolCallCard } from './ToolCallCard';
 import { PermissionDialog } from './PermissionDialog';
 import { ProjectSelector } from './ProjectSelector';
@@ -12,6 +12,46 @@ import { ResilientSSEClient } from '@/lib/sse-client';
 import { useSessionStore } from '@/stores/session-store';
 
 const sseClient = new ResilientSSEClient();
+
+/* ── Quirky Thinking Indicator ── */
+
+const THINKING_WORDS = [
+  'Thinking', 'Reasoning', 'Brewing', 'Pondering',
+  'Crafting', 'Weaving', 'Connecting', 'Synthesizing',
+  'Contemplating', 'Distilling', 'Architecting',
+];
+
+function ThinkingIndicator() {
+  const [word] = useState(() =>
+    THINKING_WORDS[Math.floor(Math.random() * THINKING_WORDS.length)]
+  );
+
+  return (
+    <div className="flex items-center gap-1.5 py-2 select-none animate-fade-in">
+      <span
+        className="text-[13px] text-muted-foreground/40 italic tracking-wide"
+        style={{ fontFamily: 'var(--font-display)' }}
+      >
+        {word}
+      </span>
+      <span className="flex items-center gap-[3px]">
+        {[0, 160, 320].map((delay) => (
+          <span
+            key={delay}
+            className="thinking-dot h-[5px] w-[5px] rounded-full"
+            style={{
+              animationDelay: `${delay}ms`,
+              backgroundColor: 'var(--color-warm)',
+              opacity: 0.5,
+            }}
+          />
+        ))}
+      </span>
+    </div>
+  );
+}
+
+/* ── Main Chat Component ── */
 
 export function CodeLabChat({ moduleId }: { moduleId: string }) {
   const [input, setInput] = useState('');
@@ -22,7 +62,7 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
   // Auto-scroll
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [store.messages, store.activeToolCalls, store.agentStatus]);
+  }, [store.messages, store.agentStatus]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -42,14 +82,16 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
       id: `usr_${Date.now()}`,
       role: 'user',
       content: text,
+      parts: [],
       timestamp: Date.now(),
     });
 
-    // Add empty assistant message
+    // Add empty assistant message with parts array
     store.addMessage({
       id: `ast_${Date.now()}`,
       role: 'assistant',
       content: '',
+      parts: [],
       toolCalls: [],
       timestamp: Date.now(),
     });
@@ -82,34 +124,31 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
         const toolName = ev.tool || 'unknown';
         const status = ev.status || 'running';
         const title = ev.title || toolName;
-        const input = ev.input || {};
+        const toolInput = ev.input || {};
         const output = ev.output || '';
 
         store.setAgent(store.currentAgent, 'tool_call');
 
-        // Find existing active tool call for this tool (by command/title match)
-        const existing = useCodeLabStore.getState().activeToolCalls;
-        const match = existing.find((tc) => tc.tool === toolName && tc.status !== 'completed');
+        // Attach tool calls to the current assistant message's parts (in order)
+        const lastMsg = useCodeLabStore.getState().messages.at(-1);
+        const match = lastMsg?.toolCalls?.find(
+          (tc) => tc.tool === toolName && tc.status === 'running'
+        );
 
         if (match) {
-          // Update existing
-          store.updateToolCall(match.id, { status: status as any, title, input, output });
-        } else if (status !== 'completed') {
-          // Add new
-          store.addToolCall({
+          store.updateToolCallInLastMessage(match.id, {
+            status: status as any, title, input: toolInput, output,
+          });
+        } else {
+          store.addToolCallToLastMessage({
             id: `tc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
             tool: toolName,
-            input,
+            input: toolInput,
             output,
             status: status as any,
             title,
             timestamp: Date.now(),
           });
-        }
-
-        // When completed, show output as text in the message
-        if (status === 'completed' && output) {
-          store.appendToLastMessage(`\n\`\`\`\n${output.slice(0, 2000)}\n\`\`\`\n`);
         }
       },
       onStatus(phase) {
@@ -125,6 +164,7 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
       onDone(_topIdeas, costUsd) {
         store.setStreaming(false);
         store.setAgent(store.currentAgent, 'idle');
+        store.finalizeLastMessageToolCalls();
         store.clearToolCalls();
         if (costUsd !== undefined) store.setCostUsd(store.costUsd + costUsd);
         session.fetchSessions(moduleId);
@@ -141,6 +181,7 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
     sseClient.stop();
     store.setStreaming(false);
     store.setAgent(store.currentAgent, 'idle');
+    store.finalizeLastMessageToolCalls();
   }, [store]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -154,6 +195,8 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
   if (!store.workingDirectory) {
     return <ProjectSelector />;
   }
+
+  const lastMsg = store.messages[store.messages.length - 1];
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
@@ -200,6 +243,7 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
         {store.messages.map((msg) => (
           <div key={msg.id} className="animate-fade-in-up">
             {msg.role === 'user' ? (
+              /* ── User message ── */
               <div className="flex gap-3 py-3 pl-1">
                 <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.07]">
                   <User className="h-3.5 w-3.5 text-foreground/70" />
@@ -209,48 +253,55 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
                 </div>
               </div>
             ) : (
+              /* ── Assistant message ── */
               <div className="flex gap-3 py-3 pl-1">
                 <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--color-warm)]/10">
                   <Bot className="h-3.5 w-3.5 text-[var(--color-warm)]" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  {/* Agent badge */}
-                  <AgentBadge agent={store.currentAgent} status={store.agentStatus} />
-
-                  {/* Tool calls */}
-                  {msg.toolCalls && msg.toolCalls.length > 0 && (
-                    <div className="mt-2 space-y-1.5">
-                      {msg.toolCalls.map((tc) => (
-                        <ToolCallCard key={tc.id} toolCall={tc} />
-                      ))}
-                    </div>
+                  {/* Thinking indicator — quirky verb + bouncing dots */}
+                  {store.isStreaming && msg === lastMsg && store.agentStatus === 'thinking' && (
+                    <ThinkingIndicator />
                   )}
 
-                  {/* Text content */}
-                  {msg.content && (
-                    <div className="mt-1.5 text-sm prose prose-sm max-w-none">
-                      <MarkdownViewer content={msg.content} compact />
-                    </div>
+                  {/* Interleaved parts — text and tools in SSE order */}
+                  {msg.parts && msg.parts.length > 0 ? (
+                    msg.parts.map((part, i) =>
+                      part.kind === 'text' ? (
+                        <div key={`t${i}`} className="text-sm prose prose-sm max-w-none py-0.5">
+                          <MarkdownViewer content={part.content} compact />
+                        </div>
+                      ) : (
+                        <ToolCallCard key={part.toolCall.id} toolCall={part.toolCall} />
+                      )
+                    )
+                  ) : (
+                    /* Fallback for messages without parts (e.g., loaded from history) */
+                    <>
+                      {msg.toolCalls && msg.toolCalls.length > 0 && (
+                        <div className="my-1">
+                          {msg.toolCalls.map((tc) => (
+                            <ToolCallCard key={tc.id} toolCall={tc} />
+                          ))}
+                        </div>
+                      )}
+                      {msg.content && (
+                        <div className="text-sm prose prose-sm max-w-none">
+                          <MarkdownViewer content={msg.content} compact />
+                        </div>
+                      )}
+                    </>
                   )}
 
                   {/* Streaming cursor */}
-                  {store.isStreaming && msg === store.messages[store.messages.length - 1] && (
-                    <span className="inline-block w-1.5 h-4 bg-[var(--color-warm)] animate-pulse rounded-sm ml-0.5 align-text-bottom" />
+                  {store.isStreaming && msg === lastMsg && (
+                    <span className="inline-block w-[2px] h-4 bg-[var(--color-warm)]/70 animate-pulse rounded-full ml-0.5 align-text-bottom" />
                   )}
                 </div>
               </div>
             )}
           </div>
         ))}
-
-        {/* Active tool calls during streaming */}
-        {store.isStreaming && store.activeToolCalls.length > 0 && (
-          <div className="pl-10 space-y-1.5 animate-fade-in">
-            {store.activeToolCalls.filter((tc) => tc.status === 'running').map((tc) => (
-              <ToolCallCard key={tc.id} toolCall={tc} />
-            ))}
-          </div>
-        )}
 
         <div ref={endRef} />
       </div>

@@ -25,10 +25,15 @@ export interface CodeLabPermission {
   status: 'pending' | 'approved' | 'denied';
 }
 
+export type MessagePart =
+  | { kind: 'text'; content: string }
+  | { kind: 'tool'; toolCall: CodeLabToolCall };
+
 export interface CodeLabMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  parts: MessagePart[];
   toolCalls?: CodeLabToolCall[];
   timestamp: number;
 }
@@ -79,6 +84,9 @@ interface CodeLabState {
   addToolCall: (tc: CodeLabToolCall) => void;
   updateToolCall: (id: string, update: Partial<CodeLabToolCall>) => void;
   clearToolCalls: () => void;
+  addToolCallToLastMessage: (tc: CodeLabToolCall) => void;
+  updateToolCallInLastMessage: (id: string, update: Partial<CodeLabToolCall>) => void;
+  finalizeLastMessageToolCalls: () => void;
   setPendingPermission: (p: CodeLabPermission | null) => void;
   setAgent: (name: string, status: CodeLabState['agentStatus']) => void;
   setCostUsd: (v: number) => void;
@@ -136,7 +144,14 @@ export const useCodeLabStore = create<CodeLabState>((set, get) => ({
       const msgs = [...s.messages];
       const last = msgs[msgs.length - 1];
       if (last && last.role === 'assistant') {
-        msgs[msgs.length - 1] = { ...last, content: last.content + text };
+        const parts = [...(last.parts || [])];
+        const lastPart = parts[parts.length - 1];
+        if (lastPart && lastPart.kind === 'text') {
+          parts[parts.length - 1] = { kind: 'text', content: lastPart.content + text };
+        } else {
+          parts.push({ kind: 'text', content: text });
+        }
+        msgs[msgs.length - 1] = { ...last, content: last.content + text, parts };
       }
       return { messages: msgs };
     }),
@@ -164,6 +179,52 @@ export const useCodeLabStore = create<CodeLabState>((set, get) => ({
     })),
 
   clearToolCalls: () => set({ activeToolCalls: [] }),
+
+  addToolCallToLastMessage: (tc) =>
+    set((s) => {
+      const msgs = [...s.messages];
+      const last = msgs[msgs.length - 1];
+      if (last?.role === 'assistant') {
+        const parts = [...(last.parts || [])];
+        parts.push({ kind: 'tool', toolCall: tc });
+        msgs[msgs.length - 1] = { ...last, parts, toolCalls: [...(last.toolCalls || []), tc] };
+      }
+      return { messages: msgs };
+    }),
+
+  updateToolCallInLastMessage: (id, update) =>
+    set((s) => {
+      const msgs = [...s.messages];
+      const last = msgs[msgs.length - 1];
+      if (last?.role === 'assistant') {
+        const parts = (last.parts || []).map((p) =>
+          p.kind === 'tool' && p.toolCall.id === id
+            ? { ...p, toolCall: { ...p.toolCall, ...update } }
+            : p
+        );
+        const toolCalls = (last.toolCalls || []).map((tc) =>
+          tc.id === id ? { ...tc, ...update } : tc
+        );
+        msgs[msgs.length - 1] = { ...last, parts, toolCalls };
+      }
+      return { messages: msgs };
+    }),
+
+  finalizeLastMessageToolCalls: () =>
+    set((s) => {
+      const msgs = [...s.messages];
+      const last = msgs[msgs.length - 1];
+      if (last?.role === 'assistant') {
+        const finalize = (tc: CodeLabToolCall) =>
+          tc.status === 'running' ? { ...tc, status: 'completed' as const } : tc;
+        const parts = (last.parts || []).map((p) =>
+          p.kind === 'tool' ? { ...p, toolCall: finalize(p.toolCall) } : p
+        );
+        const toolCalls = (last.toolCalls || []).map(finalize);
+        msgs[msgs.length - 1] = { ...last, parts, toolCalls };
+      }
+      return { messages: msgs };
+    }),
 
   setPendingPermission: (p) => set({ pendingPermission: p }),
   setAgent: (name, status) => set({ currentAgent: name, agentStatus: status }),
