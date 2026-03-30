@@ -129,9 +129,19 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
 
         store.setAgent(store.currentAgent, 'tool_call');
 
-        // Check if this event has meaningful content (file path, command, pattern, etc.)
-        const hasInput = !!(toolInput?.file_path || toolInput?.path || toolInput?.command || toolInput?.pattern);
+        // OpenCode uses camelCase params (filePath, not file_path)
+        const fp = toolInput?.filePath || toolInput?.file_path || toolInput?.path || '';
+        const hasInput = !!(fp || toolInput?.command || toolInput?.pattern);
         const hasTitle = title !== toolName; // title is not just the tool name fallback
+
+        // Track file operations for Files tab
+        if (fp && typeof fp === 'string') {
+          if (['read', 'glob', 'grep', 'list', 'codesearch'].includes(toolName)) {
+            store.addFile({ path: fp, language: '', status: 'read' });
+          } else if (['edit', 'write', 'multiedit', 'apply_patch'].includes(toolName)) {
+            store.addFile({ path: fp, language: '', status: 'modified' });
+          }
+        }
 
         // Attach tool calls to the current assistant message's parts (in order)
         const lastMsg = useCodeLabStore.getState().messages.at(-1);
