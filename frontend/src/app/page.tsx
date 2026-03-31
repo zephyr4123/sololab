@@ -96,7 +96,7 @@ export default function DashboardPage() {
       {/* Footer */}
       <div className="mt-16 text-center">
         <p className="text-[10px] text-muted-foreground/30 tracking-[0.15em] uppercase">
-          Built by S.Huang
+          Built by SuXiang.Huang
         </p>
       </div>
     </div>

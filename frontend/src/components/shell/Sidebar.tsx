@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import {
-  Lightbulb, Code, PenTool, BarChart3, BookOpen, Search, Lock,
+  Lightbulb, Code, PenTool, BarChart3, BookOpen, Search, Lock, Sun, Moon,
 } from 'lucide-react';
 import { useAppStore } from '@/stores/app-store';
 import { getAllModules } from '@/lib/module-loader';
@@ -15,6 +15,8 @@ const ICON_MAP: Record<string, typeof Lightbulb> = {
 export function Sidebar() {
   const currentModule = useAppStore((s) => s.currentModule);
   const setCurrentModule = useAppStore((s) => s.setCurrentModule);
+  const theme = useAppStore((s) => s.theme);
+  const toggleTheme = useAppStore((s) => s.toggleTheme);
   const modules = getAllModules();
 
   return (
@@ -79,10 +81,17 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-4 py-4 border-t border-border/30">
-        <p className="hidden text-[10px] text-muted-foreground/40 text-center tracking-wider lg:block">
-          S.Huang
+      <div className="flex items-center justify-between px-4 py-3 border-t border-border/30">
+        <p className="hidden text-[10px] text-muted-foreground/40 tracking-wider lg:block">
+          SuXiang.Huang
         </p>
+        <button
+          onClick={toggleTheme}
+          className="rounded-md p-1.5 text-muted-foreground/40 hover:bg-foreground/[0.05] hover:text-foreground transition-all"
+          aria-label="Toggle theme"
+        >
+          {theme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+        </button>
       </div>
     </aside>
   );
