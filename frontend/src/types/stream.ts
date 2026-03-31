@@ -3,7 +3,7 @@
 export type SSEEvent =
   | { type: 'text'; content: string }
   | { type: 'agent'; agent: string; action: string; content?: string; message_count?: number }
-  | { type: 'tool'; tool: string; agent?: string; query?: string; original_query?: string; success?: boolean; result_preview?: string; result_count?: number; results?: Array<{ title: string; url: string; snippet: string }>; error?: string | null; result?: unknown; status?: string; input?: Record<string, unknown>; output?: string; title?: string }
+  | { type: 'tool'; tool: string; agent?: string; query?: string; original_query?: string; success?: boolean; result_preview?: string; result_count?: number; results?: Array<{ title: string; url: string; snippet: string }>; error?: string | null; result?: unknown; status?: string; input?: Record<string, unknown>; output?: string; title?: string; fileDiff?: { file: string; additions: number; deletions: number; before: string; after: string }; isNewFile?: boolean }
   | { type: 'status'; phase?: string; round?: number; status?: string; [key: string]: unknown }
   | { type: 'idea'; id: string; content: string; author: string }
   | { type: 'vote'; idea_id: string; content: string; author: string; elo_score: number; rank: number; round: number }

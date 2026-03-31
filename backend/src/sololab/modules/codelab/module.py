@@ -491,8 +491,9 @@ class CodeLabModule(ModuleBase):
                 tool_input = state.get("input", {})
                 title = state.get("title", tool_name)
                 output = state.get("output", "")
+                metadata = state.get("metadata") or {}
 
-                return {
+                result: dict = {
                     "type": "tool",
                     "tool": tool_name,
                     "status": status,
@@ -500,6 +501,24 @@ class CodeLabModule(ModuleBase):
                     "input": tool_input,
                     "output": output if status == "completed" else "",
                 }
+
+                # 透传 edit 工具的 fileDiff 数据（供前端渲染代码变更）
+                if status == "completed" and tool_name == "edit":
+                    file_diff = metadata.get("filediff")
+                    if file_diff:
+                        result["fileDiff"] = {
+                            "file": file_diff.get("file", ""),
+                            "additions": file_diff.get("additions", 0),
+                            "deletions": file_diff.get("deletions", 0),
+                            "before": file_diff.get("before", ""),
+                            "after": file_diff.get("after", ""),
+                        }
+
+                # 透传 write 工具的文件存在状态
+                if status == "completed" and tool_name == "write":
+                    result["isNewFile"] = not metadata.get("exists", True)
+
+                return result
 
             if part_type == "step-start":
                 return {"type": "agent", "agent": "build", "action": "thinking"}

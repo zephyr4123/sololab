@@ -8,6 +8,14 @@ export interface CodeLabFile {
   status: 'read' | 'modified' | 'created' | 'deleted';
 }
 
+export interface FileDiff {
+  file: string;
+  additions: number;
+  deletions: number;
+  before: string;
+  after: string;
+}
+
 export interface CodeLabToolCall {
   id: string;
   tool: string;
@@ -16,6 +24,8 @@ export interface CodeLabToolCall {
   status: 'pending' | 'running' | 'completed' | 'error';
   title?: string;
   timestamp: number;
+  fileDiff?: FileDiff;
+  isNewFile?: boolean;
 }
 
 export interface CodeLabPermission {

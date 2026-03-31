@@ -129,6 +129,8 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
         const title = ev.title || toolName;
         const toolInput = ev.input || {};
         const output = ev.output || '';
+        const fileDiff = ev.fileDiff || undefined;
+        const isNewFile = ev.isNewFile || undefined;
 
         store.setAgent(store.currentAgent, 'tool_call');
 
@@ -154,7 +156,7 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
 
         if (match) {
           store.updateToolCallInLastMessage(match.id, {
-            status: status as any, title, input: toolInput, output,
+            status: status as any, title, input: toolInput, output, fileDiff, isNewFile,
           });
         } else if (status === 'running' && !hasInput && !hasTitle) {
           // Skip empty running events (no file path, no command, generic title).
@@ -169,6 +171,8 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
             status: status as any,
             title,
             timestamp: Date.now(),
+            fileDiff,
+            isNewFile,
           });
         }
       },
