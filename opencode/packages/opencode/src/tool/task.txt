@@ -1,60 +1,104 @@
 Launch a new agent to handle complex, multistep tasks autonomously.
 
+The Task tool spawns a specialized subagent in an isolated session with its own context window. Use it proactively — do not wait for the user to ask.
+
 Available agent types and the tools they have access to:
 {agents}
 
-When using the Task tool, you must specify a subagent_type parameter to select which agent type to use.
+When using the Task tool, you MUST specify a subagent_type parameter to select which agent type to use.
 
-When to use the Task tool:
-- When you are instructed to execute custom slash commands. Use the Task tool with the slash command invocation as the entire prompt. The slash command can take arguments. For example: Task(description="Check the file", prompt="/check-file path/to/file.py")
+## When to use the Task tool
 
-When NOT to use the Task tool:
-- If you want to read a specific file path, use the Read or Glob tool instead of the Task tool, to find the match more quickly
-- If you are searching for a specific class definition like "class Foo", use the Glob tool instead, to find the match more quickly
-- If you are searching for code within a specific file or set of 2-3 files, use the Read tool instead of the Task tool, to find the match more quickly
-- Other tasks that are not related to the agent descriptions above
+**Exploration & Research (explore agent):**
+- Understanding unfamiliar code before making changes
+- Finding all usages of a function, type, or pattern across the codebase
+- Tracing code paths, dependencies, or import chains
+- Answering "how does X work?" or "where is X defined?" questions
+- Investigating bugs by searching for related code and error patterns
+- Mapping architecture of a module or subsystem
 
+**Implementation & Execution (general agent):**
+- Making changes across multiple files or modules
+- Implementing features that span several areas of the codebase
+- Writing tests after implementing changes
+- Refactoring code that touches many locations
+- Any multi-step work that can run independently
 
-Usage notes:
-1. Launch multiple agents concurrently whenever possible, to maximize performance; to do that, use a single message with multiple tool uses
-2. When the agent is done, it will return a single message back to you. The result returned by the agent is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary of the result. The output includes a task_id you can reuse later to continue the same subagent session.
-3. Each agent invocation starts with a fresh context unless you provide task_id to resume the same subagent session (which continues with its previous messages and tool outputs). When starting fresh, your prompt should contain a highly detailed task description for the agent to perform autonomously and you should specify exactly what information the agent should return back to you in its final and only message to you.
-4. The agent's outputs should generally be trusted
-5. Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent. Tell it how to verify its work if possible (e.g., relevant test commands).
-6. If the agent description mentions that it should be used proactively, then you should try your best to use it without the user having to ask for it first. Use your judgement.
+**Slash Commands:**
+- Executing custom slash commands. Pass the command invocation as the entire prompt.
+  Example: Task(description="Check file", prompt="/check-file path/to/file.py")
 
-Example usage (NOTE: The agents below are fictional examples for illustration only - use the actual agents listed above):
+## When NOT to use the Task tool
+- Reading a single known file path → use Read directly
+- Searching for a specific class/function name → use Glob or Grep directly
+- Searching within 1-3 specific files → use Read directly
+- Tasks completable in 1-2 tool calls without research
 
-<example_agent_descriptions>
-"code-reviewer": use this agent after you are done writing a significant piece of code
-"greeting-responder": use this agent when to respond to user greetings with a friendly joke
-</example_agent_description>
+## Agent Selection
+
+| Scenario | Agent | Why |
+|----------|-------|-----|
+| "How does X work?" | explore | Read-only, fast, focused on finding and reading |
+| "Find all files matching..." | explore | Specialized for glob/grep/read |
+| "What's the architecture of..." | explore (very thorough) | Deep exploration, traces full dependency chain |
+| "Implement feature X" | general | Can read AND write, handles multi-step work |
+| "Refactor X across files" | general | Needs to edit multiple files |
+| "Write tests for X" | general | Needs to read code and write test files |
+| "Investigate bug X" | explore first | Research the bug, then fix directly or via general |
+
+## Parallel Execution
+
+Launch 2-3 agents IN PARALLEL (single message, multiple tool calls) whenever their tasks are independent. This is the primary way to maximize performance and thoroughness.
+
+Decomposition patterns:
+- "Add feature X" → explore(find similar code) + explore(find related tests) → then general(implement)
+- "Fix bug in Y" → explore(trace the bug) + explore(check test coverage for Y)
+- "Refactor Z" → explore(find all usage sites) + explore(find conventions) → general(area A) + general(area B)
+- "Understand module M" → explore(M's API and structure) + explore(M's dependencies and consumers)
+
+Default to PARALLEL. Only go sequential when agent2 depends on agent1's results.
+
+## Writing Effective Prompts
+
+Each agent starts with ZERO context from your conversation. Your prompt must be self-contained:
+
+1. **State the goal**: What exactly should the agent accomplish?
+2. **Provide starting points**: File paths, function names, search patterns
+3. **Specify scope**: Write code or just research? Which directories to focus on?
+4. **Define output**: What information should the response include?
+5. **For explore**: Specify thoroughness — "quick", "medium", or "very thorough"
+6. **For general**: Include verification steps (test commands, expected behavior)
+
+Bad: "Look at the auth module"
+Good: "Very thorough exploration of the auth system starting from src/auth/. Find: 1) Login flow end-to-end, 2) Session token storage, 3) Auth middleware chain. Return file paths with line numbers for each key function."
+
+## Additional Features
+
+- **Worktree isolation**: Set `isolation="worktree"` to run the agent on an isolated git worktree. Changes are returned as a diff for your review before merging. Use for risky or experimental changes.
+- **Session resumption**: The output includes a `task_id`. Pass it back to continue the same agent session with its full context preserved.
+
+## Examples
 
 <example>
-user: "Please write a function that checks if a number is prime"
-assistant: Sure let me write a function that checks if a number is prime
-assistant: First let me use the Write tool to write a function that checks if a number is prime
-assistant: I'm going to use the Write tool to write the following code:
-<code>
-function isPrime(n) {
-  if (n <= 1) return false
-  for (let i = 2; i * i <= n; i++) {
-    if (n % i === 0) return false
-  }
-  return true
-}
-</code>
-<commentary>
-Since a significant piece of code was written and the task was completed, now use the code-reviewer agent to review the code
-</commentary>
-assistant: Now let me use the code-reviewer agent to review the code
-assistant: Uses the Task tool to launch the code-reviewer agent
+user: "Add pagination to the users API endpoint"
+<plan>
+1. Need to understand current API structure and patterns → launch 2 explore agents in parallel
+2. Then implement based on findings
+</plan>
+assistant: Launches two Task tools in a single message:
+- Task(subagent_type="explore", description="Find API endpoint patterns", prompt="Medium exploration of the API layer. Find: 1) How existing endpoints handle pagination (search for 'offset', 'limit', 'page' patterns), 2) The users endpoint implementation, 3) Related request/response types. Start from src/api/ and src/routes/. Return file paths and key code patterns found.")
+- Task(subagent_type="explore", description="Find API test patterns", prompt="Quick exploration: find existing API test files, especially any that test pagination. Search in tests/ directory. Return file paths and test patterns used.")
 </example>
 
 <example>
-user: "Hello"
-<commentary>
-Since the user is greeting, use the greeting-responder agent to respond with a friendly joke
-</commentary>
-assistant: "I'm going to use the Task tool to launch the with the greeting-responder agent"
+user: "Refactor the logger to use structured JSON output"
+<plan>
+1. Explore: find all logger usages across the codebase
+2. Implement: apply changes per area in parallel
+</plan>
+assistant: First launches explore:
+- Task(subagent_type="explore", description="Find all logger usages", prompt="Very thorough exploration: find every file that imports or uses the logger. Start from src/lib/logger and trace all consumers. Also find the logger's configuration and initialization. Return a complete list of files and the specific logger patterns each uses.")
+Then, based on results, launches multiple general agents:
+- Task(subagent_type="general", description="Refactor logger core", prompt="Refactor src/lib/logger.ts to output structured JSON. [details from explore results]... Run 'npm test -- logger' to verify.")
+- Task(subagent_type="general", description="Update logger consumers", prompt="Update these files to use the new structured logger API: [file list from explore]... Ensure existing log levels are preserved.")
 </example>

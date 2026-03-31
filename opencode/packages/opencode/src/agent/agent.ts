@@ -11,6 +11,7 @@ import { ProviderTransform } from "../provider/transform"
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
+import PROMPT_GENERAL from "./prompt/general.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
@@ -145,7 +146,8 @@ export namespace Agent {
             },
             general: {
               name: "general",
-              description: `General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel.`,
+              description: `General-purpose agent for researching complex questions, searching for code, and executing multi-step tasks autonomously. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries use this agent to perform the search for you. Use this agent to implement features, apply refactors, write tests, or make changes across multiple files. Launch multiple general agents in parallel for independent work units.`,
+              prompt: PROMPT_GENERAL,
               permission: Permission.merge(
                 defaults,
                 Permission.fromConfig({
@@ -178,7 +180,7 @@ export namespace Agent {
                 }),
                 user,
               ),
-              description: `Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
+              description: `Fast, read-only agent specialized for exploring codebases. Use this BEFORE making non-trivial changes to understand the code first. Finds files by patterns (eg. "src/components/**/*.tsx"), searches code for keywords, traces import chains, maps architecture, and answers questions about the codebase. Cannot modify files. When calling this agent, specify the desired thoroughness level: "quick" for basic searches (1-2 queries), "medium" for moderate exploration (3-5 queries, follows references), or "very thorough" for comprehensive analysis (exhaustive search, multiple naming conventions, full dependency chain). Launch 2-3 explore agents IN PARALLEL for different aspects of the same investigation.`,
               prompt: PROMPT_EXPLORE,
               options: {},
               mode: "subagent",
