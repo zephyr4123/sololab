@@ -72,9 +72,19 @@ Each agent starts with ZERO context from your conversation. Your prompt must be 
 Bad: "Look at the auth module"
 Good: "Very thorough exploration of the auth system starting from src/auth/. Find: 1) Login flow end-to-end, 2) Session token storage, 3) Auth middleware chain. Return file paths with line numbers for each key function."
 
+## Worktree Isolation (Default)
+
+All tasks run in an **isolated git worktree** by default (`isolation="worktree"`). This means:
+- Each sub-agent works on its own copy of the repository — no interference between parallel agents
+- After the sub-agent finishes, changes are **automatically merged** back to the main working directory via `git apply --3way`
+- If auto-merge succeeds, the output includes `<worktree_merge status="applied">`
+- If auto-merge fails (conflict), the output includes the raw diff for manual resolution
+- The worktree is cleaned up automatically after merge
+
+Set `isolation="none"` ONLY for read-only tasks (explore agent) when you want to avoid the ~2s worktree setup overhead.
+
 ## Additional Features
 
-- **Worktree isolation**: Set `isolation="worktree"` to run the agent on an isolated git worktree. Changes are returned as a diff for your review before merging. Use for risky or experimental changes.
 - **Session resumption**: The output includes a `task_id`. Pass it back to continue the same agent session with its full context preserved.
 
 ## Examples

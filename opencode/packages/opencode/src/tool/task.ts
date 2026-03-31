@@ -174,9 +174,9 @@ const parameters = z.object({
   isolation: z
     .enum(["none", "worktree"])
     .describe(
-      "Isolation mode. 'worktree' creates a temporary git worktree so the agent works on an isolated copy of the repo. Changes are captured as a diff and the worktree is cleaned up automatically.",
+      "Isolation mode. Default 'worktree' creates a temporary git worktree so the agent works on an isolated copy of the repo. Changes are auto-merged back to the main directory after completion. Use 'none' only for tasks that you are certain will not write any files.",
     )
-    .default("none")
+    .default("worktree")
     .optional(),
 })
 
@@ -299,8 +299,10 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       }
 
       // Worktree isolation: create temporary git worktree for isolated execution
+      const mainDirectory = Instance.directory // capture before entering worktree context
       let result: MessageV2.WithParts | undefined
       let worktreeDiff = ""
+      let worktreeMergeStatus: "applied" | "conflict" | "skipped" = "skipped"
       let worktreeInfo: Worktree.Info | undefined
       let timedOut = false
 
@@ -358,6 +360,26 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                 maxBuffer: 2 * 1024 * 1024,
               })
             } catch {}
+            // Auto-merge: apply worktree changes back to the main working directory
+            if (worktreeDiff) {
+              try {
+                execSync("git apply --3way -", {
+                  cwd: mainDirectory,
+                  input: worktreeDiff,
+                  encoding: "utf-8",
+                  maxBuffer: 2 * 1024 * 1024,
+                })
+                worktreeMergeStatus = "applied"
+                log.info("worktree diff applied", { sessionID: session.id, agent: agent.name })
+              } catch (applyErr: any) {
+                worktreeMergeStatus = "conflict"
+                log.warn("worktree diff apply failed, changes returned as diff text", {
+                  sessionID: session.id,
+                  agent: agent.name,
+                  error: String(applyErr),
+                })
+              }
+            }
           } finally {
             await Worktree.remove({ directory: worktreeInfo.directory }).catch(() => {})
           }
@@ -392,9 +414,14 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       }
       let output = formatSubtaskResult(structured, session.id)
 
-      // Append worktree diff if isolation was used
+      // Append worktree merge status and diff if isolation was used
       if (worktreeDiff) {
-        output += "\n\n<worktree_diff>\n" + worktreeDiff.slice(0, 50000) + "\n</worktree_diff>"
+        if (worktreeMergeStatus === "applied") {
+          output += "\n\n<worktree_merge status=\"applied\">Changes have been auto-merged into the main working directory.</worktree_merge>"
+        } else if (worktreeMergeStatus === "conflict") {
+          output += "\n\n<worktree_merge status=\"conflict\">Auto-merge failed. The diff is included below for manual application.</worktree_merge>"
+          output += "\n<worktree_diff>\n" + worktreeDiff.slice(0, 50000) + "\n</worktree_diff>"
+        }
       }
 
       return {
@@ -404,7 +431,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           model,
           structured,
           isolation: worktreeInfo ? "worktree" : "none",
-          worktreeBranch: worktreeInfo?.branch,
+          worktreeMergeStatus,
           timedOut,
           // Skip global truncation — task output is already a structured summary (max 3000 char summary)
           truncated: false,
