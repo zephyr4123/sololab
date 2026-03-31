@@ -331,6 +331,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           structured,
           isolation: worktreeInfo ? "worktree" : "none",
           worktreeBranch: worktreeInfo?.branch,
+          // Skip global truncation — task output is already a structured summary
+          // (formatSubtaskResult caps summary at 500 chars, worktree diff at 50KB)
+          truncated: false,
         },
         output,
       }
