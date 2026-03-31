@@ -30,9 +30,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # LLM 网关
     llm_config = LLMConfig(
-        base_url=settings.llm_base_url,
-        api_key=settings.llm_api_key,
-        default_model=settings.llm_model,
+        base_url=settings.ideaspark_base_url,
+        api_key=settings.ideaspark_api_key,
+        default_model=settings.ideaspark_model,
         embedding_base_url=settings.embedding_base_url,
         embedding_api_key=settings.embedding_api_key,
         embedding_model=settings.embedding_model,

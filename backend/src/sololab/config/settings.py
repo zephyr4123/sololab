@@ -23,10 +23,10 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = "redis://localhost:6379/0"
 
-    # LLM 配置（OpenAI 兼容格式）
-    llm_base_url: str = "https://api.openai.com/v1"
-    llm_api_key: str = "sk-xxx"
-    llm_model: str = "gpt-4o"
+    # IdeaSpark LLM 配置（OpenAI 兼容格式）
+    ideaspark_base_url: str = "https://api.openai.com/v1"
+    ideaspark_api_key: str = "sk-xxx"
+    ideaspark_model: str = "gpt-4o"
     budget_limit_usd: float = 50.0
 
     # Embedding 配置（OpenAI 兼容格式，可独立于 LLM 提供商）
@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     # OpenCode 引擎（CodeLab 模块）
     opencode_url: str = "http://localhost:3100"
     opencode_server_password: Optional[str] = None
+    codelab_base_url: str = "https://api.moonshot.cn/v1"
+    codelab_api_key: str = "sk-xxx"
     codelab_model: str = "moonshotai-cn/kimi-k2.5"
 
     # API 认证

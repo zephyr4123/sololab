@@ -90,9 +90,9 @@ class BenchmarkRunner:
         s = get_settings()
 
         llm_config = LLMConfig(
-            base_url=s.llm_base_url,
-            api_key=s.llm_api_key,
-            default_model=s.llm_model,
+            base_url=s.ideaspark_base_url,
+            api_key=s.ideaspark_api_key,
+            default_model=s.ideaspark_model,
             embedding_base_url=s.embedding_base_url,
             embedding_api_key=s.embedding_api_key,
             embedding_model=s.embedding_model,
