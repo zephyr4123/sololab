@@ -132,11 +132,19 @@ interface CodeLabState {
   reset: () => void;
 }
 
+function loadRecentDirs(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const stored = localStorage.getItem('codelab_recent_dirs');
+    return stored ? JSON.parse(stored) : [];
+  } catch { return []; }
+}
+
 const initialState = {
   /** Project directory — must be set before starting conversations */
   workingDirectory: null as string | null,
-  /** Recent directories for quick access */
-  recentDirectories: [] as string[],
+  /** Recent directories for quick access (hydrated from localStorage) */
+  recentDirectories: loadRecentDirs(),
   sessionId: null as string | null,
   sessions: [] as Array<{ id: string; title: string; createdAt: string }>,
   isStreaming: false,

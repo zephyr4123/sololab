@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import {
   FolderOpen, Folder, ArrowRight, Clock, Trash2, Terminal,
   ChevronRight, Home, ArrowUp, GitBranch, Loader2,
@@ -17,7 +17,8 @@ interface DirEntry {
 
 export function ProjectSelector() {
   const setWorkingDirectory = useCodeLabStore((s) => s.setWorkingDirectory);
-  const [recent, setRecent] = useState<string[]>([]);
+  const recent = useCodeLabStore((s) => s.recentDirectories);
+  const removeRecentDirectory = useCodeLabStore((s) => s.removeRecentDirectory);
   const [currentPath, setCurrentPath] = useState<string | null>(null);
   const [entries, setEntries] = useState<DirEntry[]>([]);
   const [parentPath, setParentPath] = useState<string | null>(null);
@@ -25,14 +26,6 @@ export function ProjectSelector() {
   const [error, setError] = useState<string | null>(null);
   const [browsing, setBrowsing] = useState(false);
   const [manualInput, setManualInput] = useState('');
-
-  // Load recent directories
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('codelab_recent_dirs');
-      if (stored) setRecent(JSON.parse(stored));
-    } catch {}
-  }, []);
 
   const browse = useCallback(async (path?: string) => {
     setLoading(true);
@@ -57,10 +50,7 @@ export function ProjectSelector() {
 
   const removeRecent = (dir: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const filtered = recent.filter((d) => d !== dir);
-    setRecent(filtered);
-    try { localStorage.setItem('codelab_recent_dirs', JSON.stringify(filtered)); } catch {}
-    useCodeLabStore.setState({ recentDirectories: filtered });
+    removeRecentDirectory(dir);
   };
 
   const handleManualSubmit = () => {
