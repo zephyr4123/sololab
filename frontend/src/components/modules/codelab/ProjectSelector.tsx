@@ -55,7 +55,7 @@ export function ProjectSelector() {
 
   const handleManualSubmit = () => {
     const dir = manualInput.trim();
-    if (dir) selectProject(dir);
+    if (dir) browse(dir);
   };
 
   // Breadcrumb segments
@@ -141,7 +141,7 @@ export function ProjectSelector() {
                   value={manualInput}
                   onChange={(e) => setManualInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleManualSubmit()}
-                  placeholder="/path/to/project"
+                  placeholder="project name or path within workspace"
                   className="flex-1 bg-transparent font-mono text-sm outline-none placeholder:text-muted-foreground/30"
                 />
                 <button
@@ -149,7 +149,7 @@ export function ProjectSelector() {
                   disabled={!manualInput.trim()}
                   className="rounded-lg bg-[var(--color-warm)]/10 px-3 py-1.5 text-xs font-medium text-[var(--color-warm)] disabled:opacity-30"
                 >
-                  Open
+                  Browse
                 </button>
               </div>
             </details>
@@ -161,8 +161,9 @@ export function ProjectSelector() {
             {/* Breadcrumb bar */}
             <div className="flex items-center gap-1 mb-4 px-1 overflow-x-auto">
               <button
-                onClick={() => browse('/')}
+                onClick={() => browse('~')}
                 className="shrink-0 rounded-md p-1 text-muted-foreground/50 hover:text-foreground hover:bg-foreground/[0.04] transition-colors"
+                title="Workspace root"
               >
                 <Home className="h-3.5 w-3.5" />
               </button>

@@ -187,35 +187,38 @@ class CodeLabModule(ModuleBase):
             return {"type": "messages", "messages": [], "error": str(e)}
 
     async def _handle_browse(self, request: ModuleRequest) -> dict:
-        """Browse host filesystem directories (mounted at /host-home)."""
+        """Browse workspace directories (mounted at /workspace from WORKSPACE_DIR)."""
         import os
 
-        HOST_HOME = "/host-home"
+        MOUNT_ROOT = "/workspace"
+        workspace_dir = os.environ.get("WORKSPACE_DIR", "")
         raw_path = request.params.get("path", "~")
 
         try:
-            real_home = os.environ.get("REAL_HOME", os.path.expanduser("~"))
-
-            # Map paths: ~ and host paths → container /host-home/...
-            if raw_path == "~" or raw_path.startswith("~/"):
-                target = os.path.join(HOST_HOME, raw_path[2:] if raw_path.startswith("~/") else "")
-            elif raw_path.startswith(real_home):
-                # Host path like /Users/xxx/coding → /host-home/coding
-                rel = raw_path[len(real_home):]
-                target = HOST_HOME + rel
+            # Map host paths → container /workspace/...
+            if raw_path == "~" or raw_path == workspace_dir:
+                target = MOUNT_ROOT
+            elif workspace_dir and raw_path.startswith(workspace_dir):
+                rel = raw_path[len(workspace_dir):]
+                target = MOUNT_ROOT + rel
+            elif raw_path.startswith(MOUNT_ROOT):
+                target = raw_path
             elif os.path.exists(raw_path):
                 target = raw_path
             else:
-                target = HOST_HOME
+                target = MOUNT_ROOT
 
             target = os.path.abspath(target)
 
+            # Security: prevent path traversal outside workspace
+            if not target.startswith(MOUNT_ROOT):
+                target = MOUNT_ROOT
+
             def to_host_path(container_path: str) -> str:
-                """Map /host-home/... back to real host path for display."""
-                if container_path.startswith(HOST_HOME):
-                    rel = container_path[len(HOST_HOME):]
-                    home = os.environ.get("REAL_HOME", os.path.expanduser("~"))
-                    return home + rel if rel else home
+                """Map /workspace/... back to host path for display."""
+                if container_path.startswith(MOUNT_ROOT):
+                    rel = container_path[len(MOUNT_ROOT):]
+                    return workspace_dir + rel if workspace_dir else container_path
                 return container_path
 
             entries = []
@@ -235,7 +238,7 @@ class CodeLabModule(ModuleBase):
                         "isProject": is_project,
                     })
 
-            parent = os.path.dirname(target) if target != "/" and target != HOST_HOME else None
+            parent = os.path.dirname(target) if target != "/" and target != MOUNT_ROOT else None
 
             return {
                 "type": "browse",
@@ -248,13 +251,13 @@ class CodeLabModule(ModuleBase):
 
     @staticmethod
     def _to_container_path(host_path: str | None) -> str | None:
-        """Map host path to OpenCode container path (/host-home/...)."""
+        """Map host path to OpenCode container path (/workspace/...)."""
         if not host_path:
             return None
         import os
-        real_home = os.environ.get("REAL_HOME", "")
-        if real_home and host_path.startswith(real_home):
-            return "/host-home" + host_path[len(real_home):]
+        workspace_dir = os.environ.get("WORKSPACE_DIR", "")
+        if workspace_dir and host_path.startswith(workspace_dir):
+            return "/workspace" + host_path[len(workspace_dir):]
         return host_path
 
     async def _handle_chat(

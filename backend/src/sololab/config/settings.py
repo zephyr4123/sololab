@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     judge_api_key: str = "sk-xxx"
     judge_model: str = "qwen3.5-plus"
 
+    # 工作区（CodeLab 沙箱边界）
+    workspace_dir: str = ""
+
     # 存储
     storage_path: str = "./storage"
 
