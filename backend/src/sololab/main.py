@@ -184,10 +184,10 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # 跨域配置
+    # 跨域配置（Docker 部署由 Caddy 反代，后端信任所有来源）
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[settings.frontend_url],
+        allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

@@ -42,10 +42,6 @@ class Settings(BaseSettings):
     # 存储
     storage_path: str = "./storage"
 
-    # 地址
-    frontend_url: str = "http://localhost:3000"
-    backend_url: str = "http://localhost:8000"
-
     # 外部 API 密钥
     tavily_api_key: Optional[str] = None
     s2_api_key: Optional[str] = None  # Semantic Scholar API Key
@@ -53,7 +49,6 @@ class Settings(BaseSettings):
     # OpenCode 引擎（CodeLab 模块）
     opencode_url: str = "http://localhost:3100"
     opencode_server_password: Optional[str] = None
-    opencode_server_username: str = "opencode"
     codelab_model: str = "moonshotai-cn/kimi-k2.5"
 
     # API 认证

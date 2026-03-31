@@ -5,7 +5,7 @@ import { Settings, Sun, Moon, Cpu } from 'lucide-react';
 import { useAppStore } from '@/stores/app-store';
 import { SettingsPanel } from '@/components/shell/SettingsPanel';
 
-const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export function TopBar() {
   const { provider, providers, setProvider, setProviders, theme, toggleTheme } = useAppStore();

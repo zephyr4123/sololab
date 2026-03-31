@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useIdeaSparkStore } from '@/stores/module-stores/ideaspark-store';
 import { MarkdownViewer } from '@/components/shared/MarkdownViewer';
 
-const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export function IdeaReport() {
   const { topIdeas, phase, costUsd } = useIdeaSparkStore();

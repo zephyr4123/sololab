@@ -65,13 +65,11 @@ class CodeLabModule(ModuleBase):
         settings = get_settings()
         opencode_url = getattr(settings, "opencode_url", None) or "http://localhost:3100"
         opencode_password = getattr(settings, "opencode_server_password", None) or ""
-        opencode_username = getattr(settings, "opencode_server_username", None) or "opencode"
-
         codelab_model = getattr(settings, "codelab_model", None) or "moonshotai-cn/kimi-k2.5"
 
         self._bridge = OpenCodeBridge(
             base_url=opencode_url,
-            username=opencode_username,
+            username="opencode",
             password=opencode_password if opencode_password else None,
             timeout=300,
             default_directory=None,
