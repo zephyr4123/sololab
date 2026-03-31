@@ -1,41 +1,21 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import {
-  Check, AlertTriangle, Clock, Loader2,
-  Eye, Pencil, FileText, FolderSearch, Search, Terminal, Globe, Brain,
-  ChevronDown,
-} from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Check, AlertTriangle, Clock, Loader2 } from 'lucide-react';
 import type { ParallelTaskGroup, ParallelTaskInfo, CodeLabToolCall } from '@/stores/module-stores/codelab-store';
 
-/* ═══════════════════════════════════════════════════
-   Agent palette
-   ═══════════════════════════════════════════════════ */
+/* ── Agent palette ── */
 
 const PALETTE: Record<string, { color: string; label: string }> = {
-  explore:  { color: '#7CB3E0', label: 'Explorer' },
-  general:  { color: '#C9A87C', label: 'General' },
-  plan:     { color: '#A78BFA', label: 'Planner' },
-  build:    { color: '#6EE7A0', label: 'Builder' },
+  explore: { color: '#7CB3E0', label: 'Explorer' },
+  general: { color: '#C9A87C', label: 'General' },
+  plan:    { color: '#A78BFA', label: 'Planner' },
+  build:   { color: '#6EE7A0', label: 'Builder' },
 };
 const FALLBACK = { color: '#A8A29E', label: 'Agent' };
+function pal(agent: string) { return PALETTE[agent] ?? FALLBACK; }
 
-function palette(agent: string) {
-  return PALETTE[agent] ?? FALLBACK;
-}
-
-/* ═══════════════════════════════════════════════════
-   Tool icon map
-   ═══════════════════════════════════════════════════ */
-
-const ICONS: Record<string, typeof Eye> = {
-  read: Eye, edit: Pencil, write: FileText, glob: FolderSearch,
-  grep: Search, bash: Terminal, webfetch: Globe, websearch: Globe, task: Brain,
-};
-
-/* ═══════════════════════════════════════════════════
-   Elapsed timer
-   ═══════════════════════════════════════════════════ */
+/* ── Elapsed timer ── */
 
 function useElapsed(start: number, end?: number) {
   const [now, setNow] = useState(Date.now());
@@ -48,45 +28,49 @@ function useElapsed(start: number, end?: number) {
   return s < 60 ? `${Math.floor(s)}s` : `${Math.floor(s / 60)}m ${Math.floor(s % 60)}s`;
 }
 
-/* ═══════════════════════════════════════════════════
-   Compact tool chip — single inline element
-   ═══════════════════════════════════════════════════ */
+/* ── Format a tool call as a readable command string ──
+   e.g. "read src/config.py" | "grep 'auth'" | "glob **∕*.ts" | "$ ls -la"
+*/
 
-function ToolChip({ tc, accent }: { tc: CodeLabToolCall; accent: string }) {
-  const [open, setOpen] = useState(false);
-  const Icon = ICONS[tc.tool] ?? Terminal;
+function formatToolCmd(tc: CodeLabToolCall): string {
   const inp = tc.input as Record<string, any>;
-  const raw = inp?.file_path || inp?.filePath || inp?.path || inp?.pattern || inp?.command || '';
-  // Show only the filename, not the full path
-  const label = typeof raw === 'string' && raw.includes('/')
-    ? raw.split('/').pop() ?? raw
-    : (raw || tc.title || tc.tool);
-  const shortLabel = typeof label === 'string' && label.length > 28
-    ? label.slice(0, 25) + '…'
-    : label;
-  const isRunning = tc.status === 'running';
+  const tool = tc.tool;
 
-  return (
-    <span className="inline-flex items-center flex-shrink-0 relative">
-      <button
-        onClick={() => tc.output && setOpen(!open)}
-        disabled={!tc.output}
-        className="inline-flex items-center gap-[3px] text-[10.5px] font-mono leading-none whitespace-nowrap transition-opacity hover:opacity-100"
-        style={{ color: isRunning ? accent : undefined, opacity: isRunning ? 1 : 0.55 }}
-      >
-        <Icon size={10} className="flex-shrink-0" style={{ opacity: 0.7 }} />
-        <span>{shortLabel}</span>
-        {isRunning && <Loader2 size={9} className="animate-spin flex-shrink-0" />}
-      </button>
-      {/* Expandable output popover */}
-      {open && tc.output && (
-        <div className="absolute left-0 top-full mt-1 z-20 w-72 max-h-32 overflow-auto rounded-md bg-card border border-border/40 shadow-lg px-2.5 py-1.5 text-[10px] font-mono text-muted-foreground/60 animate-fade-in">
-          {tc.output.slice(0, 600)}
-          {tc.output.length > 600 && <span className="opacity-40">…</span>}
-        </div>
-      )}
-    </span>
-  );
+  if (tool === 'bash') {
+    const cmd = inp?.command || '';
+    // Show first ~60 chars of the command
+    return `$ ${typeof cmd === 'string' ? cmd.slice(0, 60) : cmd}`;
+  }
+
+  if (tool === 'read' || tool === 'write' || tool === 'edit') {
+    const fp = inp?.file_path || inp?.filePath || inp?.path || '';
+    return `${tool} ${shortPath(fp)}`;
+  }
+
+  if (tool === 'glob') {
+    const pattern = inp?.pattern || inp?.path || '';
+    return `glob ${pattern}`;
+  }
+
+  if (tool === 'grep') {
+    const pattern = inp?.pattern || '';
+    const path = inp?.path || inp?.file_path || '';
+    const pathPart = path ? ` ${shortPath(path)}` : '';
+    return `grep "${pattern}"${pathPart}`;
+  }
+
+  // Fallback: tool name + first string arg
+  const firstArg = inp?.file_path || inp?.filePath || inp?.path || inp?.pattern || inp?.command || inp?.query || '';
+  if (firstArg) return `${tool} ${typeof firstArg === 'string' ? firstArg.slice(0, 50) : firstArg}`;
+  return tc.title || tool;
+}
+
+/** Shorten a file path to last 2-3 segments */
+function shortPath(p: unknown): string {
+  if (!p || typeof p !== 'string') return '';
+  const segs = p.split('/').filter(Boolean);
+  if (segs.length <= 3) return segs.join('/');
+  return '…/' + segs.slice(-2).join('/');
 }
 
 /* ═══════════════════════════════════════════════════
@@ -94,35 +78,28 @@ function ToolChip({ tc, accent }: { tc: CodeLabToolCall; accent: string }) {
    ═══════════════════════════════════════════════════ */
 
 function Branch({ task, isLast, index }: { task: ParallelTaskInfo; isLast: boolean; index: number }) {
-  const p = palette(task.agent);
+  const p = pal(task.agent);
   const elapsed = useElapsed(task.startTime, task.endTime);
   const isRunning = task.status === 'running';
   const isDone = task.status === 'completed';
   const isError = task.status === 'error' || task.status === 'timeout';
-  const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Filter out empty pending tool calls (no input, no title — just noise)
-  const visibleTools = task.toolCalls.filter((tc) => {
+  // Get the latest meaningful tool call (skip pending/empty ones)
+  const latestTool = [...task.toolCalls].reverse().find((tc) => {
     if (tc.status === 'pending') return false;
     const inp = tc.input as Record<string, any>;
-    const hasData = inp?.file_path || inp?.filePath || inp?.path || inp?.pattern || inp?.command || tc.title !== tc.tool;
-    return tc.status === 'completed' || hasData;
+    return !!(inp?.file_path || inp?.filePath || inp?.path || inp?.pattern || inp?.command || inp?.query);
   });
 
-  // Auto-scroll tool strip to end
-  useEffect(() => {
-    if (scrollRef.current && isRunning) {
-      scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
-    }
-  }, [visibleTools.length, isRunning]);
+  const cmdText = latestTool ? formatToolCmd(latestTool) : null;
+  const toolCount = task.toolCalls.filter((tc) => tc.status === 'completed').length;
 
   return (
     <div
       className="relative animate-fade-in-up"
       style={{ animationDelay: `${index * 60}ms` }}
     >
-      {/* ── Branch connector lines ── */}
-      {/* Vertical line continuing from above */}
+      {/* Branch connector lines */}
       <div
         className="absolute left-[7px] top-0 w-px"
         style={{
@@ -131,26 +108,18 @@ function Branch({ task, isLast, index }: { task: ParallelTaskInfo; isLast: boole
           opacity: 0.15,
         }}
       />
-      {/* Horizontal branch line */}
       <div
         className="absolute left-[7px] top-[14px] h-px"
-        style={{
-          width: '14px',
-          background: 'var(--color-warm)',
-          opacity: 0.15,
-        }}
+        style={{ width: '14px', background: 'var(--color-warm)', opacity: 0.15 }}
       />
 
-      {/* ── Branch content ── */}
-      <div className="pl-7 py-[6px]">
-        {/* Agent header line */}
-        <div className="flex items-center gap-1.5 mb-[3px]">
+      {/* Branch content */}
+      <div className="pl-7 py-[5px]">
+        {/* Line 1: Agent header */}
+        <div className="flex items-center gap-1.5">
           {/* Status dot */}
           <div className="relative flex-shrink-0">
-            <div
-              className="w-[6px] h-[6px] rounded-full"
-              style={{ backgroundColor: p.color }}
-            />
+            <div className="w-[6px] h-[6px] rounded-full" style={{ backgroundColor: p.color }} />
             {isRunning && (
               <div
                 className="absolute inset-[-2px] rounded-full animate-ping"
@@ -170,40 +139,38 @@ function Branch({ task, isLast, index }: { task: ParallelTaskInfo; isLast: boole
             {task.description}
           </span>
 
-          {/* Status + timer */}
+          {/* Timer + count */}
           <span className="flex items-center gap-1 text-[10px] text-muted-foreground/35 flex-shrink-0 tabular-nums font-mono">
             {isDone && <Check size={10} style={{ color: p.color }} />}
             {isError && <AlertTriangle size={10} className="text-destructive/60" />}
             {isRunning && <Clock size={9} className="opacity-50" />}
             {elapsed}
+            {toolCount > 0 && (
+              <span className="text-muted-foreground/20 ml-0.5">· {toolCount}</span>
+            )}
           </span>
         </div>
 
-        {/* Tool call strip — horizontal scrolling */}
-        {(visibleTools.length > 0 || isRunning) && (
-          <div
-            ref={scrollRef}
-            className="flex items-center gap-[6px] overflow-x-auto scrollbar-none text-muted-foreground/60"
-            style={{ maskImage: 'linear-gradient(to right, black 90%, transparent)' }}
-          >
-            {visibleTools.map((tc) => (
-              <ToolChip key={tc.id} tc={tc} accent={p.color} />
-            ))}
-            {isRunning && visibleTools.length === 0 && (
-              <span className="text-[10px] italic text-muted-foreground/30 flex items-center gap-1">
-                <Loader2 size={9} className="animate-spin" style={{ color: p.color }} />
-                initializing
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Summary on completion */}
-        {isDone && task.summary && (
-          <p className="mt-1 text-[10.5px] text-muted-foreground/40 line-clamp-1">
-            {task.summary}
-          </p>
-        )}
+        {/* Line 2: Latest tool call — live command log */}
+        <div className="h-[18px] mt-[2px] overflow-hidden">
+          {cmdText ? (
+            <p
+              key={latestTool?.id}
+              className="font-mono text-[10.5px] text-muted-foreground/40 truncate animate-fade-in"
+              style={isRunning && latestTool?.status === 'running' ? { color: p.color, opacity: 0.6 } : undefined}
+            >
+              {latestTool?.status === 'running' && (
+                <Loader2 size={9} className="inline animate-spin mr-1 align-[-1px]" />
+              )}
+              {cmdText}
+            </p>
+          ) : isRunning ? (
+            <p className="font-mono text-[10.5px] text-muted-foreground/25 italic animate-fade-in">
+              <Loader2 size={9} className="inline animate-spin mr-1 align-[-1px]" style={{ color: p.color }} />
+              starting…
+            </p>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -221,7 +188,7 @@ export function ParallelTaskView({ group }: { group: ParallelTaskGroup }) {
 
   return (
     <div className="my-2 select-none">
-      {/* ── Fork header ── */}
+      {/* Fork header */}
       <div className="flex items-center gap-2 mb-1 pl-1">
         <div className="flex items-center gap-[6px] text-[10.5px] text-muted-foreground/45">
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="opacity-60">
@@ -236,25 +203,17 @@ export function ParallelTaskView({ group }: { group: ParallelTaskGroup }) {
         </div>
       </div>
 
-      {/* ── Tree branches ── */}
+      {/* Tree branches */}
       <div className="relative ml-1">
         {tasks.map((task, i) => (
-          <Branch
-            key={task.id}
-            task={task}
-            isLast={i === tasks.length - 1}
-            index={i}
-          />
+          <Branch key={task.id} task={task} isLast={i === tasks.length - 1} index={i} />
         ))}
       </div>
 
-      {/* ── Converge line ── */}
+      {/* Converge line */}
       {allDone && (
         <div className="flex items-center gap-2 mt-1 ml-1 animate-fade-in">
-          <div
-            className="w-[7px] h-px flex-shrink-0"
-            style={{ background: 'var(--color-warm)', opacity: 0.15 }}
-          />
+          <div className="w-[7px] h-px flex-shrink-0" style={{ background: 'var(--color-warm)', opacity: 0.15 }} />
           <div className="flex-1 h-px bg-border/30" />
           <span className="text-[9px] text-muted-foreground/25 italic pr-1">converged</span>
           <div className="flex-1 h-px bg-border/30" />
