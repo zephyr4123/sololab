@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import Image from 'next/image';
-import { Send, Loader2, Square, Paperclip, X, FileText, CheckCircle } from 'lucide-react';
+import { Send, Loader2, Square, Paperclip, X, FileText, CheckCircle, Lightbulb } from 'lucide-react';
 import { StreamRenderer } from '@/components/shared/StreamRenderer';
 import { ResilientSSEClient } from '@/lib/sse-client';
 import { useIdeaSparkStore } from '@/stores/module-stores/ideaspark-store';
@@ -171,7 +170,9 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
       <div className="flex-1 overflow-y-auto px-2 py-3">
         {entries.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center text-center animate-fade-in">
-            <Image src="/logo.png" alt="SoloLab" width={56} height={56} className="mb-5 h-14 w-auto object-contain opacity-60" />
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--color-warm)]/10 border border-[var(--color-warm)]/20">
+              <Lightbulb className="h-7 w-7 text-[var(--color-warm)]" />
+            </div>
             <h3 className="mb-1.5 text-lg font-semibold tracking-tight" style={{ fontFamily: 'var(--font-display)' }}>
               IdeaSpark
             </h3>
