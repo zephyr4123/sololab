@@ -306,32 +306,11 @@ html {
   animation: thinking-dot-bounce 1.4s ease-in-out infinite;
 }
 
-/* ── Parallel Task View ── */
-
-.parallel-task-container {
-  container-type: inline-size;
+/* ─── Scrollbar hide utility ─── */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
-
-.task-lane {
-  animation: taskLaneEnter 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-@keyframes taskLaneEnter {
-  from {
-    opacity: 0;
-    transform: translateY(6px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-.task-lane-flash {
-  animation: laneFlash 0.8s ease-out both;
-}
-
-@keyframes laneFlash {
-  0% { opacity: 0.6; }
-  100% { opacity: 0; }
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }

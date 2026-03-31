@@ -93,16 +93,18 @@ export function CodeLabSidebar({ moduleId }: { moduleId: string }) {
             if (p.type === 'text' && p.text) {
               parts.push({ kind: 'text', content: p.text });
             } else if (p.type === 'tool') {
+              // Skip task tool parts — their results are in the parent's text summary
+              if (p.tool === 'task') continue;
               parts.push({
                 kind: 'tool',
                 toolCall: {
-                  id: p.id || `tc_${Date.now()}`,
+                  id: p.id || `tc_${Date.now()}_${Math.random().toString(36).slice(2,5)}`,
                   tool: p.tool || 'unknown',
                   input: p.state?.input || {},
                   output: p.state?.output || '',
                   status: 'completed',
                   title: p.state?.title || p.tool || 'unknown',
-                  timestamp: Date.now(),
+                  timestamp: p.state?.time?.start || Date.now(),
                 },
               });
             }

@@ -13,7 +13,7 @@ export interface CodeLabToolCall {
   tool: string;
   input: Record<string, unknown>;
   output?: string;
-  status: 'running' | 'completed' | 'error';
+  status: 'pending' | 'running' | 'completed' | 'error';
   title?: string;
   timestamp: number;
 }

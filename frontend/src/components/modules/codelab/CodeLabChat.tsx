@@ -265,7 +265,6 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
       },
 
       onParallelTaskTool(taskId, tool, status, title, input, output) {
-        // Find which group contains this task
         const s = useCodeLabStore.getState();
         const lastMsg = s.messages.at(-1);
         if (!lastMsg?.parts) return;
@@ -275,12 +274,13 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
           const task = part.group.tasks.find((t) => t.id === taskId);
           if (!task) continue;
 
+          // Merge: find any existing entry for this tool that isn't completed yet
           const existingTc = task.toolCalls.find(
-            (tc) => tc.tool === tool && tc.status === 'running'
+            (tc) => tc.tool === tool && (tc.status === 'running' || tc.status === 'pending')
           );
 
-          if (existingTc && status === 'completed') {
-            // Update existing running tool call
+          if (existingTc) {
+            // Update existing pending/running tool call in-place
             const msgs = [...s.messages];
             const last = msgs[msgs.length - 1];
             if (last?.role === 'assistant') {
@@ -289,7 +289,9 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
                 const tasks = p.group.tasks.map((t) => {
                   if (t.id !== taskId) return t;
                   const toolCalls = t.toolCalls.map((tc) =>
-                    tc.id === existingTc.id ? { ...tc, status: status as any, output: output || '', title } : tc
+                    tc.id === existingTc.id
+                      ? { ...tc, status: status as any, output: output || tc.output || '', title: title || tc.title, input: input || tc.input }
+                      : tc
                   );
                   return { ...t, toolCalls };
                 });
@@ -299,19 +301,24 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
               store.setMessages(msgs);
             }
           } else {
-            // Add new tool call
+            // Brand new tool call
             store.addToolCallToParallelTask(part.group.id, taskId, {
-              id: `ptc_${Date.now()}_${Math.random().toString(36).slice(2, 4)}`,
+              id: `ptc_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
               tool,
               input: input || {},
               output: output || '',
               status: (status as any) || 'running',
-              title,
+              title: title || tool,
               timestamp: Date.now(),
             });
           }
           break;
         }
+      },
+
+      onParallelTaskText() {
+        // Child agent text deltas — currently not displayed in the tree view
+        // (tool call activity is more informative than streaming text)
       },
 
       onParallelTaskDone(taskId, summary, _filesRead, _filesModified, errors, timedOut) {
