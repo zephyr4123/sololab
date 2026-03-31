@@ -168,7 +168,15 @@ export const useCodeLabStore = create<CodeLabState>((set, get) => ({
     set({ workingDirectory: dir, recentDirectories: recent.slice(0, 10), messages: [], files: [], sessionId: null, costUsd: 0 });
   },
 
-  leaveDirectory: () => set({ workingDirectory: null, messages: [], files: [], sessionId: null, activeToolCalls: [], costUsd: 0 }),
+  leaveDirectory: () => {
+    set({ workingDirectory: null, messages: [], files: [], sessionId: null, activeToolCalls: [], costUsd: 0 });
+    // Clear session-store to avoid session leak from previous project
+    try {
+      const { useSessionStore } = require('@/stores/session-store');
+      useSessionStore.getState().resetConversation();
+      useSessionStore.setState({ sessions: [] });
+    } catch {}
+  },
 
   removeRecentDirectory: (dir) => {
     const recent = get().recentDirectories.filter((d) => d !== dir);
