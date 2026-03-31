@@ -10,6 +10,7 @@ import PROMPT_GPT from "./prompt/gpt.txt"
 
 import PROMPT_CODEX from "./prompt/codex.txt"
 import PROMPT_TRINITY from "./prompt/trinity.txt"
+import PROMPT_KIMI from "./prompt/kimi.txt"
 import type { Provider } from "@/provider/provider"
 import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
@@ -27,6 +28,7 @@ export namespace SystemPrompt {
     }
     if (model.api.id.includes("gemini-")) return [PROMPT_GEMINI]
     if (model.api.id.includes("claude")) return [PROMPT_ANTHROPIC]
+    if (model.api.id.includes("kimi")) return [PROMPT_KIMI]
     if (model.api.id.toLowerCase().includes("trinity")) return [PROMPT_TRINITY]
     return [PROMPT_DEFAULT]
   }
