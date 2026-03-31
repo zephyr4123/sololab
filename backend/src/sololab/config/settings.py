@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     opencode_url: str = "http://localhost:3100"
     opencode_server_password: Optional[str] = None
     opencode_server_username: str = "opencode"
+    codelab_model: str = "moonshotai-cn/kimi-k2.5"
 
     # API 认证
     api_keys: Optional[str] = None  # 逗号分隔的 API Keys，为空则禁用认证

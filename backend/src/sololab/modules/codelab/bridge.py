@@ -24,6 +24,7 @@ class OpenCodeBridge:
         password: Optional[str] = None,
         timeout: int = 300,
         default_directory: Optional[str] = None,
+        default_model: Optional[str] = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._username = username
@@ -31,6 +32,7 @@ class OpenCodeBridge:
         self._timeout = aiohttp.ClientTimeout(total=timeout)
         self._session: Optional[aiohttp.ClientSession] = None
         self._default_directory = default_directory
+        self._default_model = default_model
 
     async def _get_session(self) -> aiohttp.ClientSession:
         """获取或创建 aiohttp 会话（懒初始化）。"""
@@ -137,15 +139,22 @@ class OpenCodeBridge:
 
         使用 prompt_async 端点发送消息，然后通过 event 端点监听响应事件。
         directory 参数必须传递，否则 OpenCode 会回退到 process.cwd()（容器内的引擎目录）。
+        注意：必须显式传入 model，否则 directory 上下文切换后 OpenCode 会选择错误的 provider。
         """
         http_session = await self._get_session()
 
         # 发送 prompt（异步模式 — OpenCode 需要 parts 数组格式）
+        # 显式指定 model 以避免 directory 上下文导致的 provider 错误解析
         params = self._dir_params(directory)
+        body: Dict[str, Any] = {"parts": [{"type": "text", "text": content}]}
+        if self._default_model:
+            provider_id, _, model_id = self._default_model.partition("/")
+            if provider_id and model_id:
+                body["model"] = {"providerID": provider_id, "modelID": model_id}
         async with http_session.post(
             f"{self._base_url}/session/{session_id}/prompt_async",
             params=params,
-            json={"parts": [{"type": "text", "text": content}]},
+            json=body,
         ) as resp:
             resp.raise_for_status()
 

@@ -48,8 +48,8 @@ class CodeLabModule(ModuleBase):
                     },
                     "default_model": {
                         "type": "string",
-                        "default": "anthropic/claude-sonnet-4-20250514",
-                        "description": "Default LLM model for coding tasks",
+                        "default": "moonshot/kimi-k2.5",
+                        "description": "Default LLM model (configured in opencode/opencode.jsonc)",
                     },
                     "timeout_seconds": {
                         "type": "integer",
@@ -67,12 +67,15 @@ class CodeLabModule(ModuleBase):
         opencode_password = getattr(settings, "opencode_server_password", None) or ""
         opencode_username = getattr(settings, "opencode_server_username", None) or "opencode"
 
+        codelab_model = getattr(settings, "codelab_model", None) or "moonshotai-cn/kimi-k2.5"
+
         self._bridge = OpenCodeBridge(
             base_url=opencode_url,
             username=opencode_username,
             password=opencode_password if opencode_password else None,
             timeout=300,
             default_directory=None,
+            default_model=codelab_model,
         )
         logger.info("CodeLab 模块已加载，OpenCode Server: %s", opencode_url)
 
