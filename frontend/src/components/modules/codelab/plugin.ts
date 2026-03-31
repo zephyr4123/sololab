@@ -8,15 +8,11 @@ import { useTaskStore } from '@/stores/task-store';
 import type { StreamHandlers } from '@/types/stream';
 
 import { CodeLabChat } from './CodeLabChat';
-import { FileExplorer } from './FileExplorer';
-import { TerminalPanel } from './TerminalPanel';
 import { CodeLabSidebar } from './CodeLabSidebar';
 
 registerPlugin('codelab', {
   tabs: [
     { id: 'chat', label: '对话', icon: 'MessageSquare', component: CodeLabChat },
-    { id: 'files', label: '文件', icon: 'FolderOpen', component: FileExplorer },
-    { id: 'terminal', label: '终端', icon: 'Terminal', component: TerminalPanel },
   ],
 
   sidebar: { component: CodeLabSidebar },
