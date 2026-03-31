@@ -237,31 +237,35 @@ export function ProjectSelector() {
                 )}
 
                 {entries.map((entry) => (
-                  <button
+                  <div
                     key={entry.path}
                     className="group flex w-full items-center gap-3 border-b border-border/20 last:border-0 px-4 py-2.5 text-left transition-colors hover:bg-foreground/[0.03]"
-                    onClick={() => entry.isProject ? selectProject(entry.path) : browse(entry.path)}
                   >
-                    {entry.isProject ? (
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[var(--color-warm)]/10">
-                        <GitBranch className="h-3.5 w-3.5 text-[var(--color-warm)]" />
-                      </div>
-                    ) : (
-                      <Folder className="h-4 w-4 text-muted-foreground/40 shrink-0 ml-1.5 mr-0.5" />
-                    )}
-
-                    <span className={`flex-1 truncate text-sm ${entry.isProject ? 'font-medium' : 'text-muted-foreground'}`}>
-                      {entry.name}
-                    </span>
-
-                    {entry.isProject ? (
-                      <span className="shrink-0 rounded-full bg-[var(--color-warm)]/8 px-2 py-0.5 text-[9px] font-medium text-[var(--color-warm)] uppercase tracking-wider">
-                        Project
+                    {/* Click folder icon / name area → browse into directory */}
+                    <button
+                      className="flex flex-1 items-center gap-3 min-w-0"
+                      onClick={() => browse(entry.path)}
+                    >
+                      {entry.isProject ? (
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[var(--color-warm)]/10">
+                          <GitBranch className="h-3.5 w-3.5 text-[var(--color-warm)]" />
+                        </div>
+                      ) : (
+                        <Folder className="h-4 w-4 text-muted-foreground/40 shrink-0 ml-1.5 mr-0.5" />
+                      )}
+                      <span className={`flex-1 truncate text-sm ${entry.isProject ? 'font-medium' : 'text-muted-foreground'}`}>
+                        {entry.name}
                       </span>
-                    ) : (
-                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/20 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    )}
-                  </button>
+                    </button>
+
+                    {/* Select button → choose this directory as workspace */}
+                    <button
+                      className="shrink-0 rounded-full bg-[var(--color-warm)]/8 px-2.5 py-0.5 text-[9px] font-medium text-[var(--color-warm)] uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[var(--color-warm)]/15"
+                      onClick={() => selectProject(entry.path)}
+                    >
+                      Select
+                    </button>
+                  </div>
                 ))}
               </div>
             )}
