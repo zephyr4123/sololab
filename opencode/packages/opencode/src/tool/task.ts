@@ -11,6 +11,9 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { Permission } from "@/permission"
+import { Worktree } from "../worktree"
+import { Instance } from "../project/instance"
+import { execSync } from "child_process"
 
 export interface SubtaskResult {
   summary: string
@@ -141,6 +144,13 @@ const parameters = z.object({
     )
     .optional(),
   command: z.string().describe("The command that triggered this task").optional(),
+  isolation: z
+    .enum(["none", "worktree"])
+    .describe(
+      "Isolation mode. 'worktree' creates a temporary git worktree so the agent works on an isolated copy of the repo. Changes are captured as a diff and the worktree is cleaned up automatically.",
+    )
+    .default("none")
+    .optional(),
 })
 
 export const TaskTool = Tool.define("task", async (ctx) => {
@@ -245,7 +255,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
       const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
 
-      const result = await SessionPrompt.prompt({
+      const promptArgs = {
         messageID,
         sessionID: session.id,
         model: {
@@ -259,7 +269,43 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
         },
         parts: promptParts,
-      })
+      }
+
+      // Worktree isolation: create temporary git worktree for isolated execution
+      let result: MessageV2.WithParts
+      let worktreeDiff = ""
+      let worktreeInfo: Worktree.Info | undefined
+
+      if (params.isolation === "worktree") {
+        try {
+          worktreeInfo = await Worktree.create({ name: `task-${Date.now().toString(36)}` })
+        } catch (e) {
+          // Worktree creation may fail (not a git repo, etc.) — fall back to normal execution
+          worktreeInfo = undefined
+        }
+      }
+
+      if (worktreeInfo) {
+        try {
+          // Execute subtask within the isolated worktree context
+          result = (await Instance.provide({
+            directory: worktreeInfo.directory,
+            fn: () => SessionPrompt.prompt(promptArgs),
+          })) as unknown as MessageV2.WithParts
+          // Capture diff before cleanup
+          try {
+            worktreeDiff = execSync("git diff HEAD", {
+              cwd: worktreeInfo.directory,
+              encoding: "utf-8",
+              maxBuffer: 2 * 1024 * 1024,
+            })
+          } catch {}
+        } finally {
+          await Worktree.remove({ directory: worktreeInfo.directory }).catch(() => {})
+        }
+      } else {
+        result = await SessionPrompt.prompt(promptArgs)
+      }
 
       // Extract structured result from subtask
       let allMessages: MessageV2.WithParts[] | undefined
@@ -270,7 +316,12 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       }
 
       const structured = extractSubtaskResult(result, allMessages)
-      const output = formatSubtaskResult(structured, session.id)
+      let output = formatSubtaskResult(structured, session.id)
+
+      // Append worktree diff if isolation was used
+      if (worktreeDiff) {
+        output += "\n\n<worktree_diff>\n" + worktreeDiff.slice(0, 50000) + "\n</worktree_diff>"
+      }
 
       return {
         title: params.description,
@@ -278,6 +329,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           sessionId: session.id,
           model,
           structured,
+          isolation: worktreeInfo ? "worktree" : "none",
+          worktreeBranch: worktreeInfo?.branch,
         },
         output,
       }

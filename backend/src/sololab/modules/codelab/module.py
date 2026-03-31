@@ -295,6 +295,17 @@ class CodeLabModule(ModuleBase):
                 yield {"type": "cancelled", "session_id": oc_sid}
                 return
 
+            # 过滤子 session 事件：子 agent（task 工具）的事件有不同的 sessionID，
+            # 不应泄漏到父会话的 SSE 流中。只保留当前会话的事件。
+            evt_sid = event.get("properties", {}).get("sessionID", "")
+            if evt_sid and evt_sid != oc_sid:
+                # 但仍然累积子 session 的 cost
+                if event.get("type") == "message.updated":
+                    info = event.get("properties", {}).get("info", {})
+                    if info.get("finish") and info.get("role") == "assistant":
+                        total_cost += info.get("cost", 0)
+                continue
+
             # 从 message.updated 累积 cost（每条 assistant 消息完成时有 cost）
             if event.get("type") == "message.updated":
                 info = event.get("properties", {}).get("info", {})
