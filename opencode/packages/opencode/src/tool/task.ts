@@ -14,6 +14,15 @@ import { Permission } from "@/permission"
 import { Worktree } from "../worktree"
 import { Instance } from "../project/instance"
 import { execSync } from "child_process"
+import { Log } from "@/util/log"
+
+const log = Log.create({ service: "tool.task" })
+
+/** Maximum summary length in characters for subtask results */
+const MAX_SUMMARY_LENGTH = 3000
+
+/** Default timeout for subtask execution (5 minutes) */
+const SUBTASK_TIMEOUT_MS = 5 * 60 * 1000
 
 export interface SubtaskResult {
   summary: string
@@ -84,8 +93,26 @@ export function extractSubtaskResult(resultMsg: MessageV2.WithParts, allMessages
     decisions.push(match[2].trim())
   }
 
+  // Truncate at a natural boundary (sentence/paragraph) rather than mid-word
+  let summary = lastText
+  if (summary.length > MAX_SUMMARY_LENGTH) {
+    summary = summary.slice(0, MAX_SUMMARY_LENGTH)
+    // Try to break at last sentence-ending punctuation (。.!?！？\n)
+    const lastBreak = Math.max(
+      summary.lastIndexOf("\n"),
+      summary.lastIndexOf("。"),
+      summary.lastIndexOf(". "),
+      summary.lastIndexOf("！"),
+      summary.lastIndexOf("？"),
+    )
+    if (lastBreak > MAX_SUMMARY_LENGTH * 0.5) {
+      summary = summary.slice(0, lastBreak + 1)
+    }
+    summary += "\n\n...(truncated)"
+  }
+
   return {
-    summary: lastText.slice(0, 500),
+    summary,
     findings,
     filesRead: [...filesRead],
     filesModified: [...filesModified],
@@ -272,9 +299,10 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       }
 
       // Worktree isolation: create temporary git worktree for isolated execution
-      let result: MessageV2.WithParts
+      let result: MessageV2.WithParts | undefined
       let worktreeDiff = ""
       let worktreeInfo: Worktree.Info | undefined
+      let timedOut = false
 
       if (params.isolation === "worktree") {
         try {
@@ -285,37 +313,83 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         }
       }
 
-      if (worktreeInfo) {
-        try {
-          // Execute subtask within the isolated worktree context
-          result = (await Instance.provide({
-            directory: worktreeInfo.directory,
-            fn: () => SessionPrompt.prompt(promptArgs),
-          })) as unknown as MessageV2.WithParts
-          // Capture diff before cleanup
-          try {
-            worktreeDiff = execSync("git diff HEAD", {
-              cwd: worktreeInfo.directory,
-              encoding: "utf-8",
-              maxBuffer: 2 * 1024 * 1024,
+      // Wrap session prompt with timeout to prevent infinite hangs
+      async function promptWithTimeout(fn: () => Promise<MessageV2.WithParts>): Promise<MessageV2.WithParts> {
+        let timeoutHandle: ReturnType<typeof setTimeout> | undefined
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timeoutHandle = setTimeout(() => {
+            timedOut = true
+            log.warn("subtask timeout", {
+              sessionID: session.id,
+              agent: agent.name,
+              description: params.description,
+              timeoutMs: SUBTASK_TIMEOUT_MS,
             })
-          } catch {}
+            cancel() // Cancel the child session
+            reject(new Error(`Subtask timed out after ${SUBTASK_TIMEOUT_MS / 60000} minutes`))
+          }, SUBTASK_TIMEOUT_MS)
+        })
+        // Clear timeout if parent aborts first
+        const clearOnAbort = () => { if (timeoutHandle) clearTimeout(timeoutHandle) }
+        ctx.abort.addEventListener("abort", clearOnAbort)
+        try {
+          return await Promise.race([fn(), timeoutPromise])
         } finally {
-          await Worktree.remove({ directory: worktreeInfo.directory }).catch(() => {})
+          if (timeoutHandle) clearTimeout(timeoutHandle)
+          ctx.abort.removeEventListener("abort", clearOnAbort)
         }
-      } else {
-        result = await SessionPrompt.prompt(promptArgs)
       }
 
-      // Extract structured result from subtask
+      try {
+        if (worktreeInfo) {
+          try {
+            // Execute subtask within the isolated worktree context
+            result = (await promptWithTimeout(() =>
+              Instance.provide({
+                directory: worktreeInfo!.directory,
+                fn: () => SessionPrompt.prompt(promptArgs),
+              }) as Promise<unknown> as Promise<MessageV2.WithParts>
+            ))
+            // Capture diff before cleanup
+            try {
+              worktreeDiff = execSync("git diff HEAD", {
+                cwd: worktreeInfo.directory,
+                encoding: "utf-8",
+                maxBuffer: 2 * 1024 * 1024,
+              })
+            } catch {}
+          } finally {
+            await Worktree.remove({ directory: worktreeInfo.directory }).catch(() => {})
+          }
+        } else {
+          result = await promptWithTimeout(() => SessionPrompt.prompt(promptArgs))
+        }
+      } catch (e: any) {
+        if (!timedOut) throw e
+        // On timeout, construct a minimal result from the last message in the child session
+        log.warn("subtask timed out, extracting partial results", { sessionID: session.id })
+      }
+
+      // Extract structured result from subtask (also works for timeout — extracts partial results)
       let allMessages: MessageV2.WithParts[] | undefined
       try {
         allMessages = await Session.messages({ sessionID: session.id }) ?? undefined
+        // If timed out and no result, use the last assistant message as fallback
+        if (!result && allMessages?.length) {
+          result = allMessages[allMessages.length - 1]
+        }
       } catch {
         // Fallback: use only the result message
       }
+      // If still no result, create an empty one
+      if (!result) {
+        result = { info: { role: "assistant" } as any, parts: [] }
+      }
 
-      const structured = extractSubtaskResult(result, allMessages)
+      const structured = extractSubtaskResult(result!, allMessages)
+      if (timedOut) {
+        structured.errors.push(`Subtask timed out after ${SUBTASK_TIMEOUT_MS / 60000} minutes — partial results returned`)
+      }
       let output = formatSubtaskResult(structured, session.id)
 
       // Append worktree diff if isolation was used
@@ -331,8 +405,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           structured,
           isolation: worktreeInfo ? "worktree" : "none",
           worktreeBranch: worktreeInfo?.branch,
-          // Skip global truncation — task output is already a structured summary
-          // (formatSubtaskResult caps summary at 500 chars, worktree diff at 50KB)
+          timedOut,
+          // Skip global truncation — task output is already a structured summary (max 3000 char summary)
           truncated: false,
         },
         output,

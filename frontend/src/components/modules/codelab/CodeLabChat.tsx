@@ -3,9 +3,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Square, Bot, User, FolderOpen, ArrowLeft } from 'lucide-react';
 import { useCodeLabStore } from '@/stores/module-stores/codelab-store';
-import type { MessagePart } from '@/stores/module-stores/codelab-store';
+import type { MessagePart, ParallelTaskGroup } from '@/stores/module-stores/codelab-store';
 import { MarkdownViewer } from '@/components/shared/MarkdownViewer';
 import { ToolCallCard } from './ToolCallCard';
+import { ParallelTaskView } from './ParallelTaskView';
 import { PermissionDialog } from './PermissionDialog';
 import { ProjectSelector } from './ProjectSelector';
 import { ResilientSSEClient } from '@/lib/sse-client';
@@ -122,6 +123,8 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
       onTool(event) {
         const ev = event as any;
         const toolName = ev.tool || 'unknown';
+        // task 工具由 parallel_task_* 事件处理，不在此创建 ToolCallCard
+        if (toolName === 'task') return;
         const status = ev.status || 'running';
         const title = ev.title || toolName;
         const toolInput = ev.input || {};
@@ -200,6 +203,143 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
         store.appendToLastMessage(`\n\n> **Error**: ${msg}`);
         store.setStreaming(false);
         store.setAgent(store.currentAgent, 'idle');
+      },
+
+      /* ── Parallel Task Handlers ── */
+      onParallelTaskStart(taskId, agent, description) {
+        // Find or create a parallel task group in the current message
+        const s = useCodeLabStore.getState();
+        const lastMsg = s.messages.at(-1);
+        const existingGroup = lastMsg?.parts?.find(
+          (p): p is MessagePart & { kind: 'parallel-tasks' } =>
+            p.kind === 'parallel-tasks' && p.group.status === 'running'
+        );
+
+        if (existingGroup) {
+          // Add to existing running group
+          const updated: ParallelTaskGroup = {
+            ...existingGroup.group,
+            tasks: [...existingGroup.group.tasks, {
+              id: taskId,
+              sessionId: taskId,
+              agent,
+              description,
+              status: 'running',
+              startTime: Date.now(),
+              toolCalls: [],
+            }],
+          };
+          // Replace the group in the message parts
+          store.addParallelTaskGroup(updated); // This won't duplicate — see below
+          // Actually we need to update in-place. Use a targeted approach:
+          const msgs = [...s.messages];
+          const last = msgs[msgs.length - 1];
+          if (last?.role === 'assistant') {
+            const parts = (last.parts || []).map((p) =>
+              p.kind === 'parallel-tasks' && p.group.id === existingGroup.group.id
+                ? { ...p, group: updated }
+                : p
+            );
+            msgs[msgs.length - 1] = { ...last, parts };
+            store.setMessages(msgs);
+          }
+        } else {
+          // Create new group
+          const groupId = `ptg_${Date.now()}`;
+          store.addParallelTaskGroup({
+            id: groupId,
+            parentToolCallId: '',
+            startTime: Date.now(),
+            status: 'running',
+            tasks: [{
+              id: taskId,
+              sessionId: taskId,
+              agent,
+              description,
+              status: 'running',
+              startTime: Date.now(),
+              toolCalls: [],
+            }],
+          });
+        }
+      },
+
+      onParallelTaskTool(taskId, tool, status, title, input, output) {
+        // Find which group contains this task
+        const s = useCodeLabStore.getState();
+        const lastMsg = s.messages.at(-1);
+        if (!lastMsg?.parts) return;
+
+        for (const part of lastMsg.parts) {
+          if (part.kind !== 'parallel-tasks') continue;
+          const task = part.group.tasks.find((t) => t.id === taskId);
+          if (!task) continue;
+
+          const existingTc = task.toolCalls.find(
+            (tc) => tc.tool === tool && tc.status === 'running'
+          );
+
+          if (existingTc && status === 'completed') {
+            // Update existing running tool call
+            const msgs = [...s.messages];
+            const last = msgs[msgs.length - 1];
+            if (last?.role === 'assistant') {
+              const parts = (last.parts || []).map((p) => {
+                if (p.kind !== 'parallel-tasks' || p.group.id !== part.group.id) return p;
+                const tasks = p.group.tasks.map((t) => {
+                  if (t.id !== taskId) return t;
+                  const toolCalls = t.toolCalls.map((tc) =>
+                    tc.id === existingTc.id ? { ...tc, status: status as any, output: output || '', title } : tc
+                  );
+                  return { ...t, toolCalls };
+                });
+                return { ...p, group: { ...p.group, tasks } };
+              });
+              msgs[msgs.length - 1] = { ...last, parts };
+              store.setMessages(msgs);
+            }
+          } else {
+            // Add new tool call
+            store.addToolCallToParallelTask(part.group.id, taskId, {
+              id: `ptc_${Date.now()}_${Math.random().toString(36).slice(2, 4)}`,
+              tool,
+              input: input || {},
+              output: output || '',
+              status: (status as any) || 'running',
+              title,
+              timestamp: Date.now(),
+            });
+          }
+          break;
+        }
+      },
+
+      onParallelTaskDone(taskId, summary, _filesRead, _filesModified, errors, timedOut) {
+        const s = useCodeLabStore.getState();
+        const lastMsg = s.messages.at(-1);
+        if (!lastMsg?.parts) return;
+
+        for (const part of lastMsg.parts) {
+          if (part.kind !== 'parallel-tasks') continue;
+          const task = part.group.tasks.find((t) => t.id === taskId);
+          if (!task) continue;
+
+          const finalStatus = timedOut ? 'timeout' : (errors?.length ? 'error' : 'completed');
+          store.updateParallelTask(part.group.id, taskId, {
+            status: finalStatus as any,
+            endTime: Date.now(),
+            summary: summary || (errors?.length ? errors.join('; ') : ''),
+          });
+
+          // Check if all tasks in group are done
+          const allDone = part.group.tasks.every(
+            (t) => t.id === taskId || t.status !== 'running'
+          );
+          if (allDone) {
+            store.finalizeParallelTaskGroup(part.group.id);
+          }
+          break;
+        }
       },
     }, store.sessionId ?? undefined);
   }, [input, store, moduleId]);
@@ -298,6 +438,8 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
                         <div key={`t${i}`} className="text-sm prose prose-sm max-w-none py-0.5">
                           <MarkdownViewer content={part.content} compact />
                         </div>
+                      ) : part.kind === 'parallel-tasks' ? (
+                        <ParallelTaskView key={`pt${i}`} group={part.group} />
                       ) : (
                         <ToolCallCard key={part.toolCall.id} toolCall={part.toolCall} />
                       )

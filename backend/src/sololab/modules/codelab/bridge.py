@@ -167,13 +167,24 @@ class OpenCodeBridge:
         session_id: str,
         directory: Optional[str] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        """监听会话的 SSE 事件流。"""
+        """监听会话的 SSE 事件流。
+
+        安全机制：
+        - 单次 readany() 超时 60 秒（防止心跳丢失后永久阻塞）
+        - 总流超时 10 分钟（防止子 session 无限运行导致 API 持续计费）
+        """
+        import time
+
+        MAX_STREAM_SECONDS = 600  # 10 分钟总超时
+        READ_TIMEOUT = 60  # 单次读取超时（OpenCode 心跳间隔 10s，60s 足够容错）
+
         http_session = await self._get_session()
         params = self._dir_params(directory)
         url = f"{self._base_url}/event"
         if params:
             qs = "&".join(f"{k}={v}" for k, v in params.items())
             url = f"{url}?{qs}"
+        stream_start = time.monotonic()
         try:
             async with http_session.get(url, timeout=aiohttp.ClientTimeout(total=0)) as resp:
                 resp.raise_for_status()
@@ -181,7 +192,20 @@ class OpenCodeBridge:
                 # 使用 readany() 而非 async for（后者调用 readline()，单行限制 128KB）。
                 # OpenCode 的工具输出（如写入整个文件）可超 128KB，readany() 无此限制。
                 while not resp.content.at_eof():
-                    raw = await resp.content.readany()
+                    # 总流超时检查
+                    if time.monotonic() - stream_start > MAX_STREAM_SECONDS:
+                        logger.warning("SSE 流总超时 (%ds)，强制关闭: session=%s", MAX_STREAM_SECONDS, session_id)
+                        yield {"type": "error", "error": f"Stream timeout after {MAX_STREAM_SECONDS}s"}
+                        return
+
+                    try:
+                        raw = await asyncio.wait_for(resp.content.readany(), timeout=READ_TIMEOUT)
+                    except asyncio.TimeoutError:
+                        # 心跳超时 — OpenCode 每 10s 发一次，60s 没收到说明连接断了
+                        logger.warning("SSE 读取超时 (%ds)，连接可能断开: session=%s", READ_TIMEOUT, session_id)
+                        yield {"type": "error", "error": "SSE read timeout"}
+                        return
+
                     if not raw:
                         continue
                     buffer += raw.decode("utf-8", errors="replace")

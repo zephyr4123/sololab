@@ -25,9 +25,32 @@ export interface CodeLabPermission {
   status: 'pending' | 'approved' | 'denied';
 }
 
+/* ── Parallel Task Types ── */
+
+export interface ParallelTaskInfo {
+  id: string;
+  sessionId: string;
+  agent: string;
+  description: string;
+  status: 'pending' | 'running' | 'completed' | 'error' | 'timeout';
+  startTime: number;
+  endTime?: number;
+  toolCalls: CodeLabToolCall[];
+  summary?: string;
+}
+
+export interface ParallelTaskGroup {
+  id: string;
+  parentToolCallId: string;
+  tasks: ParallelTaskInfo[];
+  startTime: number;
+  status: 'running' | 'completed' | 'partial';
+}
+
 export type MessagePart =
   | { kind: 'text'; content: string }
-  | { kind: 'tool'; toolCall: CodeLabToolCall };
+  | { kind: 'tool'; toolCall: CodeLabToolCall }
+  | { kind: 'parallel-tasks'; group: ParallelTaskGroup };
 
 export interface CodeLabMessage {
   id: string;
@@ -87,6 +110,12 @@ interface CodeLabState {
   addToolCallToLastMessage: (tc: CodeLabToolCall) => void;
   updateToolCallInLastMessage: (id: string, update: Partial<CodeLabToolCall>) => void;
   finalizeLastMessageToolCalls: () => void;
+
+  // Parallel task management
+  addParallelTaskGroup: (group: ParallelTaskGroup) => void;
+  addToolCallToParallelTask: (groupId: string, taskId: string, tc: CodeLabToolCall) => void;
+  updateParallelTask: (groupId: string, taskId: string, update: Partial<ParallelTaskInfo>) => void;
+  finalizeParallelTaskGroup: (groupId: string) => void;
   setPendingPermission: (p: CodeLabPermission | null) => void;
   setAgent: (name: string, status: CodeLabState['agentStatus']) => void;
   setCostUsd: (v: number) => void;
@@ -222,6 +251,70 @@ export const useCodeLabStore = create<CodeLabState>((set, get) => ({
         );
         const toolCalls = (last.toolCalls || []).map(finalize);
         msgs[msgs.length - 1] = { ...last, parts, toolCalls };
+      }
+      return { messages: msgs };
+    }),
+
+  addParallelTaskGroup: (group) =>
+    set((s) => {
+      const msgs = [...s.messages];
+      const last = msgs[msgs.length - 1];
+      if (last?.role === 'assistant') {
+        const parts = [...(last.parts || [])];
+        parts.push({ kind: 'parallel-tasks', group });
+        msgs[msgs.length - 1] = { ...last, parts };
+      }
+      return { messages: msgs };
+    }),
+
+  addToolCallToParallelTask: (groupId, taskId, tc) =>
+    set((s) => {
+      const msgs = [...s.messages];
+      const last = msgs[msgs.length - 1];
+      if (last?.role === 'assistant') {
+        const parts = (last.parts || []).map((p) => {
+          if (p.kind !== 'parallel-tasks' || p.group.id !== groupId) return p;
+          const tasks = p.group.tasks.map((t) =>
+            t.id === taskId ? { ...t, toolCalls: [...t.toolCalls, tc] } : t
+          );
+          return { ...p, group: { ...p.group, tasks } };
+        });
+        msgs[msgs.length - 1] = { ...last, parts };
+      }
+      return { messages: msgs };
+    }),
+
+  updateParallelTask: (groupId, taskId, update) =>
+    set((s) => {
+      const msgs = [...s.messages];
+      const last = msgs[msgs.length - 1];
+      if (last?.role === 'assistant') {
+        const parts = (last.parts || []).map((p) => {
+          if (p.kind !== 'parallel-tasks' || p.group.id !== groupId) return p;
+          const tasks = p.group.tasks.map((t) =>
+            t.id === taskId ? { ...t, ...update } : t
+          );
+          return { ...p, group: { ...p.group, tasks } };
+        });
+        msgs[msgs.length - 1] = { ...last, parts };
+      }
+      return { messages: msgs };
+    }),
+
+  finalizeParallelTaskGroup: (groupId) =>
+    set((s) => {
+      const msgs = [...s.messages];
+      const last = msgs[msgs.length - 1];
+      if (last?.role === 'assistant') {
+        const parts = (last.parts || []).map((p) => {
+          if (p.kind !== 'parallel-tasks' || p.group.id !== groupId) return p;
+          const tasks = p.group.tasks.map((t) =>
+            t.status === 'running' ? { ...t, status: 'completed' as const, endTime: Date.now() } : t
+          );
+          const allDone = tasks.every((t) => t.status !== 'running');
+          return { ...p, group: { ...p.group, tasks, status: allDone ? 'completed' as const : 'partial' as const } };
+        });
+        msgs[msgs.length - 1] = { ...last, parts };
       }
       return { messages: msgs };
     }),

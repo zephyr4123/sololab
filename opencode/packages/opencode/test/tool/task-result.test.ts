@@ -188,6 +188,44 @@ describe("extractSubtaskResult", () => {
     const result = extractSubtaskResult(msgs[1], msgs)
     expect(result.filesModified.filter((f) => f === "/src/index.ts").length).toBe(1)
   })
+
+  test("truncates long summary at natural boundary", () => {
+    // Create a text longer than 3000 chars with sentence boundaries
+    const sentences = Array.from({ length: 100 }, (_, i) => `This is sentence number ${i + 1} of the analysis report。`).join("\n")
+    expect(sentences.length).toBeGreaterThan(3000)
+
+    const msg = mockMessage([{ type: "text", text: sentences }])
+    const result = extractSubtaskResult(msg)
+
+    // Should be truncated
+    expect(result.summary.length).toBeLessThan(sentences.length)
+    expect(result.summary).toContain("...(truncated)")
+    // Should break at a sentence boundary (。) or newline
+    const beforeMarker = result.summary.split("\n\n...(truncated)")[0]
+    expect(beforeMarker.endsWith("。") || beforeMarker.endsWith("\n")).toBe(true)
+  })
+
+  test("does not truncate summary under 3000 chars", () => {
+    const text = "A short analysis result that fits well within the limit."
+    const msg = mockMessage([{ type: "text", text }])
+    const result = extractSubtaskResult(msg)
+
+    expect(result.summary).toBe(text)
+    expect(result.summary).not.toContain("...(truncated)")
+  })
+
+  test("truncates Chinese text at sentence boundary", () => {
+    // Chinese text with 。as sentence delimiter
+    const text = Array.from({ length: 200 }, (_, i) => `这是第${i + 1}个分析结论，包含一些重要的发现。`).join("")
+    expect(text.length).toBeGreaterThan(3000)
+
+    const msg = mockMessage([{ type: "text", text }])
+    const result = extractSubtaskResult(msg)
+
+    expect(result.summary).toContain("...(truncated)")
+    const beforeMarker = result.summary.split("\n\n...(truncated)")[0]
+    expect(beforeMarker.endsWith("。")).toBe(true)
+  })
 })
 
 describe("formatSubtaskResult", () => {

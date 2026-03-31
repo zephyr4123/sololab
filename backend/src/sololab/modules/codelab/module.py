@@ -292,28 +292,129 @@ class CodeLabModule(ModuleBase):
         # 流式接收 Agent 响应，翻译 OpenCode 原生事件为前端格式
         done_sent = False
         total_cost = 0.0
-        async for event in self._bridge.send_message(oc_sid, request.input, directory=directory):
-            if ctx.cancel_event and ctx.cancel_event.is_set():
+
+        # ── 子 session 并行任务追踪 ──
+        # 时序问题：子 session 事件（glob/read/grep）在父 session 的 task tool
+        # metadata 更新（包含 child_sid）之前就开始到达。
+        # 解决方案：
+        # 1. 所有非父 session 的事件都缓存到 pending_child_events[evt_sid]
+        # 2. 当父 session 的 task tool running 事件携带 child_sid 时，
+        #    注册追踪并 flush 缓存的事件
+        # 3. 后续到达的已追踪子 session 事件直接转发
+        child_sessions: dict[str, dict] = {}  # child_sid → {agent, description}
+        pending_child_events: dict[str, list] = {}  # unknown_sid → [events]
+
+        async def _abort_all():
+            """Abort 父 session + 所有已追踪子 session，防止 API 持续计费。"""
+            for csid in list(child_sessions.keys()):
+                try:
+                    await self._bridge.abort_session(csid)
+                except Exception:
+                    pass
+            try:
                 await self._bridge.abort_session(oc_sid)
+            except Exception:
+                pass
+
+        try:
+          async for event in self._bridge.send_message(oc_sid, request.input, directory=directory):
+            if ctx.cancel_event and ctx.cancel_event.is_set():
+                await _abort_all()
                 yield {"type": "cancelled", "session_id": oc_sid}
                 return
 
-            # 过滤子 session 事件：子 agent（task 工具）的事件有不同的 sessionID，
-            # 不应泄漏到父会话的 SSE 流中。只保留当前会话的事件。
             evt_sid = event.get("properties", {}).get("sessionID", "")
+            etype = event.get("type", "")
+            props = event.get("properties", {})
+
+            # ── 子 session 事件处理 ──
             if evt_sid and evt_sid != oc_sid:
-                # 但仍然累积子 session 的 cost
-                if event.get("type") == "message.updated":
-                    info = event.get("properties", {}).get("info", {})
+                # 累积子 session 的 cost
+                if etype == "message.updated":
+                    info = props.get("info", {})
                     if info.get("finish") and info.get("role") == "assistant":
                         total_cost += info.get("cost", 0)
+
+                if evt_sid in child_sessions:
+                    # 已追踪 → 直接转发
+                    child_event = self._translate_child_event(event, evt_sid)
+                    if child_event:
+                        yield child_event
+                else:
+                    # 未追踪 → 缓存（等待父 session 的 metadata 注册）
+                    if evt_sid not in pending_child_events:
+                        pending_child_events[evt_sid] = []
+                    pending_child_events[evt_sid].append(event)
                 continue
 
-            # 从 message.updated 累积 cost（每条 assistant 消息完成时有 cost）
-            if event.get("type") == "message.updated":
-                info = event.get("properties", {}).get("info", {})
+            # ── 父 session 事件 ──
+
+            # 累积 cost
+            if etype == "message.updated":
+                info = props.get("info", {})
                 if info.get("finish") and info.get("role") == "assistant":
                     total_cost += info.get("cost", 0)
+
+            # 检测 task 工具的状态变化，管理子 session 生命周期
+            if etype == "message.part.updated":
+                part = props.get("part", {})
+                if part.get("type") == "tool" and part.get("tool") == "task":
+                    state = part.get("state", {})
+                    metadata = state.get("metadata") or {}
+                    child_sid = metadata.get("sessionId", "")
+                    status = state.get("status", "")
+                    tool_input = state.get("input", {})
+
+                    if status == "running" and child_sid and child_sid not in child_sessions:
+                        # ── 新子 agent 注册 ──
+                        agent_type = tool_input.get("subagent_type", "explore")
+                        description = tool_input.get("description", "")
+                        child_sessions[child_sid] = {
+                            "agent": agent_type,
+                            "description": description,
+                        }
+                        yield {
+                            "type": "parallel_task_start",
+                            "task_id": child_sid,
+                            "agent": agent_type,
+                            "description": description,
+                        }
+
+                        # ── Flush 缓存的子 session 事件 ──
+                        buffered = pending_child_events.pop(child_sid, [])
+                        for buffered_event in buffered:
+                            child_event = self._translate_child_event(buffered_event, child_sid)
+                            if child_event:
+                                yield child_event
+
+                    elif status == "completed" and child_sid and child_sid in child_sessions:
+                        structured = metadata.get("structured", {})
+                        yield {
+                            "type": "parallel_task_done",
+                            "task_id": child_sid,
+                            "summary": structured.get("summary", ""),
+                            "files_read": structured.get("filesRead", []),
+                            "files_modified": structured.get("filesModified", []),
+                            "errors": structured.get("errors", []),
+                            "timed_out": metadata.get("timedOut", False),
+                        }
+                        child_sessions.pop(child_sid, None)
+                        pending_child_events.pop(child_sid, None)
+
+                    elif status == "error" and child_sid and child_sid in child_sessions:
+                        error_msg = state.get("error", "Task failed")
+                        yield {
+                            "type": "parallel_task_done",
+                            "task_id": child_sid,
+                            "summary": "",
+                            "errors": [error_msg],
+                            "status": "error",
+                        }
+                        child_sessions.pop(child_sid, None)
+                        pending_child_events.pop(child_sid, None)
+
+                    # task 工具事件不转发为普通 tool 事件（避免空卡片）
+                    continue
 
             translated = self._translate_event(event)
             if translated:
@@ -329,6 +430,15 @@ class CodeLabModule(ModuleBase):
                     return
 
                 yield translated
+
+        except Exception as e:
+            logger.error("_handle_chat 异常: %s", e)
+            yield {"type": "error", "message": str(e)}
+        finally:
+            # 确保前端断开、异常、正常结束时都清理所有子 session
+            if child_sessions:
+                logger.info("清理 %d 个子 session", len(child_sessions))
+                await _abort_all()
 
         if not done_sent:
             yield {"type": "done", "session_id": oc_sid, "cost_usd": total_cost}
@@ -374,6 +484,10 @@ class CodeLabModule(ModuleBase):
 
             if part_type == "tool":
                 tool_name = part.get("tool", "unknown")
+                # task 工具由 _handle_chat 的并行任务追踪器处理，不在此转发
+                # （避免产生空的 ToolCallCard）
+                if tool_name == "task":
+                    return None
                 state = part.get("state", {})
                 status = state.get("status", "running")
                 tool_input = state.get("input", {})
@@ -421,5 +535,49 @@ class CodeLabModule(ModuleBase):
             else:
                 msg = str(error_obj)
             return {"type": "error", "message": msg or "Unknown error"}
+
+        return None
+
+    @staticmethod
+    def _translate_child_event(event: dict, child_sid: str) -> dict | None:
+        """Translate child session (subtask) events for parallel task visualization.
+
+        Only forwards tool call updates and text deltas — everything else is ignored.
+        """
+        etype = event.get("type", "")
+        props = event.get("properties", {})
+
+        # Child session tool calls → parallel_task_tool
+        if etype == "message.part.updated":
+            part = props.get("part", {})
+            if part.get("type") == "tool":
+                tool_name = part.get("tool", "unknown")
+                # Don't forward nested task tool events from child (avoid recursion noise)
+                if tool_name == "task":
+                    return None
+                state = part.get("state", {})
+                status = state.get("status", "running")
+                tool_input = state.get("input", {})
+                title = state.get("title", tool_name)
+                output = state.get("output", "")
+                return {
+                    "type": "parallel_task_tool",
+                    "task_id": child_sid,
+                    "tool": tool_name,
+                    "status": status,
+                    "title": title,
+                    "input": tool_input,
+                    "output": output if status == "completed" else "",
+                }
+
+        # Child session text streaming → parallel_task_text
+        if etype == "message.part.delta":
+            delta = props.get("delta", "")
+            if delta:
+                return {
+                    "type": "parallel_task_text",
+                    "task_id": child_sid,
+                    "content": delta,
+                }
 
         return None

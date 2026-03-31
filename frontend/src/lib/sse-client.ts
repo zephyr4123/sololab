@@ -104,6 +104,11 @@ export class ResilientSSEClient {
       case 'vote': handlers.onVote?.(event.idea_id, event.content, event.author, event.elo_score, event.rank); break;
       case 'done': handlers.onDone?.(event.top_ideas, event.cost_usd); break;
       case 'error': handlers.onError?.(event.message || event.error || 'Unknown error'); break;
+      /* ── Parallel Task Events ── */
+      case 'parallel_task_start': handlers.onParallelTaskStart?.(event.task_id, event.agent, event.description); break;
+      case 'parallel_task_tool': handlers.onParallelTaskTool?.(event.task_id, event.tool, event.status, event.title, event.input, event.output); break;
+      case 'parallel_task_text': handlers.onParallelTaskText?.(event.task_id, event.content); break;
+      case 'parallel_task_done': handlers.onParallelTaskDone?.(event.task_id, event.summary, event.files_read, event.files_modified, event.errors, event.timed_out); break;
     }
   }
 
