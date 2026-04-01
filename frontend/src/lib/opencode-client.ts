@@ -179,14 +179,7 @@ export async function streamPrompt(
   const dir = toContainerPath(directory);
   const dirParam = `directory=${encodeURIComponent(dir)}`;
 
-  // 1. 发送 prompt（async，返回 204）
-  await ocFetch(`/session/${sessionId}/prompt_async?${dirParam}`, {
-    method: 'POST',
-    body: JSON.stringify({ parts: [{ type: 'text', text: content }] }),
-    signal,
-  });
-
-  // 2. 连接 SSE 事件流
+  // 1. 先建立 SSE 连接（避免竞态：prompt_async 发射的事件可能在连接建立前丢失）
   const eventResp = await fetch(`${OC_BASE}/event?${dirParam}`, { signal });
   if (!eventResp.ok || !eventResp.body) {
     handlers.onError(`SSE connection failed: ${eventResp.status}`);
@@ -202,6 +195,13 @@ export async function streamPrompt(
   // 子 session 并行任务追踪
   const childSessions = new Map<string, ChildSessionInfo>();
   const pendingChildEvents = new Map<string, Array<{ type: string; properties: Record<string, unknown> }>>();
+
+  // 2. SSE 连接已建立，现在发送 prompt（事件不会丢失）
+  await ocFetch(`/session/${sessionId}/prompt_async?${dirParam}`, {
+    method: 'POST',
+    body: JSON.stringify({ parts: [{ type: 'text', text: content }] }),
+    signal,
+  });
 
   try {
     while (true) {
