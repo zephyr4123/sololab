@@ -17,6 +17,10 @@ WORKDIR /app
 
 RUN npm config set registry https://registry.npmmirror.com
 
+# OpenCode 代理地址（构建时注入 next.config.js rewrites）
+ARG OPENCODE_URL=http://opencode:3100
+ENV OPENCODE_URL=${OPENCODE_URL}
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY frontend/ .
 RUN npm run build
