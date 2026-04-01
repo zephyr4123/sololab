@@ -10,10 +10,14 @@ const OC_BASE = '/oc';
 // ── 目录路径映射 ────────────────────────────────────
 
 function getWorkspaceDir(): string {
-  return (typeof window !== 'undefined'
-    ? (window as Record<string, unknown>).__NEXT_DATA__?.runtimeConfig?.NEXT_PUBLIC_WORKSPACE_DIR
-    : undefined
-  ) ?? process.env.NEXT_PUBLIC_WORKSPACE_DIR ?? '';
+  if (typeof window !== 'undefined') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const nd = (window as any).__NEXT_DATA__;
+    if (nd?.runtimeConfig?.NEXT_PUBLIC_WORKSPACE_DIR) {
+      return nd.runtimeConfig.NEXT_PUBLIC_WORKSPACE_DIR as string;
+    }
+  }
+  return process.env.NEXT_PUBLIC_WORKSPACE_DIR ?? '';
 }
 
 /**
@@ -351,7 +355,7 @@ function handleEvent(
       const status = (state.status as string) ?? 'running';
       const output = status === 'completed' ? ((state.output as string) ?? '') : '';
 
-      let fileDiff: OpenCodeStreamHandlers['onToolCall'] extends (d: infer D) => void ? D extends { fileDiff?: infer F } ? F : never : never;
+      let fileDiff: { file: string; additions: number; deletions: number; before: string; after: string } | undefined;
       if (status === 'completed' && toolName === 'edit') {
         const fd = metadata.filediff as Record<string, unknown> | undefined;
         if (fd) {
