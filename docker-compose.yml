@@ -120,6 +120,8 @@ services:
     build:
       context: .
       dockerfile: infra/docker/frontend.Dockerfile
+      args:
+        NEXT_PUBLIC_WORKSPACE_DIR: ${WORKSPACE_DIR:?}
     restart: unless-stopped
     ports:
       - "3000:3000"

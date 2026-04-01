@@ -17,9 +17,12 @@ WORKDIR /app
 
 RUN npm config set registry https://registry.npmmirror.com
 
-# OpenCode 代理地址（构建时注入 next.config.js rewrites）
+# 构建时注入的环境变量（Next.js standalone 会在 build 时固化）
 ARG OPENCODE_URL=http://opencode:3100
 ENV OPENCODE_URL=${OPENCODE_URL}
+# 宿主机 WORKSPACE_DIR，用于前端路径映射（host → /workspace/）
+ARG NEXT_PUBLIC_WORKSPACE_DIR
+ENV NEXT_PUBLIC_WORKSPACE_DIR=${NEXT_PUBLIC_WORKSPACE_DIR}
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY frontend/ .
