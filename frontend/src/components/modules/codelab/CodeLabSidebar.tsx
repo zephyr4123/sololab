@@ -9,7 +9,7 @@ import {
 import { useCodeLabStore } from '@/stores/module-stores/codelab-store';
 import type { CodeLabMessage, MessagePart } from '@/stores/module-stores/codelab-store';
 import { useSessionStore } from '@/stores/session-store';
-import { api } from '@/lib/api-client';
+import { api, codelabApi } from '@/lib/api-client';
 
 function timeAgo(dateStr: string | null): string {
   if (!dateStr) return '';
@@ -43,30 +43,34 @@ export function CodeLabSidebar({ moduleId }: { moduleId: string }) {
 
   const removeRecentDirectory = useCodeLabStore((s) => s.removeRecentDirectory);
 
-  const {
-    sessions, currentSessionId, isLoadingSessions, isLoadingHistory,
-    fetchSessions, loadHistory, resetConversation, deleteSession,
-  } = useSessionStore();
+  const { currentSessionId, isLoadingHistory, resetConversation } = useSessionStore();
 
   const [showProjectSwitcher, setShowProjectSwitcher] = useState(false);
   const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
+  const [ocSessions, setOcSessions] = useState<Array<{ id: string; title?: string; createdAt?: string }>>([]);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(false);
 
-  // Fetch sessions when directory changes
+  // Fetch OpenCode sessions scoped to current working directory
   useEffect(() => {
-    if (workingDirectory) {
-      fetchSessions(moduleId);
+    if (!workingDirectory) {
+      setOcSessions([]);
+      return;
     }
-  }, [workingDirectory, moduleId, fetchSessions]);
+    let cancelled = false;
+    setIsLoadingSessions(true);
+    codelabApi.listSessions(workingDirectory)
+      .then((list) => { if (!cancelled) setOcSessions(list); })
+      .catch(() => { if (!cancelled) setOcSessions([]); })
+      .finally(() => { if (!cancelled) setIsLoadingSessions(false); });
+    return () => { cancelled = true; };
+  }, [workingDirectory]);
 
   // Load CodeLab session history from OpenCode
   const loadCodeLabHistory = async (sid: string) => {
     setLoadingSessionId(sid);
     try {
-      // Resolve SoloLab session ID → OpenCode session ID via localStorage mapping
-      let ocSid = sid;
-      try { ocSid = localStorage.getItem(`codelab_oc_${sid}`) || sid; } catch {}
-
-      const raw: any = await api.modules.run(moduleId, '', { action: 'messages', session_id: ocSid });
+      // sid is already an OpenCode session ID (ses_xxx) from codelabApi.listSessions
+      const raw: any = await api.modules.run(moduleId, '', { action: 'messages', session_id: sid });
       // Backend wraps in { module_id, results: [...] }
       const result = raw?.results?.[0] ?? raw;
       const rawMessages: any[] = result?.messages || [];
@@ -232,7 +236,7 @@ export function CodeLabSidebar({ moduleId }: { moduleId: string }) {
           </div>
         )}
 
-        {!isLoadingSessions && sessions.length === 0 && (
+        {!isLoadingSessions && ocSessions.length === 0 && (
           <div className="flex flex-col items-center justify-center py-8 text-center">
             <MessageSquare className="h-5 w-5 text-muted-foreground/15 mb-2" />
             <p className="text-[10px] text-muted-foreground/30">Start a conversation</p>
@@ -240,11 +244,11 @@ export function CodeLabSidebar({ moduleId }: { moduleId: string }) {
         )}
 
         <div className="flex-1 overflow-y-auto space-y-0.5">
-          {sessions.map((session) => {
-            const isActive = session.session_id === currentSessionId;
+          {ocSessions.map((session) => {
+            const isActive = session.id === currentSessionId;
             return (
               <div
-                key={session.session_id}
+                key={session.id}
                 className={`group/sess flex w-full items-start gap-2 rounded-lg px-2.5 py-2 transition-all duration-150 ${
                   isActive
                     ? 'bg-foreground/[0.06]'
@@ -253,13 +257,12 @@ export function CodeLabSidebar({ moduleId }: { moduleId: string }) {
               >
                 <button
                   onClick={() => {
-                    if (!loadingSessionId && session.session_id !== currentSessionId) {
-                      loadCodeLabHistory(session.session_id);
+                    if (!loadingSessionId && session.id !== currentSessionId) {
+                      loadCodeLabHistory(session.id);
                     }
                   }}
                   className="flex flex-1 items-start gap-2 text-left min-w-0"
                 >
-                  {/* Active indicator dot */}
                   <span className={`mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 transition-colors ${
                     isActive ? 'bg-[var(--color-warm)]' : 'bg-transparent'
                   }`} />
@@ -269,26 +272,9 @@ export function CodeLabSidebar({ moduleId }: { moduleId: string }) {
                       {session.title || 'Untitled'}
                     </p>
                     <span className="text-[10px] text-muted-foreground/35">
-                      {loadingSessionId === session.session_id ? 'Loading...' : timeAgo(session.updated_at || session.created_at)}
+                      {loadingSessionId === session.id ? 'Loading...' : timeAgo(session.createdAt ?? null)}
                     </span>
                   </div>
-                </button>
-
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteSession(session.session_id);
-                    if (isActive) {
-                      useCodeLabStore.getState().setMessages([]);
-                      useCodeLabStore.getState().setSessionId(null);
-                      useCodeLabStore.getState().setFiles([]);
-                      useCodeLabStore.getState().clearToolCalls();
-                    }
-                  }}
-                  className="mt-1 p-1 rounded opacity-0 group-hover/sess:opacity-100 text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10 transition-all shrink-0"
-                  title="Delete session"
-                >
-                  <Trash2 className="h-3 w-3" />
                 </button>
               </div>
             );

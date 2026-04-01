@@ -138,9 +138,26 @@ class CodeLabModule(ModuleBase):
         return {"type": "health", "ok": ok}
 
     async def _handle_list_sessions(self, request: ModuleRequest) -> dict:
-        """列出会话。"""
-        directory = request.params.get("directory")
-        sessions = await self._bridge.list_sessions(directory=directory)
+        """列出会话（按项目容器路径过滤）。"""
+        from datetime import datetime, timezone
+
+        directory = self._to_container_path(request.params.get("directory"))
+        raw_sessions = await self._bridge.list_sessions(directory=directory)
+
+        sessions = []
+        for s in raw_sessions:
+            if s.get("parentID"):
+                continue
+            time_info = s.get("time", {})
+            created_ts = time_info.get("created", 0)
+            created_at = ""
+            if created_ts:
+                created_at = datetime.fromtimestamp(created_ts / 1000, tz=timezone.utc).isoformat()
+            sessions.append({
+                "id": s.get("id", ""),
+                "title": s.get("title", "Untitled"),
+                "createdAt": created_at,
+            })
         return {"type": "sessions", "sessions": sessions}
 
     def _resolve_oc_sid(self, sololab_sid: str | None) -> str | None:

@@ -188,7 +188,6 @@ export const runHistoryApi = {
 export const codelabApi = {
   browse: async (path?: string) => {
     const raw = await api.modules.run('codelab', '', { action: 'browse', path: path ?? '~' }) as any;
-    // Backend wraps in { module_id, results: [...] }
     const result = raw?.results?.[0] ?? raw;
     return result as {
       type: string;
@@ -197,6 +196,11 @@ export const codelabApi = {
       entries: Array<{ name: string; path: string; type: string; isProject: boolean }>;
       error?: string;
     };
+  },
+  listSessions: async (directory?: string) => {
+    const raw = await api.modules.run('codelab', '', { action: 'sessions', directory }) as any;
+    const result = raw?.results?.[0] ?? raw;
+    return (result?.sessions || []) as Array<{ id: string; title?: string; createdAt?: string }>;
   },
 };
 
