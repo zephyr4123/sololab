@@ -49,6 +49,28 @@ export function CodeLabSidebar({ moduleId }: { moduleId: string }) {
   const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
   const [ocSessions, setOcSessions] = useState<Array<{ id: string; title?: string; createdAt?: string }>>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
+
+  const deleteOcSession = async (sid: string) => {
+    if (deletingSessionId) return;
+    setDeletingSessionId(sid);
+    try {
+      await opencode.deleteSession(sid);
+      setOcSessions((prev) => prev.filter((s) => s.id !== sid));
+      // If deleting the active session, reset UI
+      if (sid === sessionId || sid === currentSessionId) {
+        useCodeLabStore.getState().setMessages([]);
+        useCodeLabStore.getState().setSessionId(null);
+        useCodeLabStore.getState().setFiles([]);
+        useCodeLabStore.getState().clearToolCalls();
+        resetConversation();
+      }
+    } catch (e) {
+      console.error('Failed to delete session:', e);
+    } finally {
+      setDeletingSessionId(null);
+    }
+  };
 
   // Fetch OpenCode sessions scoped to current working directory
   useEffect(() => {
@@ -270,6 +292,17 @@ export function CodeLabSidebar({ moduleId }: { moduleId: string }) {
                       {loadingSessionId === session.id ? 'Loading...' : timeAgo(session.createdAt ?? null)}
                     </span>
                   </div>
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteOcSession(session.id);
+                  }}
+                  disabled={deletingSessionId === session.id}
+                  className="p-1 mt-0.5 rounded opacity-0 group-hover/sess:opacity-100 text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10 transition-all disabled:opacity-50"
+                  title="Delete session"
+                >
+                  <Trash2 className="h-3 w-3" />
                 </button>
               </div>
             );
