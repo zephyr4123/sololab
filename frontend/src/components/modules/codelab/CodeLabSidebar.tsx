@@ -43,6 +43,7 @@ export function CodeLabSidebar({ moduleId }: { moduleId: string }) {
   const setMessages = useCodeLabStore((s) => s.setMessages);
 
   const removeRecentDirectory = useCodeLabStore((s) => s.removeRecentDirectory);
+  const sessionListVersion = useCodeLabStore((s) => s.sessionListVersion);
 
   const { currentSessionId, isLoadingHistory, resetConversation } = useSessionStore();
 
@@ -92,7 +93,7 @@ export function CodeLabSidebar({ moduleId }: { moduleId: string }) {
       .catch(() => { if (!cancelled) setOcSessions([]); })
       .finally(() => { if (!cancelled) setIsLoadingSessions(false); });
     return () => { cancelled = true; };
-  }, [workingDirectory]);
+  }, [workingDirectory, sessionListVersion]);
 
   // Load CodeLab session history directly from OpenCode
   const loadCodeLabHistory = async (sid: string) => {

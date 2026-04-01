@@ -98,6 +98,10 @@ interface CodeLabState {
   // Cost
   costUsd: number;
 
+  // Session list refresh trigger (bump to notify sidebar)
+  sessionListVersion: number;
+  bumpSessionList: () => void;
+
   // Directory
   workingDirectory: string | null;
   recentDirectories: string[];
@@ -147,6 +151,7 @@ const initialState = {
   recentDirectories: loadRecentDirs(),
   sessionId: null as string | null,
   sessions: [] as Array<{ id: string; title: string; createdAt: string }>,
+  sessionListVersion: 0,
   isStreaming: false,
   messages: [] as CodeLabMessage[],
   files: [] as CodeLabFile[],
@@ -189,6 +194,7 @@ export const useCodeLabStore = create<CodeLabState>((set, get) => ({
   },
 
   setSessionId: (id) => set({ sessionId: id }),
+  bumpSessionList: () => set((s) => ({ sessionListVersion: s.sessionListVersion + 1 })),
   setSessions: (s) => set({ sessions: s }),
   setStreaming: (v) => set({ isStreaming: v }),
 

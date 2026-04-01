@@ -91,6 +91,7 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
         const session = await codelabSessionApi.create(store.workingDirectory!);
         sid = session.id;
         store.setSessionId(sid);
+        store.bumpSessionList();
         useSessionStore.getState().setCurrentSession(sid);
       } catch (e) {
         store.appendToLastMessage(`\n\n> **Error**: Failed to create session: ${e}`);
