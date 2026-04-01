@@ -128,7 +128,6 @@ services:
     environment:
       - HOSTNAME=0.0.0.0
       - NEXT_PUBLIC_API_URL=http://backend:8000
-      - OPENCODE_URL=http://opencode:3100
       - NEXT_PUBLIC_WORKSPACE_DIR=${WORKSPACE_DIR:?}
     depends_on:
       - backend

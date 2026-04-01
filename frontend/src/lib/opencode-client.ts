@@ -1,11 +1,11 @@
 /**
  * OpenCode 直连客户端 — 替代后端 bridge.py + module.py 翻译层。
  *
- * 前端通过 /oc/* 反向代理直接调用 OpenCode Server API，
- * 消除 Backend 中间层的 5-6 层格式转换。
+ * 浏览器直连 OpenCode Server（与重构前直连 FastAPI 端口一致），
+ * 避免 Next.js rewrite proxy 缓冲 SSE 流式响应。
  */
 
-const OC_BASE = '/oc';
+const OC_BASE = process.env.NEXT_PUBLIC_OPENCODE_URL || 'http://localhost:3101';
 
 // ── 目录路径映射 ────────────────────────────────────
 
