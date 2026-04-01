@@ -212,20 +212,76 @@ class SessionManager:
         return result
 
     async def delete_session(self, session_id: str) -> bool:
-        """删除会话（软删除，标记为 deleted）。"""
+        """硬删除会话（CASCADE 自动清理关联消息）。"""
         from sololab.models.orm import SessionRecord
 
         async with self.db() as session:
             result = await session.execute(
-                update(SessionRecord)
+                delete(SessionRecord)
                 .where(SessionRecord.session_id == session_id)
-                .values(status="deleted", updated_at=func.now())
             )
             await session.commit()
             deleted = result.rowcount > 0
             if deleted:
                 logger.info("会话已删除: session_id=%s", session_id)
             return deleted
+
+    async def delete_by_opencode_id(self, opencode_session_id: str) -> bool:
+        """按 OpenCode session ID 硬删除 CodeLab 会话。"""
+        from sololab.models.orm import SessionRecord
+
+        async with self.db() as session:
+            # metadata_json 是 JSONB，使用 PostgreSQL 的 ->> 操作符查询
+            result = await session.execute(
+                delete(SessionRecord)
+                .where(
+                    SessionRecord.module_id == "codelab",
+                    SessionRecord.metadata_json["opencode_session_id"].astext == opencode_session_id,
+                )
+            )
+            await session.commit()
+            deleted = result.rowcount > 0
+            if deleted:
+                logger.info("CodeLab 会话已删除: opencode_id=%s", opencode_session_id)
+            return deleted
+
+    async def upsert_codelab_session(
+        self,
+        opencode_session_id: str,
+        title: str,
+        created_at: Optional[str] = None,
+    ) -> str:
+        """为 CodeLab session 创建或更新 PG 记录，返回 session_id。"""
+        from sololab.models.orm import SessionRecord
+
+        async with self.db() as session:
+            # 查找是否已有记录
+            result = await session.execute(
+                select(SessionRecord).where(
+                    SessionRecord.module_id == "codelab",
+                    SessionRecord.metadata_json["opencode_session_id"].astext == opencode_session_id,
+                )
+            )
+            existing = result.scalar_one_or_none()
+            if existing:
+                # 更新标题
+                existing.title = title
+                await session.commit()
+                return existing.session_id
+
+            # 新建记录
+            session_id = str(uuid.uuid4())
+            record = SessionRecord(
+                session_id=session_id,
+                title=title,
+                module_id="codelab",
+                metadata_json={"opencode_session_id": opencode_session_id},
+                status="active",
+            )
+            session.add(record)
+            await session.commit()
+            logger.info("CodeLab 会话已同步: session_id=%s, oc_id=%s", session_id, opencode_session_id)
+            return session_id
 
     async def archive_session(self, session_id: str) -> bool:
         """归档会话。"""

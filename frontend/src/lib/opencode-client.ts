@@ -56,25 +56,10 @@ export interface OcSession {
 }
 
 export const opencode = {
-  /** 创建会话 */
-  async createSession(directory: string): Promise<OcSession> {
-    const dir = toContainerPath(directory);
-    return ocFetch<OcSession>(`/session?directory=${encodeURIComponent(dir)}`, {
-      method: 'POST',
-      body: JSON.stringify({}),
-    });
-  },
+  // Session CRUD 已迁移至 Backend 代理（codelabSessionApi in api-client.ts）
+  // 此处保留 OpenCode 直连的运行时方法（SSE streaming、消息历史、中止）
 
-  /** 列出会话（按目录过滤，排除子会话） */
-  async listSessions(directory?: string): Promise<OcSession[]> {
-    const params = new URLSearchParams();
-    if (directory) params.set('directory', toContainerPath(directory));
-    params.set('roots', 'true');
-    const sessions = await ocFetch<OcSession[]>(`/session?${params}`);
-    return sessions;
-  },
-
-  /** 获取消息历史 */
+  /** 获取消息历史（数据在 OpenCode SQLite，直连读取） */
   async getMessages(sessionId: string): Promise<OcMessageWithParts[]> {
     return ocFetch<OcMessageWithParts[]>(`/session/${sessionId}/message`);
   },
@@ -82,11 +67,6 @@ export const opencode = {
   /** 中止执行 */
   async abort(sessionId: string): Promise<void> {
     await ocFetch(`/session/${sessionId}/abort`, { method: 'POST' });
-  },
-
-  /** 删除会话 */
-  async deleteSession(sessionId: string): Promise<void> {
-    await ocFetch(`/session/${sessionId}`, { method: 'DELETE' });
   },
 
   /** 回复权限请求 */

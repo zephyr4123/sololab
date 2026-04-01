@@ -11,6 +11,7 @@ import { PermissionDialog } from './PermissionDialog';
 import { ProjectSelector } from './ProjectSelector';
 import { opencode, streamPrompt } from '@/lib/opencode-client';
 import type { OpenCodeStreamHandlers } from '@/lib/opencode-client';
+import { codelabSessionApi } from '@/lib/api-client';
 import { useSessionStore } from '@/stores/session-store';
 
 /* ── Quirky Thinking Indicator ── */
@@ -87,7 +88,7 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
     let sid = store.sessionId;
     if (!sid) {
       try {
-        const session = await opencode.createSession(store.workingDirectory!);
+        const session = await codelabSessionApi.create(store.workingDirectory!);
         sid = session.id;
         store.setSessionId(sid);
         useSessionStore.getState().setCurrentSession(sid);

@@ -127,6 +127,33 @@ export const sessionApi = {
   },
 };
 
+// === CodeLab Session API (走 Backend 代理到 OpenCode) ===
+export const codelabSessionApi = {
+  list: async (directory?: string): Promise<Array<{ id: string; title: string; directory?: string; createdAt?: number; updatedAt?: number }>> => {
+    const params = new URLSearchParams();
+    if (directory) params.set('directory', directory);
+    const res = await fetch(`${API_BASE}/api/codelab/sessions?${params}`);
+    if (!res.ok) throw new Error(`CodeLab sessions fetch failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  create: async (directory: string) => {
+    const res = await fetch(`${API_BASE}/api/codelab/sessions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ directory }),
+    });
+    if (!res.ok) throw new Error(`CodeLab session create failed: ${res.statusText}`);
+    return res.json() as Promise<{ id: string; title: string; directory?: string }>;
+  },
+
+  delete: async (ocSessionId: string) => {
+    const res = await fetch(`${API_BASE}/api/codelab/sessions/${ocSessionId}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`CodeLab session delete failed: ${res.statusText}`);
+    return res.json();
+  },
+};
+
 // === Cost API ===
 export const costApi = {
   getTotal: async (days = 30) => {

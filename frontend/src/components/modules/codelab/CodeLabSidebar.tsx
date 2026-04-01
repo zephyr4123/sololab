@@ -10,6 +10,7 @@ import { useCodeLabStore } from '@/stores/module-stores/codelab-store';
 import type { CodeLabMessage, MessagePart } from '@/stores/module-stores/codelab-store';
 import { useSessionStore } from '@/stores/session-store';
 import { opencode } from '@/lib/opencode-client';
+import { codelabSessionApi } from '@/lib/api-client';
 
 function timeAgo(dateStr: string | null): string {
   if (!dateStr) return '';
@@ -55,7 +56,7 @@ export function CodeLabSidebar({ moduleId }: { moduleId: string }) {
     if (deletingSessionId) return;
     setDeletingSessionId(sid);
     try {
-      await opencode.deleteSession(sid);
+      await codelabSessionApi.delete(sid);
       setOcSessions((prev) => prev.filter((s) => s.id !== sid));
       // If deleting the active session, reset UI
       if (sid === sessionId || sid === currentSessionId) {
@@ -80,12 +81,12 @@ export function CodeLabSidebar({ moduleId }: { moduleId: string }) {
     }
     let cancelled = false;
     setIsLoadingSessions(true);
-    opencode.listSessions(workingDirectory)
+    codelabSessionApi.list(workingDirectory)
       .then((list) => {
         if (!cancelled) setOcSessions(list.map((s) => ({
           id: s.id,
           title: s.title,
-          createdAt: s.time?.created ? new Date(s.time.created).toISOString() : undefined,
+          createdAt: s.createdAt ? new Date(s.createdAt).toISOString() : undefined,
         })));
       })
       .catch(() => { if (!cancelled) setOcSessions([]); })
