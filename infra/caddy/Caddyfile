@@ -11,6 +11,13 @@
 		reverse_proxy backend:8000
 	}
 
+	# OpenCode 直连（CodeLab 模块）
+	handle_path /oc/* {
+		reverse_proxy opencode:3100 {
+			flush_interval -1
+		}
+	}
+
 	# 前端
 	handle {
 		reverse_proxy frontend:3000

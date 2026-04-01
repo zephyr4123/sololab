@@ -184,23 +184,19 @@ export const runHistoryApi = {
   },
 };
 
-// === Memory API ===
+// === CodeLab API (browse 走后端，其余走 opencode-client 直连) ===
 export const codelabApi = {
   browse: async (path?: string) => {
-    const raw = await api.modules.run('codelab', '', { action: 'browse', path: path ?? '~' }) as any;
-    const result = raw?.results?.[0] ?? raw;
-    return result as {
+    return fetchAPI<{
       type: string;
       path: string;
       parent: string | null;
       entries: Array<{ name: string; path: string; type: string; isProject: boolean }>;
       error?: string;
-    };
-  },
-  listSessions: async (directory?: string) => {
-    const raw = await api.modules.run('codelab', '', { action: 'sessions', directory }) as any;
-    const result = raw?.results?.[0] ?? raw;
-    return (result?.sessions || []) as Array<{ id: string; title?: string; createdAt?: string }>;
+    }>('/api/modules/codelab/browse', {
+      method: 'POST',
+      body: JSON.stringify({ path: path ?? '~' }),
+    });
   },
 };
 

@@ -9,7 +9,7 @@ import {
 import { useCodeLabStore } from '@/stores/module-stores/codelab-store';
 import type { CodeLabMessage, MessagePart } from '@/stores/module-stores/codelab-store';
 import { useSessionStore } from '@/stores/session-store';
-import { api, codelabApi } from '@/lib/api-client';
+import { opencode } from '@/lib/opencode-client';
 
 function timeAgo(dateStr: string | null): string {
   if (!dateStr) return '';
@@ -58,57 +58,52 @@ export function CodeLabSidebar({ moduleId }: { moduleId: string }) {
     }
     let cancelled = false;
     setIsLoadingSessions(true);
-    codelabApi.listSessions(workingDirectory)
-      .then((list) => { if (!cancelled) setOcSessions(list); })
+    opencode.listSessions(workingDirectory)
+      .then((list) => {
+        if (!cancelled) setOcSessions(list.map((s) => ({
+          id: s.id,
+          title: s.title,
+          createdAt: s.time?.created ? new Date(s.time.created).toISOString() : undefined,
+        })));
+      })
       .catch(() => { if (!cancelled) setOcSessions([]); })
       .finally(() => { if (!cancelled) setIsLoadingSessions(false); });
     return () => { cancelled = true; };
   }, [workingDirectory]);
 
-  // Load CodeLab session history from OpenCode
+  // Load CodeLab session history directly from OpenCode
   const loadCodeLabHistory = async (sid: string) => {
     setLoadingSessionId(sid);
     try {
-      // sid is already an OpenCode session ID (ses_xxx) from codelabApi.listSessions
-      const raw: any = await api.modules.run(moduleId, '', { action: 'messages', session_id: sid });
-      // Backend wraps in { module_id, results: [...] }
-      const result = raw?.results?.[0] ?? raw;
-      const rawMessages: any[] = result?.messages || [];
+      const rawMessages = await opencode.getMessages(sid);
 
-      // OpenCode message format: { info: { role, id, time }, parts: [{ type, text }] }
       const msgs: CodeLabMessage[] = rawMessages
-        .filter((m: any) => {
-          const role = m.info?.role;
-          return role === 'user' || role === 'assistant';
-        })
-        .map((m: any) => {
+        .filter((m) => m.info.role === 'user' || m.info.role === 'assistant')
+        .map((m) => {
           const role = m.info.role as 'user' | 'assistant';
-          const ocParts: any[] = m.parts || [];
+          const ocParts = m.parts || [];
 
-          // Extract text content from OpenCode parts
           const textContent = ocParts
-            .filter((p: any) => p.type === 'text')
-            .map((p: any) => p.text || '')
+            .filter((p) => p.type === 'text')
+            .map((p) => p.text || '')
             .join('');
 
-          // Convert to our MessagePart format
           const parts: MessagePart[] = [];
           for (const p of ocParts) {
             if (p.type === 'text' && p.text) {
               parts.push({ kind: 'text', content: p.text });
             } else if (p.type === 'tool') {
-              // Skip task tool parts — their results are in the parent's text summary
               if (p.tool === 'task') continue;
               parts.push({
                 kind: 'tool',
                 toolCall: {
                   id: p.id || `tc_${Date.now()}_${Math.random().toString(36).slice(2,5)}`,
                   tool: p.tool || 'unknown',
-                  input: p.state?.input || {},
-                  output: p.state?.output || '',
+                  input: (p.state?.input as Record<string, unknown>) || {},
+                  output: (p.state?.output as string) || '',
                   status: 'completed',
-                  title: p.state?.title || p.tool || 'unknown',
-                  timestamp: p.state?.time?.start || Date.now(),
+                  title: (p.state?.title as string) || p.tool || 'unknown',
+                  timestamp: (p.state?.time?.start as number) || Date.now(),
                 },
               });
             }

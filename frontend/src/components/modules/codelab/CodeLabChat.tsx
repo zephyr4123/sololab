@@ -9,10 +9,9 @@ import { ToolCallCard } from './ToolCallCard';
 import { ParallelTaskView } from './ParallelTaskView';
 import { PermissionDialog } from './PermissionDialog';
 import { ProjectSelector } from './ProjectSelector';
-import { ResilientSSEClient } from '@/lib/sse-client';
+import { opencode, streamPrompt } from '@/lib/opencode-client';
+import type { OpenCodeStreamHandlers } from '@/lib/opencode-client';
 import { useSessionStore } from '@/stores/session-store';
-
-const sseClient = new ResilientSSEClient();
 
 /* ── Quirky Thinking Indicator ── */
 
@@ -58,6 +57,7 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
   const [input, setInput] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const store = useCodeLabStore();
 
   // Auto-scroll
@@ -78,69 +78,44 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
     if (!text || store.isStreaming) return;
     setInput('');
 
-    // Add user message
-    store.addMessage({
-      id: `usr_${Date.now()}`,
-      role: 'user',
-      content: text,
-      parts: [],
-      timestamp: Date.now(),
-    });
-
-    // Add empty assistant message with parts array
-    store.addMessage({
-      id: `ast_${Date.now()}`,
-      role: 'assistant',
-      content: '',
-      parts: [],
-      toolCalls: [],
-      timestamp: Date.now(),
-    });
-
+    store.addMessage({ id: `usr_${Date.now()}`, role: 'user', content: text, parts: [], timestamp: Date.now() });
+    store.addMessage({ id: `ast_${Date.now()}`, role: 'assistant', content: '', parts: [], toolCalls: [], timestamp: Date.now() });
     store.setStreaming(true);
     store.setAgent(store.currentAgent, 'thinking');
 
-    const session = useSessionStore.getState();
+    // Create or reuse OpenCode session
+    let sid = store.sessionId;
+    if (!sid) {
+      try {
+        const session = await opencode.createSession(store.workingDirectory!);
+        sid = session.id;
+        store.setSessionId(sid);
+        useSessionStore.getState().setCurrentSession(sid);
+      } catch (e) {
+        store.appendToLastMessage(`\n\n> **Error**: Failed to create session: ${e}`);
+        store.setStreaming(false);
+        return;
+      }
+    }
 
-    await sseClient.start(moduleId, text, { directory: store.workingDirectory, session_id: store.sessionId ?? undefined }, {
-      onTaskCreated(sessionId) {
-        if (sessionId) {
-          store.setSessionId(sessionId);
-          session.setCurrentSession(sessionId);
-        }
-      },
-      onText(content) {
-        store.appendToLastMessage(content);
+    abortRef.current = new AbortController();
+
+    const handlers: OpenCodeStreamHandlers = {
+      onText(delta) {
+        store.appendToLastMessage(delta);
         store.setAgent(store.currentAgent, 'writing');
       },
       onAgent(agent, action) {
-        if (action === 'thinking' || action === 'start') {
-          store.setAgent(agent, 'thinking');
-        } else if (action === 'done' || action === 'complete') {
-          store.setAgent(agent, 'idle');
-        }
+        store.setAgent(agent, action);
       },
-      onTool(event) {
-        const ev = event as any;
-        const toolName = ev.tool || 'unknown';
-        // task 工具由 parallel_task_* 事件处理，不在此创建 ToolCallCard
-        if (toolName === 'task') return;
-        const status = ev.status || 'running';
-        const title = ev.title || toolName;
-        const toolInput = ev.input || {};
-        const output = ev.output || '';
-        const fileDiff = ev.fileDiff || undefined;
-        const isNewFile = ev.isNewFile || undefined;
-
+      onToolCall({ tool: toolName, status, title, input: toolInput, output, fileDiff, isNewFile }) {
         store.setAgent(store.currentAgent, 'tool_call');
 
-        // OpenCode uses camelCase params (filePath, not file_path)
-        const fp = toolInput?.filePath || toolInput?.file_path || toolInput?.path || '';
+        const fp = (toolInput?.filePath || toolInput?.file_path || toolInput?.path || '') as string;
         const hasInput = !!(fp || toolInput?.command || toolInput?.pattern);
-        const hasTitle = title !== toolName; // title is not just the tool name fallback
+        const hasTitle = title !== toolName;
 
-        // Track file operations for Files tab
-        if (fp && typeof fp === 'string') {
+        if (fp) {
           if (['read', 'glob', 'grep', 'list', 'codesearch'].includes(toolName)) {
             store.addFile({ path: fp, language: '', status: 'read' });
           } else if (['edit', 'write', 'multiedit', 'apply_patch'].includes(toolName)) {
@@ -148,70 +123,23 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
           }
         }
 
-        // Attach tool calls to the current assistant message's parts (in order)
         const lastMsg = useCodeLabStore.getState().messages.at(-1);
-        const match = lastMsg?.toolCalls?.find(
-          (tc) => tc.tool === toolName && tc.status === 'running'
-        );
+        const match = lastMsg?.toolCalls?.find((tc) => tc.tool === toolName && tc.status === 'running');
 
         if (match) {
-          store.updateToolCallInLastMessage(match.id, {
-            status: status as any, title, input: toolInput, output, fileDiff, isNewFile,
-          });
+          store.updateToolCallInLastMessage(match.id, { status: status as any, title, input: toolInput, output, fileDiff, isNewFile });
         } else if (status === 'running' && !hasInput && !hasTitle) {
-          // Skip empty running events (no file path, no command, generic title).
-          // The completed event will carry the real data and create the entry.
           return;
         } else {
           store.addToolCallToLastMessage({
             id: `tc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-            tool: toolName,
-            input: toolInput,
-            output,
-            status: status as any,
-            title,
-            timestamp: Date.now(),
-            fileDiff,
-            isNewFile,
+            tool: toolName, input: toolInput, output, status: status as any,
+            title, timestamp: Date.now(), fileDiff, isNewFile,
           });
         }
       },
-      onStatus(phase) {
-        if (phase === 'permission_request') {
-          store.setPendingPermission({
-            id: `perm_${Date.now()}`,
-            tool: 'unknown',
-            description: 'Permission required',
-            status: 'pending',
-          });
-        }
-      },
-      onDone(_topIdeas, costUsd) {
-        store.setStreaming(false);
-        store.setAgent(store.currentAgent, 'idle');
-        store.finalizeLastMessageToolCalls();
-        store.clearToolCalls();
-        if (costUsd !== undefined) store.setCostUsd(store.costUsd + costUsd);
 
-        // Persist SoloLab→OpenCode session ID mapping for history loading
-        // Must read CURRENT state (not the stale snapshot from send() scope)
-        const ocSid = sseClient.getSessionId();
-        const slSid = useSessionStore.getState().currentSessionId;
-        if (slSid && ocSid && slSid !== ocSid) {
-          try { localStorage.setItem(`codelab_oc_${slSid}`, ocSid); } catch {}
-        }
-
-        session.fetchSessions(moduleId);
-      },
-      onError(msg) {
-        store.appendToLastMessage(`\n\n> **Error**: ${msg}`);
-        store.setStreaming(false);
-        store.setAgent(store.currentAgent, 'idle');
-      },
-
-      /* ── Parallel Task Handlers ── */
       onParallelTaskStart(taskId, agent, description) {
-        // Find or create a parallel task group in the current message
         const s = useCodeLabStore.getState();
         const lastMsg = s.messages.at(-1);
         const existingGroup = lastMsg?.parts?.find(
@@ -220,50 +148,26 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
         );
 
         if (existingGroup) {
-          // Add to existing running group
           const updated: ParallelTaskGroup = {
             ...existingGroup.group,
             tasks: [...existingGroup.group.tasks, {
-              id: taskId,
-              sessionId: taskId,
-              agent,
-              description,
-              status: 'running',
-              startTime: Date.now(),
-              toolCalls: [],
+              id: taskId, sessionId: taskId, agent, description,
+              status: 'running', startTime: Date.now(), toolCalls: [],
             }],
           };
-          // Replace the group in the message parts
-          store.addParallelTaskGroup(updated); // This won't duplicate — see below
-          // Actually we need to update in-place. Use a targeted approach:
           const msgs = [...s.messages];
           const last = msgs[msgs.length - 1];
           if (last?.role === 'assistant') {
             const parts = (last.parts || []).map((p) =>
-              p.kind === 'parallel-tasks' && p.group.id === existingGroup.group.id
-                ? { ...p, group: updated }
-                : p
+              p.kind === 'parallel-tasks' && p.group.id === existingGroup.group.id ? { ...p, group: updated } : p
             );
             msgs[msgs.length - 1] = { ...last, parts };
             store.setMessages(msgs);
           }
         } else {
-          // Create new group
-          const groupId = `ptg_${Date.now()}`;
           store.addParallelTaskGroup({
-            id: groupId,
-            parentToolCallId: '',
-            startTime: Date.now(),
-            status: 'running',
-            tasks: [{
-              id: taskId,
-              sessionId: taskId,
-              agent,
-              description,
-              status: 'running',
-              startTime: Date.now(),
-              toolCalls: [],
-            }],
+            id: `ptg_${Date.now()}`, parentToolCallId: '', startTime: Date.now(), status: 'running',
+            tasks: [{ id: taskId, sessionId: taskId, agent, description, status: 'running', startTime: Date.now(), toolCalls: [] }],
           });
         }
       },
@@ -278,13 +182,8 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
           const task = part.group.tasks.find((t) => t.id === taskId);
           if (!task) continue;
 
-          // Merge: find any existing entry for this tool that isn't completed yet
-          const existingTc = task.toolCalls.find(
-            (tc) => tc.tool === tool && (tc.status === 'running' || tc.status === 'pending')
-          );
-
+          const existingTc = task.toolCalls.find((tc) => tc.tool === tool && (tc.status === 'running' || tc.status === 'pending'));
           if (existingTc) {
-            // Update existing pending/running tool call in-place
             const msgs = [...s.messages];
             const last = msgs[msgs.length - 1];
             if (last?.role === 'assistant') {
@@ -292,12 +191,9 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
                 if (p.kind !== 'parallel-tasks' || p.group.id !== part.group.id) return p;
                 const tasks = p.group.tasks.map((t) => {
                   if (t.id !== taskId) return t;
-                  const toolCalls = t.toolCalls.map((tc) =>
-                    tc.id === existingTc.id
-                      ? { ...tc, status: status as any, output: output || tc.output || '', title: title || tc.title, input: input || tc.input }
-                      : tc
-                  );
-                  return { ...t, toolCalls };
+                  return { ...t, toolCalls: t.toolCalls.map((tc) =>
+                    tc.id === existingTc.id ? { ...tc, status: status as any, output: output || tc.output || '', title: title || tc.title, input: input || tc.input } : tc
+                  )};
                 });
                 return { ...p, group: { ...p.group, tasks } };
               });
@@ -305,24 +201,13 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
               store.setMessages(msgs);
             }
           } else {
-            // Brand new tool call
             store.addToolCallToParallelTask(part.group.id, taskId, {
               id: `ptc_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
-              tool,
-              input: input || {},
-              output: output || '',
-              status: (status as any) || 'running',
-              title: title || tool,
-              timestamp: Date.now(),
+              tool, input: input || {}, output: output || '', status: (status as any) || 'running', title: title || tool, timestamp: Date.now(),
             });
           }
           break;
         }
-      },
-
-      onParallelTaskText() {
-        // Child agent text deltas — currently not displayed in the tree view
-        // (tool call activity is more informative than streaming text)
       },
 
       onParallelTaskDone(taskId, summary, _filesRead, _filesModified, errors, timedOut) {
@@ -337,26 +222,46 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
 
           const finalStatus = timedOut ? 'timeout' : (errors?.length ? 'error' : 'completed');
           store.updateParallelTask(part.group.id, taskId, {
-            status: finalStatus as any,
-            endTime: Date.now(),
+            status: finalStatus as any, endTime: Date.now(),
             summary: summary || (errors?.length ? errors.join('; ') : ''),
           });
 
-          // Check if all tasks in group are done
-          const allDone = part.group.tasks.every(
-            (t) => t.id === taskId || t.status !== 'running'
-          );
-          if (allDone) {
+          if (part.group.tasks.every((t) => t.id === taskId || t.status !== 'running')) {
             store.finalizeParallelTaskGroup(part.group.id);
           }
           break;
         }
       },
-    }, store.sessionId ?? undefined);
+
+      onTitleUpdate(title) {
+        // Session title updated — could refresh sidebar
+        void title;
+      },
+      onDone(costUsd) {
+        store.setStreaming(false);
+        store.setAgent(store.currentAgent, 'idle');
+        store.finalizeLastMessageToolCalls();
+        store.clearToolCalls();
+        if (costUsd) store.setCostUsd(store.costUsd + costUsd);
+      },
+      onError(msg) {
+        store.appendToLastMessage(`\n\n> **Error**: ${msg}`);
+        store.setStreaming(false);
+        store.setAgent(store.currentAgent, 'idle');
+      },
+    };
+
+    try {
+      await streamPrompt(sid, text, store.workingDirectory!, handlers, abortRef.current.signal);
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') return;
+      handlers.onError(String(e));
+    }
   }, [input, store, moduleId]);
 
   const stop = useCallback(() => {
-    sseClient.stop();
+    abortRef.current?.abort();
+    if (store.sessionId) opencode.abort(store.sessionId).catch(() => {});
     store.setStreaming(false);
     store.setAgent(store.currentAgent, 'idle');
     store.finalizeLastMessageToolCalls();

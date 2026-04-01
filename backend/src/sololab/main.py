@@ -8,7 +8,7 @@ import redis.asyncio as aioredis
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from sololab.api import codelab, documents, modules, providers, sessions, tasks, tools
+from sololab.api import codelab_browse, documents, modules, providers, sessions, tasks, tools
 from sololab.config.settings import get_settings
 from sololab.core.llm_gateway import LLMConfig, LLMGateway
 from sololab.core.module_registry import ModuleContext, ModuleRegistry
@@ -204,7 +204,7 @@ def create_app() -> FastAPI:
     app.include_router(sessions.router, prefix="/api", tags=["sessions"])
     app.include_router(providers.router, prefix="/api", tags=["providers"])
     app.include_router(tools.router, prefix="/api", tags=["tools"])
-    app.include_router(codelab.router, prefix="/api", tags=["codelab"])
+    app.include_router(codelab_browse.router, prefix="/api", tags=["codelab"])
 
     @app.get("/health")
     async def health_check(request: Request) -> dict:
