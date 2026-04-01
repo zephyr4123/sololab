@@ -56,6 +56,9 @@ services:
     environment:
       OPENCODE_SERVER_PASSWORD: "${OPENCODE_SERVER_PASSWORD:-}"
       OPENCODE_SERVER_USERNAME: opencode
+      # 强制加载项目级配置（解决 workspace 目录切换后 findUp 找不到 /app/opencode.jsonc 的问题）
+      # 使用 volume mount 的源文件，避免 Docker image 中的副本过期
+      OPENCODE_CONFIG: /app/opencode-src/opencode.jsonc
     volumes:
       - ./opencode:/app/opencode-src:ro
       - opencode_data:/root/.local/share/opencode
