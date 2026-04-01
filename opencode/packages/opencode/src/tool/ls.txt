@@ -1,1 +1,1 @@
-Lists files and directories in a given path. The path parameter must be absolute; omit it to use the current workspace directory. You can optionally provide an array of glob patterns to ignore with the ignore parameter. You should generally prefer the Glob and Grep tools, if you know which directories to search.
+列出给定路径中的文件和目录。path 参数必须是绝对路径；省略则使用当前工作区目录。你可以选择提供一组 glob 模式通过 ignore 参数来忽略。如果你知道要搜索哪些目录，通常应优先使用 Glob 和 Grep 工具。

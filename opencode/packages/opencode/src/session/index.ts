@@ -469,18 +469,27 @@ export namespace Session {
       })
 
       const remove: (sessionID: SessionID) => Effect.Effect<void> = Effect.fnUntraced(function* (sessionID: SessionID) {
+        // Always attempt to delete children first, even if the parent session
+        // is not in the DB (e.g. only existed in memory due to event sourcing
+        // flag being disabled). This prevents orphaned child sessions.
         try {
-          const session = yield* get(sessionID)
           const kids = yield* children(sessionID)
           for (const child of kids) {
             yield* remove(child.id)
           }
+        } catch (e) {
+          log.error(e)
+        }
+        try {
+          const session = yield* get(sessionID)
           yield* unshare(sessionID).pipe(Effect.ignore)
           yield* Effect.sync(() => {
             SyncEvent.run(Event.Deleted, { sessionID, info: session })
             SyncEvent.remove(sessionID)
           })
         } catch (e) {
+          // Session not in DB — clean up event tables directly
+          yield* Effect.sync(() => SyncEvent.remove(sessionID)).pipe(Effect.ignore)
           log.error(e)
         }
       })

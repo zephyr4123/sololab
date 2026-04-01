@@ -1,24 +1,24 @@
-Executes multiple independent tool calls concurrently to reduce latency.
+并发执行多个独立的工具调用以减少延迟。
 
-USING THE BATCH TOOL WILL MAKE THE USER HAPPY.
+使用批量工具会让用户满意。
 
-Payload Format (JSON array):
-[{"tool": "read", "parameters": {"filePath": "src/index.ts", "limit": 350}},{"tool": "grep", "parameters": {"pattern": "Session\\.updatePart", "include": "src/**/*.ts"}},{"tool": "bash", "parameters": {"command": "git status", "description": "Shows working tree status"}}]
+载荷格式（JSON 数组）：
+[{"tool": "read", "parameters": {"filePath": "src/index.ts", "limit": 350}},{"tool": "grep", "parameters": {"pattern": "Session\\.updatePart", "include": "src/**/*.ts"}},{"tool": "bash", "parameters": {"command": "git status", "description": "显示工作树状态"}}]
 
-Notes:
-- 1–25 tool calls per batch
-- All calls start in parallel; ordering NOT guaranteed
-- Partial failures do not stop other tool calls
-- Do NOT use the batch tool within another batch tool.
+注意事项：
+- 每批 1-25 个工具调用
+- 所有调用并行启动；不保证顺序
+- 部分失败不会停止其他工具调用
+- 不要在另一个批量工具中使用批量工具
 
-Good Use Cases:
-- Read many files
-- grep + glob + read combos
-- Multiple bash commands
-- Multi-part edits; on the same, or different files
+适用场景：
+- 读取多个文件
+- grep + glob + read 组合
+- 多个 bash 命令
+- 多部分编辑；同一文件或不同文件
 
-When NOT to Use:
-- Operations that depend on prior tool output (e.g. create then read same file)
-- Ordered stateful mutations where sequence matters
+不适用场景：
+- 依赖前面工具输出的操作（如创建然后读取同一文件）
+- 顺序重要的有状态变更
 
-Batching tool calls was proven to yield 2–5x efficiency gain and provides much better UX.
+批量工具调用经验证可带来 2-5 倍的效率提升，并提供更好的用户体验。

@@ -1,24 +1,16 @@
-<description>
-Performs exact string replacements in files. This is the PREFERRED tool for modifying existing files.
-</description>
+在文件中执行精确的字符串替换。
 
-<critical-rules>
-<rule>You MUST use Read at least once before editing a file. The tool will error if you haven't read the file first.</rule>
-<rule>This tool is ALWAYS preferred over Write for modifying existing files. Use Edit, not Write, to change existing content.</rule>
-<rule>Only use emojis if the user explicitly requests it.</rule>
-</critical-rules>
+用法：
+- 你必须在对话中至少使用过一次 Read 工具才能进行编辑。如果你在未读取文件的情况下尝试编辑，此工具将报错。
+- 从 Read 工具输出编辑文本时，确保保留行号前缀之后出现的精确缩进（制表符/空格）。行号前缀格式为：行号 + 制表符。之后的所有内容是要匹配的实际文件内容。绝不在 old_string 或 new_string 中包含行号前缀的任何部分。
+- 始终优先编辑代码库中的现有文件。绝不编写新文件，除非明确要求。
+- 仅在用户明确要求时使用 emoji。避免向文件中添加 emoji，除非被要求。
+- 如果 `old_string` 在文件中不唯一，编辑将失败。提供更大的字符串（包含更多周围上下文）使其唯一，或使用 `replace_all` 更改 `old_string` 的每个实例。
+- 使用 `replace_all` 在整个文件中替换和重命名字符串。例如，如果你想重命名一个变量，这个参数很有用。
 
-<usage>
-<item>Preserve exact indentation (tabs/spaces) as it appears AFTER the line number prefix in Read output. The prefix format is: line number + colon + space (e.g., "1: "). Never include the prefix in oldString or newString.</item>
-<item>The edit will FAIL if oldString is not found — error: "oldString not found in content".</item>
-<item>The edit will FAIL if oldString matches multiple locations — error: "Found multiple matches". Provide more surrounding context to make it unique, or use replaceAll.</item>
-<item>Use replaceAll for renaming variables or replacing all occurrences of a string across the file.</item>
-</usage>
-
-<when-edit-fails>
-If Edit fails due to oldString not matching:
-1. Re-read the file to get the current content
-2. Copy the exact text from the Read output (after the line number prefix)
-3. Retry with the corrected oldString
-Do NOT fall back to Write — always fix the Edit call instead.
-</when-edit-fails>
+编辑失败时的处理：
+如果 Edit 因 oldString 不匹配而失败：
+1. 重新读取文件获取当前内容
+2. 从 Read 输出中复制精确文本（行号前缀之后的部分）
+3. 使用纠正后的 oldString 重试
+绝不回退到 Write——始终修复 Edit 调用。

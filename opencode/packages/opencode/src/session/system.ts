@@ -1,61 +1,32 @@
-import { Ripgrep } from "../file/ripgrep"
-
 import { Instance } from "../project/instance"
 
-import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
-import PROMPT_DEFAULT from "./prompt/default.txt"
-import PROMPT_BEAST from "./prompt/beast.txt"
-import PROMPT_GEMINI from "./prompt/gemini.txt"
-import PROMPT_GPT from "./prompt/gpt.txt"
-
-import PROMPT_CODEX from "./prompt/codex.txt"
-import PROMPT_TRINITY from "./prompt/trinity.txt"
-import PROMPT_KIMI from "./prompt/kimi.txt"
+import PROMPT_UNIFIED from "./prompt/unified.txt"
 import type { Provider } from "@/provider/provider"
 import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
 import { Skill } from "@/skill"
 
 export namespace SystemPrompt {
-  export function provider(model: Provider.Model) {
-    if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
-      return [PROMPT_BEAST]
-    if (model.api.id.includes("gpt")) {
-      if (model.api.id.includes("codex")) {
-        return [PROMPT_CODEX]
-      }
-      return [PROMPT_GPT]
-    }
-    if (model.api.id.includes("gemini-")) return [PROMPT_GEMINI]
-    if (model.api.id.includes("claude")) return [PROMPT_ANTHROPIC]
-    if (model.api.id.includes("kimi")) return [PROMPT_KIMI]
-    if (model.api.id.toLowerCase().includes("trinity")) return [PROMPT_TRINITY]
-    return [PROMPT_DEFAULT]
+  /**
+   * 统一系统提示词 —— 所有模型使用同一套提示词，消除 provider 分裂。
+   * 模型差异通过 environment() 中的动态信息注入处理。
+   */
+  export function provider(_model: Provider.Model) {
+    return [PROMPT_UNIFIED]
   }
 
   export async function environment(model: Provider.Model) {
     const project = Instance.project
     return [
       [
-        `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
-        `Here is some useful information about the environment you are running in:`,
-        `<env>`,
-        `  Working directory: ${Instance.directory}`,
-        `  Workspace root folder: ${Instance.worktree}`,
-        `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
-        `  Platform: ${process.platform}`,
-        `  Today's date: ${new Date().toDateString()}`,
-        `</env>`,
-        `<directories>`,
-        `  ${
-          project.vcs === "git" && false
-            ? await Ripgrep.tree({
-                cwd: Instance.directory,
-                limit: 50,
-              })
-            : ""
-        }`,
-        `</directories>`,
+        `# 环境信息`,
+        `你正在以下环境中运行：`,
+        ` - 当前模型：${model.api.id}（完整 ID：${model.providerID}/${model.api.id}）`,
+        ` - 工作目录：${Instance.directory}`,
+        ` - 工作区根目录：${Instance.worktree}`,
+        ` - 是否为 Git 仓库：${project.vcs === "git" ? "是" : "否"}`,
+        ` - 平台：${process.platform}`,
+        ` - 今日日期：${new Date().toLocaleDateString("zh-CN")}`,
       ].join("\n"),
     ]
   }
@@ -66,10 +37,8 @@ export namespace SystemPrompt {
     const list = await Skill.available(agent)
 
     return [
-      "Skills provide specialized instructions and workflows for specific tasks.",
-      "Use the skill tool to load a skill when a task matches its description.",
-      // the agents seem to ingest the information about skills a bit better if we present a more verbose
-      // version of them here and a less verbose version in tool description, rather than vice versa.
+      "技能提供针对特定任务的专门指令和工作流。",
+      "当任务匹配技能描述时，使用技能工具加载它。",
       Skill.fmt(list, { verbose: true }),
     ].join("\n")
   }

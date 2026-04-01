@@ -1,8 +1,10 @@
-- Fast content search tool that works with any codebase size
-- Searches file contents using regular expressions
-- Supports full regex syntax (eg. "log.*Error", "function\s+\w+", etc.)
-- Filter files by pattern with the include parameter (eg. "*.js", "*.{ts,tsx}")
-- Returns file paths and line numbers with at least one match sorted by modification time
-- Use this tool when you need to find files containing specific patterns
-- If you need to identify/count the number of matches within files, use the Bash tool with `rg` (ripgrep) directly. Do NOT use `grep`.
-- When you are doing an open-ended search that may require multiple rounds of globbing and grepping, use the Task tool instead
+基于 ripgrep 构建的强大搜索工具。
+
+用法：
+- 始终使用 Grep 执行搜索任务。绝不通过 Bash 命令调用 `grep` 或 `rg`。Grep 工具已针对正确的权限和访问进行了优化。
+- 支持完整的正则表达式语法（例如 "log.*Error"、"function\\s+\\w+"）
+- 使用 include 参数按 glob 过滤文件（例如 "*.js"、"**/*.tsx"）
+- 返回按修改时间排序的文件路径和行号
+- 模式语法：使用 ripgrep（非 grep）——字面花括号需要转义（使用 `interface\\{\\}` 查找 `interface{}`）
+- 当你进行可能需要多轮搜索的开放性搜索时，使用 Task 工具配合 explore 代理
+- 如果你需要识别/计数文件内的匹配数量，使用 Bash 工具直接运行 `rg`（ripgrep）。不要使用 `grep`

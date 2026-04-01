@@ -1,14 +1,22 @@
-- Search the web using Exa AI - performs real-time web searches and can scrape content from specific URLs
-- Provides up-to-date information for current events and recent data
-- Supports configurable result counts and returns the content from the most relevant websites
-- Use this tool for accessing information beyond knowledge cutoff
-- Searches are performed automatically within a single API call
+- 搜索网络并使用结果来提供最新信息
+- 为当前事件和最新数据提供实时信息
+- 返回搜索结果信息，包括 Markdown 超链接
+- 使用此工具访问超出知识截止日期的信息
+- 搜索在单次 API 调用中自动执行
 
-Usage notes:
-  - Supports live crawling modes: 'fallback' (backup if cached unavailable) or 'preferred' (prioritize live crawling)
-  - Search types: 'auto' (balanced), 'fast' (quick results), 'deep' (comprehensive search)
-  - Configurable context length for optimal LLM integration
-  - Domain filtering and advanced search options available
+关键要求——你必须遵守：
+  - 回答用户问题后，你必须在回复末尾包含"来源："部分
+  - 在来源部分，将搜索结果中所有相关 URL 列为 Markdown 超链接：[标题](URL)
+  - 这是强制性的——绝不跳过在回复中包含来源
+  - 格式示例：
 
-The current year is {{year}}. You MUST use this year when searching for recent information or current events
-- Example: If the current year is 2026 and the user asks for "latest AI news", search for "AI news 2026", NOT "AI news 2025"
+    [你的回答]
+
+    来源：
+    - [来源标题 1](https://example.com/1)
+    - [来源标题 2](https://example.com/2)
+
+用法说明：
+  - 支持域名过滤以包含或屏蔽特定网站
+  - 当前年份为 {{year}}。搜索近期信息时必须使用当前年份
+  - 例如：如果当前是 2026 年，用户问"最新的 React 文档"，搜索"React 文档 2026"而非 2025

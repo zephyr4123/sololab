@@ -1,15 +1,41 @@
-Manage project memories that persist across sessions. Use this tool to save important discoveries, patterns, preferences, and knowledge learned during the current session so future sessions can benefit from this context.
+管理跨会话持久化的项目记忆。使用此工具保存在当前会话中发现的重要信息，让未来的会话能够从中受益。
 
-Actions:
-- **list**: Show all project memories
-- **add**: Save a new memory entry
-- **update**: Modify an existing memory
-- **delete**: Remove a memory entry
-- **search**: Search memories by keyword
+操作：
+- **list**：显示所有项目记忆
+- **add**：保存新的记忆条目
+- **update**：修改现有记忆
+- **delete**：删除记忆条目
+- **search**：按关键词搜索记忆
 
-When to save memories:
-- Architectural patterns or conventions discovered in the codebase
-- User preferences or corrections
-- Important file knowledge (what files do what)
-- Key decisions made during the session
-- Debugging discoveries that would help in future sessions
+## 记忆类型
+
+记忆分为四种类型：
+
+1. **user**（用户画像）：关于用户角色、目标、职责和知识的信息。帮助你为特定用户定制行为。例如：用户是数据科学家、精通 Go 但是 React 新手。
+
+2. **feedback**（反馈指导）：用户给你的关于如何处理工作的指导——包括要避免什么和要继续做什么。在用户纠正你或确认方法时保存。例如：不要在测试中模拟数据库、不要在每次回复末尾总结。
+
+3. **project**（项目状态）：关于正在进行的工作、目标、计划、bug 或事件的信息，这些无法从代码或 git 历史中推导出来。例如：周四后冻结所有非关键合并、认证中间件重写是法律合规驱动的。
+
+4. **reference**（外部引用）：指向外部系统中信息的指针。例如：管道 bug 在 Linear 项目"INGEST"中跟踪、oncall 延迟仪表板在 grafana.internal/d/api-latency。
+
+## 什么不该保存
+
+- 代码模式、约定、架构、文件路径或项目结构——这些可以通过读取当前项目状态推导出来
+- Git 历史、最近更改——`git log` / `git blame` 是权威来源
+- 调试解决方案——修复在代码中，提交消息有上下文
+- 临时任务详情：进行中的工作、临时状态、当前对话上下文
+
+## 何时保存记忆
+
+- 当你了解到用户角色、偏好、职责或知识的任何细节时
+- 当用户纠正你的方法或确认非明显的方法有效时
+- 当你了解到谁在做什么、为什么、何时完成
+- 当你了解到外部系统中的资源及其用途时
+
+## 使用记忆前的验证
+
+记忆可能随时间变得过时。在根据记忆信息行动前：
+- 如果记忆提到文件路径：检查文件是否存在
+- 如果记忆提到函数或标志：搜索它
+- "记忆说 X 存在"不等于"X 现在存在"
