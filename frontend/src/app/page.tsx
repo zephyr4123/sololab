@@ -3,19 +3,22 @@ import Link from 'next/link';
 import { Lightbulb, Code, PenTool, BarChart3, BookOpen, Search, ArrowRight } from 'lucide-react';
 
 const modules = [
-  { id: 'ideaspark', name: 'IdeaSpark', description: '多智能体协作，激发创新性研究创意', icon: Lightbulb, status: 'ready' },
-  { id: 'codelab', name: 'CodeLab', description: 'AI 辅助编码与实验原型开发', icon: Code, status: 'ready' },
-  { id: 'writer', name: 'WriterAI', description: '学术论文写作与结构化表达', icon: PenTool, status: 'planned' },
-  { id: 'datalens', name: 'DataLens', description: '数据分析与可视化洞察', icon: BarChart3, status: 'planned' },
-  { id: 'litreview', name: 'LitReview', description: '系统性文献综述与知识图谱', icon: BookOpen, status: 'planned' },
-  { id: 'reviewer', name: 'Reviewer', description: '模拟同行评审与论文改进建议', icon: Search, status: 'planned' },
+  { id: 'ideaspark', name: 'IdeaSpark', description: '多智能体协作，激发创新性研究创意', icon: Lightbulb, status: 'ready', accent: 'var(--color-warm)' },
+  { id: 'codelab', name: 'CodeLab', description: 'AI 辅助编码与实验原型开发', icon: Code, status: 'ready', accent: 'var(--color-warm)' },
+  { id: 'writer', name: 'WriterAI', description: '学术论文写作与结构化表达', icon: PenTool, status: 'planned', accent: '' },
+  { id: 'datalens', name: 'DataLens', description: '数据分析与可视化洞察', icon: BarChart3, status: 'planned', accent: '' },
+  { id: 'litreview', name: 'LitReview', description: '系统性文献综述与知识图谱', icon: BookOpen, status: 'planned', accent: '' },
+  { id: 'reviewer', name: 'Reviewer', description: '模拟同行评审与论文改进建议', icon: Search, status: 'planned', accent: '' },
 ];
 
 export default function DashboardPage() {
   return (
     <div className="mx-auto max-w-4xl py-6">
-      {/* Hero section */}
-      <div className="mb-14 animate-fade-in-up">
+      {/* Hero section — atmospheric greeting */}
+      <div className="relative mb-16 animate-fade-in-up">
+        {/* Decorative accent orb */}
+        <div className="hero-accent" />
+
         <div className="flex items-center gap-5">
           <Image
             src="/logo.png"
@@ -33,6 +36,11 @@ export default function DashboardPage() {
             </p>
           </div>
         </div>
+
+        {/* Inspirational tagline */}
+        <p className="mt-8 text-lg text-muted-foreground/60 animate-fade-in delay-2" style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic' }}>
+          "One researcher, infinite possibilities."
+        </p>
       </div>
 
       {/* Section divider */}

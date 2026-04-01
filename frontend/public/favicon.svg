@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2C2620"/>
+      <stop offset="100%" stop-color="#1C1917"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#D4A96A"/>
+      <stop offset="100%" stop-color="#B8956A"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="url(#bg)"/>
+  <!-- Stylized "S" — two offset arcs forming a fluid research path -->
+  <path d="M19.5 7.5C19.5 7.5 23 8.5 23 12c0 3-3.5 3.5-7 4.5S9 19 9 21.5c0 2.5 3.5 3.5 3.5 3.5"
+        stroke="url(#mark)" stroke-width="2.8" stroke-linecap="round" fill="none"/>
+  <!-- Accent dot — the "solo" researcher point -->
+  <circle cx="21" cy="24" r="2" fill="url(#mark)" opacity="0.9"/>
+</svg>

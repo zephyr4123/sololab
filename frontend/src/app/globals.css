@@ -98,6 +98,59 @@ body::before {
   opacity: 0.04;
 }
 
+/* ─── Dark Mode: Warm Ambient Glow ─── */
+.dark body::after {
+  content: '';
+  position: fixed;
+  top: -20%;
+  left: -10%;
+  width: 60%;
+  height: 50%;
+  pointer-events: none;
+  z-index: -1;
+  background: radial-gradient(ellipse at 30% 20%, rgba(184, 149, 106, 0.04) 0%, transparent 70%);
+}
+
+/* ─── Tool Call Active Glow ─── */
+@keyframes warmPulse {
+  0%, 100% { border-left-color: var(--color-warm); opacity: 1; }
+  50% { border-left-color: var(--color-warm); opacity: 0.5; }
+}
+
+.tool-call-active {
+  animation: warmPulse 2s ease-in-out infinite;
+  box-shadow: -2px 0 12px -4px rgba(184, 149, 106, 0.15);
+}
+
+.dark .tool-call-active {
+  box-shadow: -2px 0 16px -4px rgba(201, 168, 124, 0.2);
+}
+
+/* ─── Module Icon Glow (sidebar hover) ─── */
+.module-icon-wrap {
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.module-icon-wrap:hover {
+  box-shadow: 0 0 0 4px rgba(184, 149, 106, 0.08);
+}
+
+/* ─── Hero Decorative Accent ─── */
+.hero-accent {
+  position: absolute;
+  top: -24px;
+  right: -32px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(184, 149, 106, 0.06) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.dark .hero-accent {
+  background: radial-gradient(circle, rgba(201, 168, 124, 0.08) 0%, transparent 70%);
+}
+
 /* ─── Scrollbar Styling ─── */
 ::-webkit-scrollbar {
   width: 6px;

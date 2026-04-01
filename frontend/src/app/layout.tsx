@@ -4,8 +4,14 @@ import { Sidebar } from '@/components/shell/Sidebar';
 import { ThemeInitializer } from '@/components/shell/ThemeInitializer';
 
 export const metadata: Metadata = {
-  title: 'SoloLab - AI 辅助研究平台',
-  description: '面向独立研究者的 AI 辅助研究平台',
+  title: 'SoloLab',
+  description: 'AI-Powered Research Platform for Independent Researchers',
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+    ],
+    apple: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

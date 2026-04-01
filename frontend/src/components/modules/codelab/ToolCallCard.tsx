@@ -90,7 +90,7 @@ export function ToolCallCard({ toolCall }: { toolCall: CodeLabToolCall }) {
     : 'border-l-border/40';
 
   return (
-    <div className={`border-l-2 ${borderColor} pl-3 my-1 transition-colors duration-300`}>
+    <div className={`border-l-2 ${borderColor} pl-3 my-1 transition-colors duration-300 ${isRunning ? 'tool-call-active' : ''}`}>
       {/* Header row */}
       <div
         className={`group/tc flex items-center gap-2 rounded-md py-1 px-1.5 -ml-1.5 transition-colors ${

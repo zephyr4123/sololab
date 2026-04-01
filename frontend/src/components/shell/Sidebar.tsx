@@ -52,7 +52,9 @@ export function Sidebar() {
                 className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-muted-foreground/30 cursor-not-allowed"
                 title={mod.description ?? 'Coming soon'}
               >
-                <Icon className="h-[18px] w-[18px] shrink-0" />
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-muted/40 shrink-0">
+                  <Icon className="h-[15px] w-[15px]" />
+                </div>
                 <span className="hidden flex-1 lg:block">{mod.name}</span>
                 <Lock className="hidden h-3 w-3 opacity-40 lg:block" />
               </div>
@@ -70,7 +72,13 @@ export function Sidebar() {
                   : 'text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground'
               }`}
             >
-              <Icon className={`h-[18px] w-[18px] shrink-0 transition-colors ${isActive ? 'text-[var(--color-warm)]' : ''}`} />
+              <div className={`module-icon-wrap flex h-7 w-7 items-center justify-center rounded-lg shrink-0 transition-all duration-200 ${
+                isActive
+                  ? 'bg-[var(--color-warm)]/12 text-[var(--color-warm)]'
+                  : 'bg-foreground/[0.04] group-hover:bg-[var(--color-warm)]/8 group-hover:text-[var(--color-warm)]'
+              }`}>
+                <Icon className="h-[15px] w-[15px]" />
+              </div>
               <span className="hidden lg:block">{mod.name}</span>
               {isActive && (
                 <span className="ml-auto hidden h-1.5 w-1.5 rounded-full bg-[var(--color-warm)] lg:block" />
