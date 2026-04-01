@@ -4,7 +4,7 @@ import { pathToFileURL } from "url"
 import { createRequire } from "module"
 import os from "os"
 import z from "zod"
-import { ModelsDev } from "../provider/models"
+// ModelsDev removed — schemas inlined in Config.Provider below
 import { mergeDeep, pipe, unique } from "remeda"
 import { Global } from "../global"
 import fsNode from "fs/promises"
@@ -45,7 +45,7 @@ import { Flock } from "@/util/flock"
 import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
 
 export namespace Config {
-  const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
+  const ModelId = z.string()
   const PluginOptions = z.record(z.string(), z.unknown())
   export const PluginSpec = z.union([z.string(), z.tuple([z.string(), PluginOptions])])
 
@@ -837,57 +837,91 @@ export namespace Config {
   })
   export type Layout = z.infer<typeof Layout>
 
-  export const Provider = ModelsDev.Provider.partial()
-    .extend({
+  export const Provider = z
+    .object({
+      // Provider metadata (inlined from former ModelsDev.Provider)
+      name: z.string().optional(),
+      env: z.array(z.string()).optional(),
+      npm: z.string().optional(),
+      api: z.string().optional(),
+      // Filtering
       whitelist: z.array(z.string()).optional(),
       blacklist: z.array(z.string()).optional(),
+      // Per-model overrides
       models: z
         .record(
           z.string(),
-          ModelsDev.Model.partial().extend({
-            variants: z
-              .record(
-                z.string(),
-                z
-                  .object({
-                    disabled: z.boolean().optional().describe("Disable this variant for the model"),
-                  })
-                  .catchall(z.any()),
-              )
-              .optional()
-              .describe("Variant-specific configuration"),
-          }),
+          z
+            .object({
+              id: z.string().optional(),
+              name: z.string().optional(),
+              family: z.string().optional(),
+              reasoning: z.boolean().optional(),
+              temperature: z.boolean().optional(),
+              attachment: z.boolean().optional(),
+              tool_call: z.boolean().optional(),
+              interleaved: z
+                .union([z.boolean(), z.object({ field: z.enum(["reasoning_content", "reasoning_details"]) })])
+                .optional(),
+              cost: z
+                .object({
+                  input: z.number().optional(),
+                  output: z.number().optional(),
+                  cache_read: z.number().optional(),
+                  cache_write: z.number().optional(),
+                })
+                .optional(),
+              limit: z
+                .object({
+                  context: z.number().optional(),
+                  input: z.number().optional(),
+                  output: z.number().optional(),
+                })
+                .optional(),
+              options: z.record(z.string(), z.any()).optional(),
+              headers: z.record(z.string(), z.string()).optional(),
+              status: z.enum(["alpha", "beta", "deprecated", "active"]).optional(),
+              modalities: z
+                .object({
+                  input: z.array(z.enum(["text", "audio", "image", "video", "pdf"])).optional(),
+                  output: z.array(z.enum(["text", "audio", "image", "video", "pdf"])).optional(),
+                })
+                .optional(),
+              provider: z.object({ npm: z.string().optional(), api: z.string().optional() }).optional(),
+              release_date: z.string().optional(),
+              variants: z
+                .record(
+                  z.string(),
+                  z
+                    .object({
+                      disabled: z.boolean().optional().describe("Disable this variant for the model"),
+                    })
+                    .catchall(z.any()),
+                )
+                .optional()
+                .describe("Variant-specific configuration"),
+            })
+            .partial(),
         )
         .optional(),
+      // Connection options
       options: z
         .object({
           apiKey: z.string().optional(),
           baseURL: z.string().optional(),
-          enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
-          setCacheKey: z.boolean().optional().describe("Enable promptCacheKey for this provider (default false)"),
           timeout: z
             .union([
-              z
-                .number()
-                .int()
-                .positive()
-                .describe(
-                  "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
-                ),
-              z.literal(false).describe("Disable timeout for this provider entirely."),
+              z.number().int().positive(),
+              z.literal(false).describe("Disable timeout entirely."),
             ])
             .optional()
-            .describe(
-              "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
-            ),
+            .describe("Timeout in milliseconds (default 300000). Set to false to disable."),
           chunkTimeout: z
             .number()
             .int()
             .positive()
             .optional()
-            .describe(
-              "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
-            ),
+            .describe("Timeout in milliseconds between SSE chunks."),
         })
         .catchall(z.any())
         .optional(),

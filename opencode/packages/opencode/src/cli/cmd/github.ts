@@ -18,13 +18,12 @@ import type {
 } from "@octokit/webhooks-types"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
-import { ModelsDev } from "../../provider/models"
+import { Provider } from "../../provider/provider"
 import { Instance } from "@/project/instance"
 import { bootstrap } from "../bootstrap"
 import { Session } from "../../session"
 import type { SessionID } from "../../session/schema"
 import { MessageID, PartID } from "../../session/schema"
-import { Provider } from "../../provider/provider"
 import { Bus } from "../../bus"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
@@ -209,11 +208,7 @@ export const GithubInstallCommand = cmd({
           const app = await getAppInfo()
           await installGitHubApp()
 
-          const providers = await ModelsDev.get().then((p) => {
-            // TODO: add guide for copilot, for now just hide it
-            delete p["github-copilot"]
-            return p
-          })
+          const providers = await Provider.list()
 
           const provider = await promptProvider()
           const model = await promptModel()

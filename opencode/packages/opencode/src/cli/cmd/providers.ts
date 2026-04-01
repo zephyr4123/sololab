@@ -2,7 +2,7 @@ import { Auth } from "../../auth"
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
-import { ModelsDev } from "../../provider/models"
+import { Provider } from "../../provider/provider"
 import { map, pipe, sortBy, values } from "remeda"
 import path from "path"
 import os from "os"
@@ -216,37 +216,21 @@ export const ProvidersListCommand = cmd({
     const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
     prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
     const results = Object.entries(await Auth.all())
-    const database = await ModelsDev.get()
 
     for (const [providerID, result] of results) {
-      const name = database[providerID]?.name || providerID
-      prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
+      prompts.log.info(`${providerID} ${UI.Style.TEXT_DIM}${result.type}`)
     }
 
     prompts.outro(`${results.length} credentials`)
 
-    const activeEnvVars: Array<{ provider: string; envVar: string }> = []
-
-    for (const [providerID, provider] of Object.entries(database)) {
-      for (const envVar of provider.env) {
-        if (process.env[envVar]) {
-          activeEnvVars.push({
-            provider: provider.name || providerID,
-            envVar,
-          })
-        }
-      }
-    }
-
-    if (activeEnvVars.length > 0) {
+    // Show env-based provider
+    if (process.env.CODELAB_API_KEY) {
       UI.empty()
       prompts.intro("Environment")
-
-      for (const { provider, envVar } of activeEnvVars) {
-        prompts.log.info(`${provider} ${UI.Style.TEXT_DIM}${envVar}`)
-      }
-
-      prompts.outro(`${activeEnvVars.length} environment variable` + (activeEnvVars.length === 1 ? "" : "s"))
+      prompts.log.info(`CODELAB_API_KEY ${UI.Style.TEXT_DIM}set`)
+      if (process.env.CODELAB_MODEL) prompts.log.info(`CODELAB_MODEL ${UI.Style.TEXT_DIM}${process.env.CODELAB_MODEL}`)
+      if (process.env.CODELAB_BASE_URL) prompts.log.info(`CODELAB_BASE_URL ${UI.Style.TEXT_DIM}${process.env.CODELAB_BASE_URL}`)
+      prompts.outro("Environment configured")
     }
   },
 })
@@ -303,62 +287,13 @@ export const ProvidersLoginCommand = cmd({
           prompts.outro("Done")
           return
         }
-        await ModelsDev.refresh().catch(() => {})
-
         const config = await Config.get()
+        const connected = await Provider.list()
 
-        const disabled = new Set(config.disabled_providers ?? [])
-        const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
-
-        const providers = await ModelsDev.get().then((x) => {
-          const filtered: Record<string, (typeof x)[string]> = {}
-          for (const [key, value] of Object.entries(x)) {
-            if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) {
-              filtered[key] = value
-            }
-          }
-          return filtered
-        })
-
-        const priority: Record<string, number> = {
-          opencode: 0,
-          openai: 1,
-          "github-copilot": 2,
-          google: 3,
-          anthropic: 4,
-          openrouter: 5,
-          vercel: 6,
-        }
-        const pluginProviders = resolvePluginProviders({
-          hooks: await Plugin.list(),
-          existingProviders: providers,
-          disabled,
-          enabled,
-          providerNames: Object.fromEntries(Object.entries(config.provider ?? {}).map(([id, p]) => [id, p.name])),
-        })
-        const options = [
-          ...pipe(
-            providers,
-            values(),
-            sortBy(
-              (x) => priority[x.id] ?? 99,
-              (x) => x.name ?? x.id,
-            ),
-            map((x) => ({
-              label: x.name,
-              value: x.id,
-              hint: {
-                opencode: "recommended",
-                openai: "ChatGPT Plus/Pro or API key",
-              }[x.id],
-            })),
-          ),
-          ...pluginProviders.map((x) => ({
-            label: x.name,
-            value: x.id,
-            hint: "plugin",
-          })),
-        ]
+        const options = Object.values(connected).map((p) => ({
+          label: p.name,
+          value: p.id as string,
+        }))
 
         let provider: string
         if (args.provider) {
@@ -463,11 +398,10 @@ export const ProvidersLogoutCommand = cmd({
       prompts.log.error("No credentials found")
       return
     }
-    const database = await ModelsDev.get()
     const providerID = await prompts.select({
       message: "Select provider",
       options: credentials.map(([key, value]) => ({
-        label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
+        label: key + UI.Style.TEXT_DIM + " (" + value.type + ")",
         value: key,
       })),
     })

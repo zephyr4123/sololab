@@ -6,7 +6,7 @@ import { LLM } from "../../src/session/llm"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
 import { ProviderTransform } from "../../src/provider/transform"
-import { ModelsDev } from "../../src/provider/models"
+// ModelsDev removed — provider system simplified
 import { ProviderID, ModelID } from "../../src/provider/schema"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
@@ -188,7 +188,7 @@ function createChatStream(text: string) {
 
 async function loadFixture(providerID: string, modelID: string) {
   const fixturePath = path.join(import.meta.dir, "../tool/fixtures/models-api.json")
-  const data = await Filesystem.readJson<Record<string, ModelsDev.Provider>>(fixturePath)
+  const data = await Filesystem.readJson<Record<string, { name: string; env: string[]; models: Record<string, any> }>>(fixturePath)
   const provider = data[providerID]
   if (!provider) {
     throw new Error(`Missing provider in fixture: ${providerID}`)

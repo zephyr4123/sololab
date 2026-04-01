@@ -556,50 +556,7 @@ test("provider removed when all models filtered out", async () => {
   })
 })
 
-test("closest finds model by partial match", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-        }),
-      )
-    },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    init: async () => {
-      Env.set("ANTHROPIC_API_KEY", "test-api-key")
-    },
-    fn: async () => {
-      const result = await Provider.closest(ProviderID.anthropic, ["sonnet-4"])
-      expect(result).toBeDefined()
-      expect(String(result?.providerID)).toBe("anthropic")
-      expect(String(result?.modelID)).toContain("sonnet-4")
-    },
-  })
-})
-
-test("closest returns undefined for nonexistent provider", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-        }),
-      )
-    },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const result = await Provider.closest(ProviderID.make("nonexistent"), ["model"])
-      expect(result).toBeUndefined()
-    },
-  })
-})
+// closest() tests removed — function removed in provider simplification
 
 test("getModel uses realIdByKey for aliased models", async () => {
   await using tmp = await tmpdir({
@@ -1611,53 +1568,7 @@ test("getProvider returns provider info", async () => {
   })
 })
 
-test("closest returns undefined when no partial match found", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-        }),
-      )
-    },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    init: async () => {
-      Env.set("ANTHROPIC_API_KEY", "test-api-key")
-    },
-    fn: async () => {
-      const result = await Provider.closest(ProviderID.anthropic, ["nonexistent-xyz-model"])
-      expect(result).toBeUndefined()
-    },
-  })
-})
-
-test("closest checks multiple query terms in order", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-        }),
-      )
-    },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    init: async () => {
-      Env.set("ANTHROPIC_API_KEY", "test-api-key")
-    },
-    fn: async () => {
-      // First term won't match, second will
-      const result = await Provider.closest(ProviderID.anthropic, ["nonexistent", "haiku"])
-      expect(result).toBeDefined()
-      expect(result?.modelID).toContain("haiku")
-    },
-  })
-})
+// closest() tests removed — function removed in provider simplification
 
 test("model limit defaults to zero when not specified", async () => {
   await using tmp = await tmpdir({

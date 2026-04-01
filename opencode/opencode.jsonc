@@ -3,16 +3,17 @@
   // SoloLab CodeLab 模块 — OpenCode 引擎配置
   //
   // 用户只需在 .env 中设置三个变量即可：
-  //   CODELAB_BASE_URL — LLM API 端点（可选，默认用 provider 自带端点）
   //   CODELAB_API_KEY  — API 密钥
   //   CODELAB_MODEL    — 模型（格式: providerID/modelID）
+  //   CODELAB_BASE_URL — LLM API 端点（anthropic/openai/google 原生 SDK 可不设）
   //
   // 切换 Provider 示例：
-  //   Moonshot:   CODELAB_MODEL=moonshotai-cn/kimi-k2.5           CODELAB_BASE_URL=https://api.moonshot.cn/v1
-  //   Anthropic:  CODELAB_MODEL=anthropic/claude-sonnet-4-5        （无需设 BASE_URL）
-  //   OpenAI:     CODELAB_MODEL=openai/gpt-4o                     （无需设 BASE_URL）
-  //   DeepSeek:   CODELAB_MODEL=deepseek/deepseek-chat            （无需设 BASE_URL）
-  //   Qwen:       CODELAB_MODEL=alibaba-cn/qwen3-coder-30b-a3b   （无需设 BASE_URL）
+  //   Qwen:       CODELAB_MODEL=alibaba-cn/qwen3.5-plus         CODELAB_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+  //   Moonshot:   CODELAB_MODEL=moonshotai-cn/kimi-k2.5         CODELAB_BASE_URL=https://api.moonshot.cn/v1
+  //   DeepSeek:   CODELAB_MODEL=deepseek/deepseek-chat          CODELAB_BASE_URL=https://api.deepseek.com/v1
+  //   Anthropic:  CODELAB_MODEL=anthropic/claude-sonnet-4-5      （无需 BASE_URL）
+  //   OpenAI:     CODELAB_MODEL=openai/gpt-4o                   （无需 BASE_URL）
+  //   Google:     CODELAB_MODEL=google/gemini-2.5-flash          （无需 BASE_URL）
 
   "server": {
     "port": 3100,
@@ -21,49 +22,6 @@
 
   // 默认模型（从 .env 的 CODELAB_MODEL 读取）
   "model": "{env:CODELAB_MODEL}",
-
-  // ─── Provider 配置 ───────────────────────────────────────────
-  // 将 CODELAB_API_KEY 映射到各 provider 的密钥。
-  // 切换 provider 时只需改 .env 中的 CODELAB_MODEL，无需改此文件。
-  // 如需使用未列出的 provider，添加一行 "providerID": { "env": ["CODELAB_API_KEY"] } 即可。
-  "provider": {
-    // ── 模型厂商（直连官方 API）──
-    "moonshotai-cn": {
-      "env": ["CODELAB_API_KEY"],
-      "options": { "baseURL": "{env:CODELAB_BASE_URL}" }
-    },
-    "moonshotai":    { "env": ["CODELAB_API_KEY"] },
-    "anthropic":     { "env": ["CODELAB_API_KEY"] },
-    "openai":        { "env": ["CODELAB_API_KEY"] },
-    "google":        { "env": ["CODELAB_API_KEY"] },
-    "deepseek":      { "env": ["CODELAB_API_KEY"] },
-    "xai":           { "env": ["CODELAB_API_KEY"] },
-    "mistral":       { "env": ["CODELAB_API_KEY"] },
-    "cohere":        { "env": ["CODELAB_API_KEY"] },
-    "minimax":       { "env": ["CODELAB_API_KEY"] },
-    "minimax-cn":    { "env": ["CODELAB_API_KEY"] },
-
-    // ── 国内模型厂商 ──
-    "alibaba-cn":    { "env": ["CODELAB_API_KEY"] },
-    "alibaba":       { "env": ["CODELAB_API_KEY"] },
-    "zhipuai":       { "env": ["CODELAB_API_KEY"] },
-    "siliconflow-cn": { "env": ["CODELAB_API_KEY"] },
-    "modelscope":    { "env": ["CODELAB_API_KEY"] },
-    "xiaomi":        { "env": ["CODELAB_API_KEY"] },
-
-    // ── 推理平台（聚合多模型）──
-    "openrouter":    { "env": ["CODELAB_API_KEY"] },
-    "groq":          { "env": ["CODELAB_API_KEY"] },
-    "fireworks-ai":  { "env": ["CODELAB_API_KEY"] },
-    "togetherai":    { "env": ["CODELAB_API_KEY"] },
-    "deepinfra":     { "env": ["CODELAB_API_KEY"] },
-    "cerebras":      { "env": ["CODELAB_API_KEY"] },
-    "siliconflow":   { "env": ["CODELAB_API_KEY"] },
-    "nvidia":        { "env": ["CODELAB_API_KEY"] },
-    "novita-ai":     { "env": ["CODELAB_API_KEY"] },
-    "huggingface":   { "env": ["CODELAB_API_KEY"] },
-    "perplexity":    { "env": ["CODELAB_API_KEY"] }
-  },
 
   // 权限配置：保护关键文件
   "permission": {

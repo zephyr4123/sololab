@@ -4,11 +4,10 @@ import { Token } from "../util/token"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import type { JSONSchema } from "zod/v4/core"
 import type { Provider } from "./provider"
-import type { ModelsDev } from "./models"
 import { iife } from "@/util/iife"
 import { Flag } from "@/flag/flag"
 
-type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
+type Modality = "text" | "audio" | "image" | "video" | "pdf"
 
 function mimeToModality(mime: string): Modality | undefined {
   if (mime.startsWith("image/")) return "image"
