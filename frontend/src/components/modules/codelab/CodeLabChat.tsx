@@ -11,7 +11,7 @@ import { PermissionDialog } from './PermissionDialog';
 import { ProjectSelector } from './ProjectSelector';
 import { opencode, streamPrompt } from '@/lib/opencode-client';
 import type { OpenCodeStreamHandlers } from '@/lib/opencode-client';
-import { codelabSessionApi } from '@/lib/api-client';
+import { codelabSessionApi, codelabSkillApi, type CodelabSkill } from '@/lib/api-client';
 import { useSessionStore } from '@/stores/session-store';
 
 /* ── Quirky Thinking Indicator ── */
@@ -56,10 +56,23 @@ function ThinkingIndicator() {
 
 export function CodeLabChat({ moduleId }: { moduleId: string }) {
   const [input, setInput] = useState('');
+  const [skills, setSkills] = useState<CodelabSkill[]>([]);
+  const [showSkills, setShowSkills] = useState(false);
+  const [selectedSkillIdx, setSelectedSkillIdx] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const store = useCodeLabStore();
+
+  // Fetch available skills once
+  useEffect(() => {
+    codelabSkillApi.list().then(setSkills).catch(() => {});
+  }, []);
+
+  // Skill autocomplete: show when input starts with "/"
+  const filteredSkills = showSkills
+    ? skills.filter((s) => s.name.toLowerCase().includes(input.slice(1).toLowerCase()))
+    : [];
 
   // Auto-scroll
   useEffect(() => {
@@ -270,6 +283,33 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
   }, [store]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Skill autocomplete navigation
+    if (showSkills && filteredSkills.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedSkillIdx((i) => Math.min(i + 1, filteredSkills.length - 1));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedSkillIdx((i) => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const skill = filteredSkills[selectedSkillIdx];
+        if (skill) {
+          setInput(`/${skill.name} `);
+          setShowSkills(false);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        setShowSkills(false);
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       send();
@@ -394,13 +434,43 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
       </div>
 
       {/* Input area — unified container */}
-      <div className="shrink-0 pt-3 pb-1 px-1">
+      <div className="relative shrink-0 pt-3 pb-1 px-1">
+        {/* Skill autocomplete dropdown */}
+        {showSkills && filteredSkills.length > 0 && (
+          <div className="absolute bottom-full left-1 right-1 mb-1 max-h-48 overflow-y-auto rounded-xl border border-border/60 bg-card shadow-lg z-10">
+            {filteredSkills.map((skill, i) => (
+              <button
+                key={skill.name}
+                className={`w-full flex items-start gap-3 px-4 py-2.5 text-left text-sm transition-colors ${
+                  i === selectedSkillIdx
+                    ? 'bg-[var(--color-warm)]/8 text-foreground'
+                    : 'text-muted-foreground hover:bg-foreground/[0.03]'
+                }`}
+                onMouseEnter={() => setSelectedSkillIdx(i)}
+                onClick={() => {
+                  setInput(`/${skill.name} `);
+                  setShowSkills(false);
+                  textareaRef.current?.focus();
+                }}
+              >
+                <span className="shrink-0 text-[var(--color-warm)] font-mono text-xs mt-0.5">/{skill.name}</span>
+                <span className="text-xs text-muted-foreground/70 truncate">{skill.description}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="rounded-2xl border border-border/50 bg-card/50 transition-all duration-200 focus-within:border-[var(--color-warm)]/30 focus-within:bg-card/80 focus-within:shadow-[0_0_0_1px_var(--color-warm)]/10">
           {/* Textarea */}
           <textarea
             ref={textareaRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setInput(v);
+              setShowSkills(v.startsWith('/') && !v.includes(' '));
+              setSelectedSkillIdx(0);
+            }}
             onKeyDown={handleKeyDown}
             placeholder="描述你的编码需求..."
             rows={1}

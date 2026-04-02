@@ -154,6 +154,20 @@ export const codelabSessionApi = {
   },
 };
 
+// === CodeLab Skills API ===
+export interface CodelabSkill {
+  name: string;
+  description: string;
+}
+
+export const codelabSkillApi = {
+  list: async (): Promise<CodelabSkill[]> => {
+    const res = await fetch(`${API_BASE}/api/codelab/skills`);
+    if (!res.ok) return [];
+    return res.json();
+  },
+};
+
 // === Cost API ===
 export const costApi = {
   getTotal: async (days = 30) => {

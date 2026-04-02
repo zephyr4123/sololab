@@ -149,3 +149,26 @@ async def delete_codelab_session(
         "status": "deleted",
         "pg_deleted": pg_deleted,
     }
+
+
+# ─── GET /api/codelab/skills ─────────────────────────────────────────────────
+
+@router.get("/codelab/skills")
+async def list_codelab_skills() -> list[dict]:
+    """列出 CodeLab 可用的 Skills（从 OpenCode 拉取）。"""
+    try:
+        skills = await _oc_request("GET", "/skill")
+    except httpx.HTTPError as e:
+        logger.warning("OpenCode skills 列表失败: %s", e)
+        return []
+
+    if not isinstance(skills, list):
+        return []
+
+    return [
+        {
+            "name": s.get("name", ""),
+            "description": s.get("description", ""),
+        }
+        for s in skills
+    ]
