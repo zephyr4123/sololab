@@ -61,6 +61,7 @@ services:
       OPENCODE_CONFIG: /app/opencode-src/opencode.jsonc
     volumes:
       - ./opencode:/app/opencode-src:ro
+      - ./opencode/skills:/app/.opencode/skills:ro
       - opencode_data:/root/.local/share/opencode
       - ${WORKSPACE_DIR:?WORKSPACE_DIR must be set in .env}:/workspace
     # ── 安全加固 ──
