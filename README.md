@@ -603,6 +603,41 @@ Agent 运行时自主编排调用，无需人工指定：
 </table>
 </center>
 
+### ⚡ Skill 系统 — `/` 斜杠命令
+
+输入 `/` 即弹出 Skill 浮窗，选择后自动加载专业化指令到 Agent 上下文。CodeLab 内置了完整的 **SuperClaude Skill 包**（30 个），开箱即用：
+
+<div align="center">
+<img src="docs/images/codelab-skills.png" width="720" alt="CodeLab Skill 斜杠命令浮窗" />
+<br/>
+<sub>输入 / 弹出 Skill 列表 · 上下键选择 · Enter 确认 · 自动注入指令到 Agent</sub>
+</div>
+
+<center>
+<table align="center" width="960" cellpadding="8">
+<tr>
+<td align="center" width="25%" valign="top">
+<b>🔍 分析与探索</b><br/>
+<sub><code>/analyze</code> 代码质量分析<br/><code>/explain</code> 代码解释<br/><code>/research</code> 深度调研<br/><code>/troubleshoot</code> 问题诊断</sub>
+</td>
+<td align="center" width="25%" valign="top">
+<b>🏗️ 构建与实现</b><br/>
+<sub><code>/implement</code> 功能实现<br/><code>/build</code> 编译打包<br/><code>/test</code> 测试执行<br/><code>/workflow</code> 工作流生成</sub>
+</td>
+<td align="center" width="25%" valign="top">
+<b>📝 文档与规划</b><br/>
+<sub><code>/document</code> 文档生成<br/><code>/design</code> 架构设计<br/><code>/estimate</code> 工期估算<br/><code>/brainstorm</code> 需求探索</sub>
+</td>
+<td align="center" width="25%" valign="top">
+<b>🔧 维护与优化</b><br/>
+<sub><code>/improve</code> 代码改进<br/><code>/cleanup</code> 死代码清理<br/><code>/git</code> Git 操作<br/><code>/pm</code> 项目管理</sub>
+</td>
+</tr>
+</table>
+</center>
+
+> 自定义 Skill：在 `opencode/skills/你的skill名/SKILL.md` 放一个 Markdown 文件即可。重启 OpenCode 后自动发现，无需写代码。
+
 ### 🏛️ 技术架构
 
 <div align="center">
