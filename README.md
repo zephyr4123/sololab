@@ -25,6 +25,7 @@
 <a href="#modules">模块路线图</a> ·
 <a href="#architecture">系统架构</a> ·
 <a href="#ideaspark">IdeaSpark</a> ·
+<a href="#codelab">CodeLab</a> ·
 <a href="#benchmark">Benchmark</a> ·
 <a href="#quickstart">快速开始</a> ·
 <a href="#dev-module">开发新模块</a>
@@ -113,8 +114,8 @@ SoloLab 的核心价值在于**统一架构承载多个研究阶段的智能模�
 </tr>
 <tr>
 <td align="center">🔧 <b>CodeLab</b></td>
-<td>AI 辅助编码 · 代码审查 · 调试重构</td>
-<td align="center"><img src="https://img.shields.io/badge/-Planned-9E9E9E?style=flat-square" alt="Planned"/></td>
+<td>AI 编码助手 · 多代理并行探索 · 工具调用链 · 文件读写与终端</td>
+<td align="center"><img src="https://img.shields.io/badge/-Ready-00C853?style=flat-square" alt="Ready"/></td>
 </tr>
 <tr>
 <td align="center">✍️ <b>WriterAI</b></td>
@@ -504,6 +505,80 @@ IdeaSpark 将一个研究主题转化为经过 **多轮辩论、文献检索验�
 
 ---
 
+<a id="codelab"></a>
+
+## 🔧 CodeLab — AI 编码助手
+
+> **基于 OpenCode 引擎**：多代理并行探索 × 20+ 工具链 × 文件读写与终端 × 跨会话记忆
+
+<center>
+<table align="center" width="960" cellpadding="12">
+<tr>
+<td align="center" width="25%">
+<b>3 类专用代理</b><br/>
+<sub>Build / Explore / Plan<br/>自动路由，各司其职</sub>
+</td>
+<td align="center" width="25%">
+<b>20+ 内置工具</b><br/>
+<sub>Read / Edit / Grep / Bash / Web<br/>Agent 自主编排调用</sub>
+</td>
+<td align="center" width="25%">
+<b>并行子代理</b><br/>
+<sub>Task 工具启动多个 explore<br/>独立上下文同时深入</sub>
+</td>
+<td align="center" width="25%">
+<b>3 变量直连</b><br/>
+<sub>CODELAB_MODEL/KEY/URL<br/>支持 100+ LLM Provider</sub>
+</td>
+</tr>
+</table>
+</center>
+
+### 核心特性
+
+CodeLab 将开源项目 [OpenCode](https://github.com/nicepkg/opencode) 引擎深度集成为 SoloLab 的 AI 编码模块。Frontend → Backend → OpenCode 单向代理，Session 统一管理。
+
+- **智能 Agent 路由**：根据用户意图自动选择 Build（编码）/ Explore（探索）/ Plan（规划）代理
+- **并行子代理**：复杂任务自动启动 2-3 个 explore 子代理并行调查，结果汇聚后再行动
+- **完整工具链**：文件读写（Read/Edit/Write）、搜索（Glob/Grep）、终端（Bash）、Web 搜索、记忆系统
+- **Session 级联管理**：创建 / 列表 / 删除统一走 Backend API，主 session 删除级联清理所有子 session
+- **Prompt 缓存优化**：自适应缓存策略，Compaction 三级压缩（L1 裁剪 / L2 启发式 / L3 LLM 摘要）
+
+<!-- 📌 图片占位符 — CodeLab 运行截图
+     截图内容：CodeLab 界面运行中，显示 3 个并行 explore 子代理 + 工具调用卡片
+     截图时机：多代理探索完成后的结果汇总页面
+-->
+<div align="center">
+<img src="docs/images/codelab-running.png" width="720" alt="CodeLab 多代理并行探索" />
+<br/>
+<sub>3 个 explore 子代理并行 · 工具调用实时展示 · Session 侧边栏同步</sub>
+</div>
+
+<!-- 📌 图片占位符 — CodeLab 编辑截图
+     截图内容：CodeLab 执行文件编辑任务的界面（Edit 工具调用 + diff 预览）
+     截图时机：Agent 完成代码修改后显示 diff 的瞬间
+-->
+<div align="center">
+<img src="docs/images/codelab-editing.png" width="720" alt="CodeLab AI 辅助编码" />
+<br/>
+<sub>Agent 自主编排：Read → 分析 → Edit → 验证 · 内联 Diff 预览</sub>
+</div>
+
+### 技术架构
+
+```text
+Browser ─── SSE Stream ───────────────> OpenCode Server (Bun + Hono)
+   │                                         │
+   └── REST ──> SoloLab Backend (FastAPI) ──┘
+                     │                    Session CRUD 代理
+                     ├── PostgreSQL       Session 元数据
+                     └── OpenCode SQLite  消息 · 工具调用 · Compaction
+```
+
+> `.env` 三变量直连 Vercel AI SDK — 无注册表、无 models.dev 网络依赖。`CODELAB_BASE_URL` 有值走 OpenAI Compatible，无值走 Anthropic/OpenAI/Google 原生 SDK。
+
+---
+
 ## 🛠️ 技术栈
 
 <p align="center">
@@ -516,8 +591,13 @@ IdeaSpark 将一个研究主题转化为经过 **多轮辩论、文献检索验�
 <b>Frontend</b>&nbsp;&nbsp;
 <img src="https://img.shields.io/badge/Next.js_14-000000?style=flat-square&logo=next.js&logoColor=white" alt="Next.js"/>
 <img src="https://img.shields.io/badge/Zustand-433E38?style=flat-square&logo=react&logoColor=white" alt="Zustand"/>
-<img src="https://img.shields.io/badge/shadcn%2Fui-000000?style=flat-square&logo=shadcnui&logoColor=white" alt="shadcn/ui"/>
 <img src="https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind"/>
+<br/>
+<b>CodeLab Engine</b>&nbsp;&nbsp;
+<img src="https://img.shields.io/badge/Bun-000000?style=flat-square&logo=bun&logoColor=white" alt="Bun"/>
+<img src="https://img.shields.io/badge/Vercel_AI_SDK-000000?style=flat-square&logo=vercel&logoColor=white" alt="AI SDK"/>
+<img src="https://img.shields.io/badge/Hono-E36002?style=flat-square&logo=hono&logoColor=white" alt="Hono"/>
+<img src="https://img.shields.io/badge/SQLite+Drizzle-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite"/>
 <br/>
 <b>AI / Search</b>&nbsp;&nbsp;
 <img src="https://img.shields.io/badge/100+_LLMs-412991?style=flat-square&logo=openai&logoColor=white" alt="LLMs"/>
@@ -562,12 +642,22 @@ docker compose up -d   # 🚀 一行拉起全部 5 个服务
 ### `.env` 必填项
 
 ```bash
-LLM_API_KEY=sk-xxx           # 你的 LLM API 密钥（OpenAI 兼容格式）
-EMBEDDING_API_KEY=sk-xxx      # Embedding API 密钥（可与 LLM 相同）
-TAVILY_API_KEY=tvly-xxx       # Tavily 搜索 API（https://tavily.com）
+# IdeaSpark 模块
+IDEASPARK_BASE_URL=https://api.openai.com/v1  # OpenAI 兼容端点
+IDEASPARK_API_KEY=sk-xxx
+IDEASPARK_MODEL=gpt-4o
+
+# CodeLab 模块（3 变量直连 AI SDK）
+CODELAB_MODEL=anthropic/claude-sonnet-4-5     # providerID/modelID
+CODELAB_API_KEY=sk-xxx
+# CODELAB_BASE_URL=                           # anthropic/openai/google 无需设置
+
+# 外部 API
+TAVILY_API_KEY=tvly-xxx                       # Tavily 搜索（https://tavily.com）
+EMBEDDING_API_KEY=sk-xxx                      # 向量嵌入（可与 IdeaSpark 相同）
 ```
 
-> 其他配置均有默认值，开箱即用。详见 [.env.example](.env.example)。
+> 详见 [.env.example](.env.example)，含 30+ Provider 配置示例。
 
 ### 本地开发
 
@@ -608,25 +698,34 @@ soloLab/
 │       ├── main.py                # 应用入口
 │       ├── config/                # 配置 & LLM 配置
 │       ├── core/                  # 核心服务层 (7 个服务)
-│       ├── api/                   # REST API 路由
+│       ├── api/                   # REST API 路由 (含 codelab.py 代理)
 │       ├── models/                # Pydantic 数据模型
 │       ├── modules/               # 可插拔功能模块
 │       │   └── ideaspark/         # IdeaSpark 模块
 │       ├── tools/                 # 外部工具 (arXiv/Scholar/Tavily)
 │       └── benchmark/             # Benchmark 评测框架
 │
+├── opencode/                      # CodeLab 引擎 (OpenCode 核心)
+│   ├── packages/opencode/src/     # 核心源码 (45 子模块)
+│   │   ├── agent/                 # Agent 定义 (build/explore/plan)
+│   │   ├── session/               # 会话 + Compaction + 记忆
+│   │   ├── provider/              # LLM Provider (直连 Vercel AI SDK)
+│   │   ├── tool/                  # 20+ 工具 (read/edit/bash/grep...)
+│   │   └── server/                # Hono HTTP/WebSocket
+│   └── opencode.jsonc             # 引擎配置
+│
 ├── frontend/                      # Next.js 14 前端
 │   └── src/
 │       ├── app/                   # App Router 页面
-│       ├── components/            # UI 组件库
-│       ├── lib/                   # API Client & SSE Client
+│       ├── components/            # UI 组件库 (含 modules/codelab/)
+│       ├── lib/                   # API Client & OpenCode Client
 │       ├── stores/                # Zustand 状态管理
 │       └── types/                 # TypeScript 类型定义
 │
 ├── tests/                         # 测试 (unit/integration/e2e)
 ├── docs/                          # 架构文档 & PRD
 ├── infra/                         # Dockerfiles & Caddyfile
-└── docker-compose.yml             # 一键部署 (5 服务: PG + Redis + Backend + Frontend + Caddy)
+└── docker-compose.yml             # 一键部署 (6 服务: PG + Redis + OpenCode + Backend + Frontend + Caddy)
 ```
 
 ---
