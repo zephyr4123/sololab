@@ -752,68 +752,77 @@ CodeLab 的核心引擎基于 **[OpenCode](https://github.com/nicepkg/opencode)*
 
 - [Docker](https://docs.docker.com/get-docker/) & Docker Compose
 
-> 仅需 Docker，无需手动安装 Python、Node.js、PostgreSQL 或 Redis。
+> 仅需 Docker，无需安装 Python、Node.js、Bun、PostgreSQL 或 Redis。所有服务容器化运行。
 
-### 一键部署
+### 一键启动
 
 ```bash
 git clone https://github.com/zephyr4123/sololab.git && cd sololab
-cp .env.example .env   # 编辑 .env 填入你的 LLM API Key
+cp .env.example .env   # 编辑 .env 填入 API Key（见下方）
 docker compose up -d   # 🚀 一行拉起全部 6 个服务
 ```
 
-启动后自动完成：PostgreSQL + pgvector 初始化 → Redis 就绪 → **数据库表自动迁移** → Backend 启动 → Frontend 就绪 → Caddy 反向代理。
+启动后自动完成：PostgreSQL + pgvector 初始化 → Redis 就绪 → **数据库表自动迁移** → OpenCode 引擎启动 → Backend 就绪 → Frontend 构建 → Caddy 反向代理。
 
-| 入口 | 地址 |
-|------|------|
-| 前端界面 | http://localhost:3000 |
-| API 文档 | http://localhost:8000/docs |
-| 反向代理 (HTTPS) | https://localhost |
+| 入口 | 地址 | 说明 |
+|------|------|------|
+| 🖥️ 前端界面 | http://localhost:3000 | 主工作台 |
+| 📡 API 文档 | http://localhost:8000/docs | Swagger UI |
+| 🔧 OpenCode | http://localhost:3101 | CodeLab 引擎（内部） |
+| 🔒 反向代理 | https://localhost | Caddy 自动 HTTPS |
 
-### `.env` 必填项
+### `.env` 配置
 
 ```bash
-# IdeaSpark 模块
+# ── IdeaSpark 模块 ──
 IDEASPARK_BASE_URL=https://api.openai.com/v1  # OpenAI 兼容端点
 IDEASPARK_API_KEY=sk-xxx
 IDEASPARK_MODEL=gpt-4o
 
-# CodeLab 模块（3 变量直连 AI SDK）
-CODELAB_MODEL=anthropic/claude-sonnet-4-5     # providerID/modelID
+# ── CodeLab 模块（3 变量直连 AI SDK）──
+CODELAB_MODEL=anthropic/claude-sonnet-4-5     # 格式: providerID/modelID
 CODELAB_API_KEY=sk-xxx
 # CODELAB_BASE_URL=                           # anthropic/openai/google 无需设置
 
-# 外部 API
-TAVILY_API_KEY=tvly-xxx                       # Tavily 搜索（https://tavily.com）
-EMBEDDING_API_KEY=sk-xxx                      # 向量嵌入（可与 IdeaSpark 相同）
+# ── 外部 API ──
+TAVILY_API_KEY=tvly-xxx                       # Tavily 搜索
+EMBEDDING_API_KEY=sk-xxx                      # 向量嵌入
+
+# ── 工作区 ──
+WORKSPACE_DIR=/path/to/your/code              # CodeLab Agent 的沙箱边界
 ```
 
 > 详见 [.env.example](.env.example)，含 30+ Provider 配置示例。
 
-### 本地开发
+### 日常开发
 
-本地开发仍需要数据库服务。推荐用 Docker 单独启动基础设施：
+开发和生产**都通过 Docker 运行**。改代码后重建对应服务即可：
 
 ```bash
-# 仅启动 PostgreSQL + Redis
-docker compose up -d postgres redis
+# 改了前端代码 → 重建 frontend
+docker compose up -d --build frontend
 
-# 后端（新终端）
-conda activate sololab  # 或使用你偏好的虚拟环境
-cd backend && pip install -e ".[dev]"
-alembic upgrade head    # 初始化数据库表
-uvicorn sololab.main:app --reload --port 8000
+# 改了 OpenCode 引擎 → 重建 opencode
+docker compose up -d --build opencode
 
-# 前端（新终端）
-cd frontend && pnpm install && pnpm dev
+# 改了后端 Python 代码 → 自动热重载（--reload 模式），无需重建
+# 如果改了依赖 → docker compose up -d --build backend
+
+# 查看日志
+docker compose logs -f backend opencode       # 实时跟踪
+docker compose ps                             # 查看服务状态
 ```
 
 ### 运行测试
 
 ```bash
+# 后端测试（在容器外用 conda 环境）
 conda activate sololab
 pytest tests/unit/ -v          # 单元测试
 pytest tests/integration/ -v   # 集成测试
+
+# OpenCode 引擎测试
+cd opencode && bun run test
 ```
 
 > 📂 Benchmark 复现指南见 [消融实验报告](docs/benchmark/ideaspark-ablation.md#-复现指南)。
