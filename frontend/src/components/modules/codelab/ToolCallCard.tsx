@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   FileText, Search, Terminal, Pencil, Eye, FolderSearch,
   Loader2, ChevronRight, Globe, FilePlus,
@@ -25,7 +25,13 @@ function shortPath(p: string): string {
 }
 
 export function ToolCallCard({ toolCall }: { toolCall: CodeLabToolCall }) {
-  const [expanded, setExpanded] = useState(false);
+  const hasDiffContent = Boolean(toolCall.fileDiff) || Boolean(toolCall.tool === 'edit' && toolCall.input?.oldString && toolCall.status === 'completed');
+  const [expanded, setExpanded] = useState(hasDiffContent);
+
+  // Auto-expand when diff arrives (edit completes while card was collapsed)
+  useEffect(() => {
+    if (hasDiffContent) setExpanded(true);
+  }, [hasDiffContent]);
   const meta = TOOLS[toolCall.tool] || { icon: Terminal, label: toolCall.tool };
   const Icon = toolCall.isNewFile ? FilePlus : meta.icon;
   const inp = toolCall.input as Record<string, any>;
