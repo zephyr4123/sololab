@@ -441,6 +441,7 @@ export function CodeLabChat({ moduleId }: { moduleId: string }) {
             {filteredSkills.map((skill, i) => (
               <button
                 key={skill.name}
+                ref={i === selectedSkillIdx ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined}
                 className={`w-full flex items-start gap-3 px-4 py-2.5 text-left text-sm transition-colors ${
                   i === selectedSkillIdx
                     ? 'bg-[var(--color-warm)]/8 text-foreground'
