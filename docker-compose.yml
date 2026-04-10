@@ -103,6 +103,7 @@ services:
       - ./backend:/app/backend
       - ./storage:/app/storage
       - ${WORKSPACE_DIR:?}:/workspace:ro
+      - /var/run/docker.sock:/var/run/docker.sock  # WriterAI 沙箱需要 Docker API
     depends_on:
       postgres:
         condition: service_healthy

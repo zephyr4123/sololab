@@ -56,6 +56,13 @@ class Settings(BaseSettings):
     codelab_api_key: str = "sk-xxx"
     codelab_model: str = "moonshotai-cn/kimi-k2.5"
 
+    # WriterAI 模块
+    writer_base_url: str = ""  # LLM Provider（留空复用 IDEASPARK_*）
+    writer_api_key: str = ""
+    writer_model: str = ""
+    writer_sandbox_timeout: int = 30  # 沙箱超时（秒）
+    writer_sandbox_memory: str = "512m"  # 沙箱内存限制
+
     # API 认证
     api_keys: Optional[str] = None  # 逗号分隔的 API Keys，为空则禁用认证
 

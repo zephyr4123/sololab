@@ -1,0 +1,38 @@
+id: nature
+name: "Nature Article"
+language_default: en
+sections:
+  - type: abstract
+    title: Abstract
+    required: true
+    max_words: 200
+    guidelines: "Single paragraph, no subheadings. State the problem, approach, key findings, and significance."
+  - type: introduction
+    title: Introduction
+    required: true
+    guidelines: "Background context, research gap, and study objectives. End with a brief overview of the paper structure."
+  - type: results
+    title: Results
+    required: true
+    guidelines: "Present findings with supporting data. Reference figures and tables. Use past tense for observations."
+  - type: discussion
+    title: Discussion
+    required: true
+    guidelines: "Interpret results in context of existing literature. Address limitations. Suggest future directions."
+  - type: methods
+    title: Methods
+    required: true
+    guidelines: "Detailed methodology after Discussion (Nature style). Sufficient detail for reproduction."
+  - type: conclusion
+    title: Conclusion
+    required: false
+    guidelines: "Brief summary of key contributions. Optional for Nature format."
+  - type: references
+    title: References
+    auto_generated: true
+citation:
+  style: nature-numeric
+  format: "{authors}. {title}. _{venue}_ **{volume}**, {pages} ({year})."
+  max_authors: 5
+page_limit: 8
+word_template: nature.docx

@@ -1,0 +1,35 @@
+{
+  "id": "writer",
+  "name": "WriterAI",
+  "version": "1.0.0",
+  "description": "AI-powered academic paper writing with real-time streaming preview, literature search, code execution sandbox, and multi-template Word export",
+  "icon": "PenTool",
+  "entry_point": "sololab.modules.writer.module:WriterModule",
+  "required_tools": ["web_search", "arxiv_search", "scholar_search", "doc_parse"],
+  "required_models": ["reasoning"],
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "default_template": {
+        "type": "string",
+        "default": "nature",
+        "description": "Default paper template (nature, cvpr, iccv, ieee, acm, chinese_journal)"
+      },
+      "sandbox_timeout": {
+        "type": "integer",
+        "default": 30,
+        "description": "Code execution sandbox timeout in seconds"
+      },
+      "sandbox_memory": {
+        "type": "string",
+        "default": "512m",
+        "description": "Code execution sandbox memory limit"
+      },
+      "budget_limit_usd": {
+        "type": "number",
+        "default": 5.0,
+        "description": "Budget limit per writing session in USD"
+      }
+    }
+  }
+}

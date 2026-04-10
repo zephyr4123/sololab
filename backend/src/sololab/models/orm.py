@@ -155,6 +155,26 @@ class BlackboardMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class WriterDocumentRecord(Base):
+    """WriterAI 文档表 — 论文文档状态存储。"""
+    __tablename__ = "writer_documents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    doc_id: Mapped[str] = mapped_column(String(36), unique=True, nullable=False, index=True)
+    session_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    title: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    template_id: Mapped[str] = mapped_column(String(64), nullable=False, default="nature")
+    language: Mapped[str] = mapped_column(String(10), nullable=False, default="en")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")  # draft|writing|complete
+    sections: Mapped[Optional[str]] = mapped_column(JSONB, nullable=False, default=[])
+    references: Mapped[Optional[str]] = mapped_column(JSONB, nullable=False, default=[])
+    figures: Mapped[Optional[str]] = mapped_column(JSONB, nullable=False, default=[])
+    metadata_json: Mapped[Optional[str]] = mapped_column(JSONB, nullable=True, default={})
+    word_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class APIKeyRecord(Base):
     """API Key 表。"""
     __tablename__ = "api_keys"
