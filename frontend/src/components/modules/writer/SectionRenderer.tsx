@@ -13,59 +13,57 @@ interface SectionRendererProps {
 export default function SectionRenderer({ section, isStreaming, isSelected, onSelect }: SectionRendererProps) {
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom during streaming
   useEffect(() => {
     if (isStreaming && contentRef.current) {
       contentRef.current.scrollTop = contentRef.current.scrollHeight;
     }
   }, [section.content, isStreaming]);
 
-  const statusColors = {
-    empty: 'border-border/50',
-    writing: 'border-[var(--warm-highlight)] ring-1 ring-[var(--warm-highlight)]/20',
-    complete: 'border-border',
-  };
-
-  const statusIcons = {
-    empty: '○',
-    writing: '◐',
-    complete: '●',
-  };
-
   return (
     <div
-      className={`rounded-lg border p-4 transition-all cursor-pointer ${statusColors[section.status]} ${isSelected ? 'bg-accent/30' : 'hover:bg-accent/10'}`}
+      className={`group transition-all cursor-pointer rounded-sm ${
+        isSelected ? 'ring-1 ring-[var(--warm-highlight)]/30 bg-amber-50/30 dark:bg-amber-950/10' : 'hover:bg-accent/10'
+      }`}
       onClick={onSelect}
     >
-      {/* Section header */}
-      <div className="flex items-center justify-between mb-2">
+      {/* Section heading — academic style */}
+      <div className="flex items-baseline justify-between mb-1.5 px-1">
+        <h2 className="text-[13px] font-bold uppercase tracking-wide text-foreground/80 font-serif">
+          {section.title}
+        </h2>
         <div className="flex items-center gap-2">
-          <span className="text-xs opacity-60">{statusIcons[section.status]}</span>
-          <h3 className="font-semibold text-sm">{section.title}</h3>
-          <span className="text-xs text-muted-foreground capitalize">({section.type})</span>
+          {section.wordCount > 0 && (
+            <span className="text-[10px] text-muted-foreground/50 font-mono">{section.wordCount}w</span>
+          )}
+          {isStreaming && (
+            <span className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--warm-highlight)] animate-pulse" />
+              <span className="text-[10px] text-[var(--warm-highlight)]/80">writing</span>
+            </span>
+          )}
         </div>
-        <span className="text-xs text-muted-foreground">
-          {section.wordCount > 0 && `${section.wordCount} words`}
-        </span>
       </div>
 
       {/* Content */}
       {section.status === 'empty' ? (
-        <p className="text-xs text-muted-foreground italic">Waiting to be written...</p>
+        <div className="px-1 py-3 border-l-2 border-dashed border-border/30 ml-0.5">
+          <p className="text-xs text-muted-foreground/40 italic font-serif">Awaiting content...</p>
+        </div>
       ) : (
         <div
           ref={contentRef}
-          className="prose prose-sm dark:prose-invert max-w-none max-h-[300px] overflow-y-auto text-sm leading-relaxed"
+          className="px-1 text-[13px] leading-[1.7] text-foreground/85 font-serif max-h-[500px] overflow-y-auto
+            [&_p]:mb-2 [&_p]:text-justify
+            [&_ul]:ml-4 [&_ul]:list-disc [&_ul]:mb-2 [&_ul_li]:mb-0.5
+            [&_ol]:ml-4 [&_ol]:list-decimal [&_ol]:mb-2 [&_ol_li]:mb-0.5
+            [&_strong]:font-semibold [&_em]:italic"
           dangerouslySetInnerHTML={{ __html: section.content }}
         />
       )}
 
-      {/* Streaming indicator */}
-      {isStreaming && (
-        <div className="flex items-center gap-1 mt-2">
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--warm-highlight)] animate-pulse" />
-          <span className="text-xs text-[var(--warm-highlight)]">Writing...</span>
-        </div>
+      {/* Streaming cursor */}
+      {isStreaming && section.content && (
+        <span className="inline-block w-0.5 h-4 bg-[var(--warm-highlight)] animate-pulse ml-1 -mb-1" />
       )}
     </div>
   );

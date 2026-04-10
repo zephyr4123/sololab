@@ -50,6 +50,8 @@ export interface WriterChatEntry {
   timestamp: number;
   toolName?: string;
   toolStatus?: string;
+  toolInput?: Record<string, unknown>;
+  toolDetail?: string;
 }
 
 /* ── Store ── */

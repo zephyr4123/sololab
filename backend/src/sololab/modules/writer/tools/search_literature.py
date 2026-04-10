@@ -32,7 +32,8 @@ async def execute(args: dict, ctx: WriterToolContext) -> str:
     if arxiv_tool:
         try:
             arxiv_result = await arxiv_tool.execute({"query": query, "max_results": max_results})
-            for paper in arxiv_result.get("results", []):
+            results_data = arxiv_result.data if hasattr(arxiv_result, "data") else arxiv_result
+            for paper in (results_data.get("results", []) if isinstance(results_data, dict) else []):
                 all_results.append({
                     "title": paper.get("title", ""),
                     "authors": paper.get("authors", []),
@@ -50,7 +51,8 @@ async def execute(args: dict, ctx: WriterToolContext) -> str:
     if scholar_tool:
         try:
             scholar_result = await scholar_tool.execute({"query": query, "max_results": max_results})
-            for paper in scholar_result.get("results", []):
+            results_data = scholar_result.data if hasattr(scholar_result, "data") else scholar_result
+            for paper in (results_data.get("results", []) if isinstance(results_data, dict) else []):
                 all_results.append({
                     "title": paper.get("title", ""),
                     "authors": paper.get("authors", []),
@@ -68,7 +70,8 @@ async def execute(args: dict, ctx: WriterToolContext) -> str:
     if web_tool:
         try:
             web_result = await web_tool.execute({"query": f"academic paper {query}", "max_results": 2})
-            for item in web_result.get("results", []):
+            results_data = web_result.data if hasattr(web_result, "data") else web_result
+            for item in (results_data.get("results", []) if isinstance(results_data, dict) else []):
                 all_results.append({
                     "title": item.get("title", ""),
                     "authors": [],

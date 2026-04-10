@@ -133,13 +133,19 @@ async def export_document(request: Request, doc_id: str):
         logger.exception("Word export failed for doc %s", doc_id)
         raise HTTPException(status_code=500, detail=f"Export failed: {e}")
 
-    title = doc.get("title", "paper").replace(" ", "_")[:50]
-    filename = f"{title}.docx"
+    import re
+    from urllib.parse import quote
+
+    title = doc.get("title", "paper")
+    # ASCII-safe filename for Content-Disposition
+    safe_title = re.sub(r'[^\w\s-]', '', title).replace(" ", "_")[:50] or "paper"
+    filename_ascii = f"{safe_title}.docx"
+    filename_utf8 = quote(f"{title[:50]}.docx")
 
     return Response(
         content=docx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f"attachment; filename=\"{filename_ascii}\"; filename*=UTF-8''{filename_utf8}"},
     )
 
 
