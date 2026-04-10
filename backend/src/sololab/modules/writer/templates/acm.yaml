@@ -1,0 +1,42 @@
+id: acm
+name: "ACM Conference"
+language_default: en
+sections:
+  - type: abstract
+    title: Abstract
+    required: true
+    max_words: 200
+    guidelines: "Brief overview of the paper's contributions and findings."
+  - type: introduction
+    title: Introduction
+    required: true
+    guidelines: "Context, motivation, problem statement, and paper contributions."
+  - type: related_work
+    title: Related Work
+    required: true
+    guidelines: "Position this work relative to existing literature."
+  - type: methods
+    title: Approach
+    required: true
+    guidelines: "System design, algorithms, and implementation details."
+  - type: evaluation
+    title: Evaluation
+    required: true
+    guidelines: "Experimental setup, benchmarks, results, and analysis."
+  - type: discussion
+    title: Discussion
+    required: false
+    guidelines: "Limitations, broader impact, and implications."
+  - type: conclusion
+    title: Conclusion
+    required: true
+    guidelines: "Summary and future work."
+  - type: references
+    title: References
+    auto_generated: true
+citation:
+  style: apa-author-year
+  format: "{authors}. {year}. {title}. In {venue}. {pages}."
+  max_authors: 7
+page_limit: 12
+word_template: acm.docx

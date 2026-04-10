@@ -109,24 +109,37 @@ async def delete_document(request: Request, doc_id: str):
 
 @router.post("/documents/{doc_id}/export")
 async def export_document(request: Request, doc_id: str):
-    """导出文档为 Word 文件。
-
-    Phase 6.3 实现完整的 python-docx 导出。
-    当前阶段返回占位响应。
-    """
+    """导出文档为 Word (.docx) 文件。"""
     doc_manager = _get_document_manager(request)
     doc = await doc_manager.get(doc_id)
     if doc is None:
         raise HTTPException(status_code=404, detail=f"Document '{doc_id}' not found")
 
-    # Phase 6.3: WordExporter 将在此实现
-    return JSONResponse(
-        status_code=501,
-        content={
-            "detail": "Word export will be implemented in Phase 6.3",
-            "doc_id": doc_id,
-            "template_id": doc.get("template_id"),
-        },
+    from fastapi.responses import Response
+    from sololab.modules.writer.export.word_exporter import WordExporter
+    from sololab.config.settings import get_settings
+
+    # Resolve citation style from template
+    template_registry = _get_template_registry(request)
+    template = template_registry.get(doc.get("template_id", "nature"))
+    citation_style = template.citation.style if template else "nature-numeric"
+
+    settings = get_settings()
+    exporter = WordExporter(storage_path=settings.storage_path)
+
+    try:
+        docx_bytes = await exporter.export(doc, citation_style=citation_style)
+    except Exception as e:
+        logger.exception("Word export failed for doc %s", doc_id)
+        raise HTTPException(status_code=500, detail=f"Export failed: {e}")
+
+    title = doc.get("title", "paper").replace(" ", "_")[:50]
+    filename = f"{title}.docx"
+
+    return Response(
+        content=docx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

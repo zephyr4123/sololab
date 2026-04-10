@@ -1,0 +1,38 @@
+id: ieee
+name: "IEEE Journal"
+language_default: en
+sections:
+  - type: abstract
+    title: Abstract
+    required: true
+    max_words: 250
+    guidelines: "State the problem, methodology, principal results, and major conclusions."
+  - type: introduction
+    title: Introduction
+    required: true
+    guidelines: "Background, problem statement, and overview of contributions."
+  - type: related_work
+    title: Related Work
+    required: false
+    guidelines: "May be combined with Introduction. Review relevant literature."
+  - type: methods
+    title: Proposed Method
+    required: true
+    guidelines: "Detailed technical approach with mathematical formulation."
+  - type: results
+    title: Results and Discussion
+    required: true
+    guidelines: "Experimental setup, results, analysis, and comparison with state-of-the-art."
+  - type: conclusion
+    title: Conclusion
+    required: true
+    guidelines: "Summary of findings and future research directions."
+  - type: references
+    title: References
+    auto_generated: true
+citation:
+  style: ieee-numeric
+  format: "{authors}, \"{title},\" {venue}, vol. {volume}, pp. {pages}, {year}."
+  max_authors: 6
+page_limit: 10
+word_template: ieee.docx

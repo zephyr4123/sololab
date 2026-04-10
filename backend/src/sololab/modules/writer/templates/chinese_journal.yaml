@@ -1,0 +1,43 @@
+id: chinese_journal
+name: "中文期刊论文"
+language_default: zh
+sections:
+  - type: abstract_zh
+    title: 摘要
+    required: true
+    max_words: 300
+    guidelines: "中文摘要，包含研究目的、方法、结果和结论。"
+  - type: abstract_en
+    title: Abstract
+    required: true
+    max_words: 300
+    guidelines: "英文摘要，与中文摘要内容对应。"
+  - type: introduction
+    title: 引言
+    required: true
+    guidelines: "研究背景、国内外研究现状、研究目的和意义。"
+  - type: related_work
+    title: 相关工作
+    required: false
+    guidelines: "文献综述，可合并至引言。"
+  - type: methods
+    title: 方法
+    required: true
+    guidelines: "研究方法、技术路线、算法描述。"
+  - type: experiments
+    title: 实验与分析
+    required: true
+    guidelines: "实验设置、数据集、评价指标、结果分析。"
+  - type: conclusion
+    title: 结论
+    required: true
+    guidelines: "研究总结、主要贡献、不足与展望。"
+  - type: references
+    title: 参考文献
+    auto_generated: true
+citation:
+  style: gbt-7714
+  format: "{authors}. {title}[J]. {venue}, {year}, {volume}: {pages}."
+  max_authors: 3
+page_limit: 12
+word_template: chinese_journal.docx

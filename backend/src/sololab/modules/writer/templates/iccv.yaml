@@ -1,0 +1,38 @@
+id: iccv
+name: "ICCV Paper"
+language_default: en
+sections:
+  - type: abstract
+    title: Abstract
+    required: true
+    max_words: 200
+    guidelines: "Concise summary of problem, method, and key results."
+  - type: introduction
+    title: Introduction
+    required: true
+    guidelines: "Motivation, related context, and contributions."
+  - type: related_work
+    title: Related Work
+    required: true
+    guidelines: "Survey of prior work. Highlight differences from your approach."
+  - type: methods
+    title: Method
+    required: true
+    guidelines: "Detailed description of the proposed approach with equations and figures."
+  - type: experiments
+    title: Experiments
+    required: true
+    guidelines: "Datasets, metrics, baselines, quantitative results, ablation studies."
+  - type: conclusion
+    title: Conclusion
+    required: true
+    guidelines: "Summary and future work."
+  - type: references
+    title: References
+    auto_generated: true
+citation:
+  style: ieee-numeric
+  format: "{authors}, \"{title},\" in {venue}, {year}."
+  max_authors: 6
+page_limit: 8
+word_template: iccv.docx
