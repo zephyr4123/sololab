@@ -14,7 +14,16 @@ export type SSEEvent =
   | { type: 'parallel_task_start'; task_id: string; agent: string; description: string }
   | { type: 'parallel_task_tool'; task_id: string; tool: string; status: string; title?: string; input?: Record<string, unknown>; output?: string }
   | { type: 'parallel_task_text'; task_id: string; content: string }
-  | { type: 'parallel_task_done'; task_id: string; summary?: string; files_read?: string[]; files_modified?: string[]; errors?: string[]; timed_out?: boolean; status?: string };
+  | { type: 'parallel_task_done'; task_id: string; summary?: string; files_read?: string[]; files_modified?: string[]; errors?: string[]; timed_out?: boolean; status?: string }
+  /* ── WriterAI Events ── */
+  | { type: 'outline_created'; doc_id?: string; title?: string; template_id?: string; sections: Array<{ id: string; type: string; title: string }> }
+  | { type: 'section_start'; section_id: string; title: string }
+  | { type: 'section_stream'; section_id: string; delta: string }
+  | { type: 'section_complete'; section_id: string; word_count: number }
+  | { type: 'reference_added'; reference: { number: number; title: string; authors?: string[]; year?: number; venue?: string; doi?: string; url?: string } }
+  | { type: 'reference_removed'; ref_number: number }
+  | { type: 'figure_created'; figure: { id: string; section_id?: string; caption: string; url: string; number?: number } }
+  | { type: 'code_executing'; description?: string; language?: string };
 
 export interface StreamHandlers {
   onTaskCreated?: (sessionId?: string) => void;
@@ -32,4 +41,13 @@ export interface StreamHandlers {
   onParallelTaskTool?: (taskId: string, tool: string, status: string, title?: string, input?: Record<string, unknown>, output?: string) => void;
   onParallelTaskText?: (taskId: string, content: string) => void;
   onParallelTaskDone?: (taskId: string, summary?: string, filesRead?: string[], filesModified?: string[], errors?: string[], timedOut?: boolean) => void;
+  /* ── WriterAI Handlers ── */
+  onOutlineCreated?: (event: SSEEvent & { type: 'outline_created' }) => void;
+  onSectionStart?: (sectionId: string, title: string) => void;
+  onSectionStream?: (sectionId: string, delta: string) => void;
+  onSectionComplete?: (sectionId: string, wordCount: number) => void;
+  onReferenceAdded?: (ref: { number: number; title: string; authors?: string[]; year?: number; venue?: string }) => void;
+  onReferenceRemoved?: (refNumber: number) => void;
+  onFigureCreated?: (figure: { id: string; section_id?: string; caption: string; url: string; number?: number }) => void;
+  onCodeExecuting?: (description?: string) => void;
 }

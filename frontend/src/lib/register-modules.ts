@@ -8,3 +8,4 @@
 
 import '@/components/modules/ideaspark/plugin.tsx';
 import '@/components/modules/codelab/plugin';
+import '@/components/modules/writer/plugin.tsx';

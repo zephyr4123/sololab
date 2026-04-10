@@ -109,6 +109,15 @@ export class ResilientSSEClient {
       case 'parallel_task_tool': handlers.onParallelTaskTool?.(event.task_id, event.tool, event.status, event.title, event.input, event.output); break;
       case 'parallel_task_text': handlers.onParallelTaskText?.(event.task_id, event.content); break;
       case 'parallel_task_done': handlers.onParallelTaskDone?.(event.task_id, event.summary, event.files_read, event.files_modified, event.errors, event.timed_out); break;
+      /* ── WriterAI Events ── */
+      case 'outline_created': handlers.onOutlineCreated?.(event as any); break;
+      case 'section_start': handlers.onSectionStart?.((event as any).section_id, (event as any).title); break;
+      case 'section_stream': handlers.onSectionStream?.((event as any).section_id, (event as any).delta); break;
+      case 'section_complete': handlers.onSectionComplete?.((event as any).section_id, (event as any).word_count); break;
+      case 'reference_added': handlers.onReferenceAdded?.((event as any).reference); break;
+      case 'reference_removed': handlers.onReferenceRemoved?.((event as any).ref_number); break;
+      case 'figure_created': handlers.onFigureCreated?.((event as any).figure); break;
+      case 'code_executing': handlers.onCodeExecuting?.((event as any).description); break;
     }
   }
 

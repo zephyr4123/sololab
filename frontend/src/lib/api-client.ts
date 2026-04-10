@@ -241,6 +241,65 @@ export const codelabApi = {
   },
 };
 
+// === WriterAI API ===
+export interface WriterTemplate {
+  id: string;
+  name: string;
+  language_default: string;
+  sections: Array<{ type: string; title: string; required: boolean; max_words?: number; guidelines?: string; auto_generated?: boolean }>;
+  citation: { style: string; format: string; max_authors: number };
+  page_limit?: number;
+  word_template?: string;
+}
+
+export interface WriterDocumentSummary {
+  doc_id: string;
+  session_id: string;
+  title: string;
+  template_id: string;
+  language: string;
+  status: string;
+  word_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export const writerApi = {
+  listTemplates: () => fetchAPI<WriterTemplate[]>('/api/writer/templates'),
+  getTemplate: (id: string) => fetchAPI<WriterTemplate>(`/api/writer/templates/${id}`),
+  listDocuments: (sessionId?: string) => {
+    const params = sessionId ? `?session_id=${sessionId}` : '';
+    return fetchAPI<WriterDocumentSummary[]>(`/api/writer/documents${params}`);
+  },
+  getDocument: (docId: string) => fetchAPI<Record<string, unknown>>(`/api/writer/documents/${docId}`),
+  deleteDocument: async (docId: string) => {
+    const res = await fetch(`${API_BASE}/api/writer/documents/${docId}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`Delete failed: ${res.statusText}`);
+    return res.json();
+  },
+  exportDocument: async (docId: string) => {
+    const res = await fetch(`${API_BASE}/api/writer/documents/${docId}/export`, { method: 'POST' });
+    return res;
+  },
+  uploadKnowledge: async (file: File, projectId = 'writer') => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API_BASE}/api/writer/knowledge?project_id=${projectId}`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) throw new Error(`Upload failed: ${res.statusText}`);
+    return res.json();
+  },
+  listKnowledge: (projectId = 'writer') =>
+    fetchAPI<Array<{ doc_id: string; filename: string; title?: string; status: string; total_pages: number; total_chunks: number; created_at: string }>>(`/api/writer/knowledge?project_id=${projectId}`),
+  deleteKnowledge: async (docId: string) => {
+    const res = await fetch(`${API_BASE}/api/writer/knowledge/${docId}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`Delete failed: ${res.statusText}`);
+    return res.json();
+  },
+};
+
 export const memoryApi = {
   search: async (query: string, scope = "project", topK = 5) => {
     const params = new URLSearchParams({

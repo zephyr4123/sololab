@@ -22,7 +22,7 @@ export interface ModuleDefinition {
 const MODULE_REGISTRY: ModuleDefinition[] = [
   { id: 'ideaspark', name: 'IdeaSpark', description: '多智能体创意生成', icon: 'Lightbulb', status: 'ready' },
   { id: 'codelab', name: 'CodeLab', description: 'AI 编码助手', icon: 'Code', status: 'ready' },
-  { id: 'writer', name: 'WriterAI', description: '学术论文写作', icon: 'PenTool', status: 'planned' },
+  { id: 'writer', name: 'WriterAI', description: '学术论文写作', icon: 'PenTool', status: 'ready' },
   { id: 'datalens', name: 'DataLens', description: '数据分析', icon: 'BarChart3', status: 'planned' },
   { id: 'litreview', name: 'LitReview', description: '文献综述', icon: 'BookOpen', status: 'planned' },
   { id: 'reviewer', name: 'Reviewer', description: '论文评审模拟', icon: 'Search', status: 'planned' },
