@@ -6,6 +6,7 @@ references, and figures.
 """
 from __future__ import annotations
 
+import copy
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -13,6 +14,7 @@ from typing import Any
 
 from sqlalchemy import select, delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm.attributes import flag_modified
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +142,7 @@ class DocumentManager:
             if not record:
                 return None
 
-            sections = list(record.sections) if record.sections else []
+            sections = copy.deepcopy(record.sections) if record.sections else []
             updated = False
 
             for sec in sections:
@@ -159,6 +161,7 @@ class DocumentManager:
                 return None
 
             record.sections = sections
+            flag_modified(record, "sections")
             record.word_count = sum(s.get("word_count", 0) for s in sections)
             record.updated_at = _now()
             await session.commit()
@@ -179,6 +182,7 @@ class DocumentManager:
                 return None
 
             record.sections = sections
+            flag_modified(record, "sections")
             record.status = "writing"
             record.updated_at = _now()
             await session.commit()
@@ -200,7 +204,7 @@ class DocumentManager:
             if not record:
                 return None
 
-            refs = list(record.references) if record.references else []
+            refs = copy.deepcopy(record.references) if record.references else []
 
             # Deduplicate by title (case-insensitive)
             new_title = reference.get("title", "").lower().strip()
@@ -213,6 +217,7 @@ class DocumentManager:
             refs.append(reference)
 
             record.references = refs
+            flag_modified(record, "references")
             record.updated_at = _now()
             await session.commit()
             await session.refresh(record)
@@ -231,7 +236,7 @@ class DocumentManager:
             if not record:
                 return None
 
-            refs = list(record.references) if record.references else []
+            refs = copy.deepcopy(record.references) if record.references else []
             refs = [r for r in refs if r.get("number") != ref_number]
 
             # Renumber
@@ -239,6 +244,7 @@ class DocumentManager:
                 ref["number"] = i
 
             record.references = refs
+            flag_modified(record, "references")
             record.updated_at = _now()
             await session.commit()
             await session.refresh(record)
@@ -259,7 +265,7 @@ class DocumentManager:
             if not record:
                 return None
 
-            figures = list(record.figures) if record.figures else []
+            figures = copy.deepcopy(record.figures) if record.figures else []
 
             if "id" not in figure:
                 figure["id"] = _new_id()
@@ -268,6 +274,7 @@ class DocumentManager:
             figures.append(figure)
 
             record.figures = figures
+            flag_modified(record, "figures")
             record.updated_at = _now()
             await session.commit()
             await session.refresh(record)

@@ -6,12 +6,18 @@ left chat + right document canvas with real-time streaming preview.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import AsyncGenerator
 
+from sololab.config.settings import get_settings
 from sololab.core.module_registry import ModuleBase, ModuleContext, ModuleManifest, ModuleRequest
+from sololab.modules.writer.agent import WriterAgent
 from sololab.modules.writer.document import DocumentManager
+from sololab.modules.writer.sandbox.executor import SandboxExecutor
 from sololab.modules.writer.templates.registry import TemplateRegistry
+
+logger = logging.getLogger(__name__)
 
 
 class WriterModule(ModuleBase):
@@ -21,6 +27,8 @@ class WriterModule(ModuleBase):
         self._manifest_data: dict | None = None
         self.document_manager: DocumentManager | None = None
         self.template_registry: TemplateRegistry | None = None
+        self.sandbox_executor: SandboxExecutor | None = None
+        self.agent: WriterAgent | None = None
 
     def manifest(self) -> ModuleManifest:
         if self._manifest_data is None:
@@ -40,35 +48,63 @@ class WriterModule(ModuleBase):
         )
 
     async def on_load(self, ctx: ModuleContext) -> None:
+        settings = get_settings()
+
+        # Template registry
         templates_dir = Path(__file__).parent / "templates"
         self.template_registry = TemplateRegistry(templates_dir)
 
-        if hasattr(ctx, "db_session_factory") and ctx.db_session_factory is not None:
-            self.document_manager = DocumentManager(ctx.db_session_factory)
-        else:
-            db_factory = getattr(ctx, "_db_session_factory", None)
-            self.document_manager = DocumentManager(db_factory)
+        # Document manager (requires database)
+        db_factory = getattr(ctx, "db_session_factory", None) or getattr(ctx, "_db_session_factory", None)
+        self.document_manager = DocumentManager(db_factory)
+
+        # Sandbox executor
+        self.sandbox_executor = SandboxExecutor(
+            storage_path=settings.storage_path,
+            timeout=settings.writer_sandbox_timeout,
+            memory=settings.writer_sandbox_memory,
+        )
+
+        # Writer agent
+        self.agent = WriterAgent(
+            settings=settings,
+            document_manager=self.document_manager,
+            template_registry=self.template_registry,
+            sandbox_executor=self.sandbox_executor,
+            tool_registry=ctx.tool_registry if hasattr(ctx, "tool_registry") else None,
+            document_pipeline=ctx.document_pipeline if hasattr(ctx, "document_pipeline") else None,
+        )
+
+        logger.info("WriterAI module loaded (templates: %s)", self.template_registry.list_ids())
 
     async def execute(
         self, request: ModuleRequest, ctx: ModuleContext
     ) -> AsyncGenerator[dict, None]:
-        """Execute a writing request.
+        """Execute a writing request via the WriterAgent.
 
-        Phase 6.0: skeleton only — yields a placeholder response.
-        Phase 6.1 will integrate the full WriterAgent with tool chain.
+        Params (in request.params):
+            template: Template ID (default "nature").
+            language: Target language — "en", "zh", or "auto" (default "auto").
+            doc_id: Existing document ID for multi-turn editing.
         """
-        yield {
-            "type": "status",
-            "status": "initializing",
-            "message": "WriterAI module loaded. Agent implementation in Phase 6.1.",
-        }
+        if not self.agent:
+            yield {"type": "error", "message": "WriterAI agent not initialized."}
+            return
 
-        template_id = request.params.get("template", "nature") if request.params else "nature"
-        template = self.template_registry.get(template_id) if self.template_registry else None
+        params = request.params or {}
+        template_id = params.get("template", "nature")
+        language = params.get("language", "auto")
+        doc_id = params.get("doc_id", "")
+        session_id = ctx.session_id or request.session_id or ""
 
-        yield {
-            "type": "status",
-            "status": "ready",
-            "template": template.id if template else template_id,
-            "sections": [s.type for s in template.sections] if template else [],
-        }
+        yield {"type": "status", "status": "starting", "template": template_id}
+
+        async for event in self.agent.run(
+            prompt=request.input,
+            session_id=session_id,
+            template_id=template_id,
+            language=language,
+            doc_id=doc_id,
+            cancel_event=ctx.cancel_event,
+        ):
+            yield event

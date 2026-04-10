@@ -41,23 +41,16 @@ class TestWriterModuleManifest:
 
 
 class TestWriterModuleExecution:
-    """测试模块执行（Phase 6.0 骨架）。"""
+    """测试模块执行。"""
 
     @pytest.mark.asyncio
-    async def test_execute_yields_status(self):
-        """验证 execute 生成器能正常 yield 事件。"""
+    async def test_execute_without_agent_yields_error(self):
+        """未初始化 agent 时应返回错误事件。"""
         module = WriterModule()
 
-        # 模拟 on_load（不需要数据库）
-        from pathlib import Path
-        from sololab.modules.writer.templates.registry import TemplateRegistry
-        templates_dir = Path(__file__).resolve().parents[5] / "backend" / "src" / "sololab" / "modules" / "writer" / "templates"
-        module.template_registry = TemplateRegistry(templates_dir)
-
-        # 模拟 request 和 context
         from unittest.mock import MagicMock
         request = MagicMock()
-        request.input = "Write a paper about transformers"
+        request.input = "Write a paper"
         request.params = {"template": "nature"}
         context = MagicMock()
 
@@ -65,8 +58,6 @@ class TestWriterModuleExecution:
         async for event in module.execute(request, context):
             events.append(event)
 
-        assert len(events) == 2
-        assert events[0]["type"] == "status"
-        assert events[1]["type"] == "status"
-        assert events[1]["template"] == "nature"
-        assert "abstract" in events[1]["sections"]
+        assert len(events) == 1
+        assert events[0]["type"] == "error"
+        assert "not initialized" in events[0]["message"]

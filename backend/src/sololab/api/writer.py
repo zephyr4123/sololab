@@ -17,7 +17,7 @@ router = APIRouter(prefix="/writer", tags=["writer"])
 
 
 def _get_document_manager(request: Request):
-    """从 app state 获取 DocumentManager 实例。"""
+    """从 app state 获取 DocumentManager 实例，懒注入 db_session_factory。"""
     module_registry = getattr(request.app.state, "module_registry", None)
     if module_registry is None:
         raise HTTPException(status_code=503, detail="Module registry not available")
@@ -28,7 +28,14 @@ def _get_document_manager(request: Request):
 
     doc_manager = getattr(writer_module, "document_manager", None)
     if doc_manager is None:
-        raise HTTPException(status_code=503, detail="DocumentManager not initialized (database may be unavailable)")
+        raise HTTPException(status_code=503, detail="DocumentManager not initialized")
+
+    # ModuleContext 不包含 db_session_factory，从 app.state 懒注入
+    if doc_manager.session_factory is None:
+        db_factory = getattr(request.app.state, "db_session", None)
+        if db_factory is None:
+            raise HTTPException(status_code=503, detail="Database not available")
+        doc_manager.session_factory = db_factory
 
     return doc_manager
 
@@ -164,7 +171,7 @@ async def list_knowledge(
     project_id: str = Query(default="writer"),
 ):
     """列出已上传的知识库文档。"""
-    db_session_factory = getattr(request.app.state, "db_session_factory", None)
+    db_session_factory = getattr(request.app.state, "db_session", None)
     if db_session_factory is None:
         raise HTTPException(status_code=503, detail="Database not available")
 
@@ -196,7 +203,7 @@ async def list_knowledge(
 @router.delete("/knowledge/{doc_id}")
 async def delete_knowledge(request: Request, doc_id: str):
     """删除知识库中的参考文档。"""
-    db_session_factory = getattr(request.app.state, "db_session_factory", None)
+    db_session_factory = getattr(request.app.state, "db_session", None)
     if db_session_factory is None:
         raise HTTPException(status_code=503, detail="Database not available")
 
