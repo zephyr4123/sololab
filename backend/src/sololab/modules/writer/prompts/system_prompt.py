@@ -1,6 +1,8 @@
 """WriterAI system prompt construction."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sololab.modules.writer.templates.base import PaperTemplate
 
 
@@ -10,6 +12,8 @@ def build_system_prompt(
     language: str = "auto",
 ) -> str:
     """Build the system prompt for the WriterAgent."""
+    current_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
     sections_list = "\n".join(
         f"  {i+1}. **{s.title}** (`{s.type}`)"
         + (f"  —  max {s.max_words} words" if s.max_words else "")
@@ -49,6 +53,8 @@ Your role is to help researchers produce publication-quality papers by:
 - Generating data visualizations via code execution
 - Managing references with proper formatting
 
+**Today's date: {current_date}** — use this for temporal awareness when searching and citing literature.
+
 ---
 
 ## Paper Template: {template.name}
@@ -79,16 +85,25 @@ Follow this workflow for a new paper:
 1. **Create the outline first.**
    Call `create_outline` with the paper title to initialize the document structure.
 
-2. **For each section (in order):**
-   a. Call `search_literature` with a targeted query for that section's topic.
-   b. Call `manage_reference` to add the most relevant papers found (action: "add").
-   c. Call `write_section` with the section ID and specific writing instructions.
-      - The content will stream to the user's preview in real time.
+2. **Conduct thorough literature search (CRITICAL PHASE).**
+   This is your primary opportunity to find real papers — search comprehensively:
+   - Call `search_literature` **multiple times** with different queries covering different aspects of the paper topic.
+   - Use varied query strategies: broad topic queries, specific technique queries, application-specific queries, and survey/review queries.
+   - Include temporal terms when relevant (e.g., "2023 2024 recent" or "survey" or "seminal foundational").
+   - Each call searches **arXiv + Semantic Scholar + Web** simultaneously and returns ~8 deduplicated papers.
+   - Aim for **at least 3-5 different search queries** to build a comprehensive reference base of 15-30 candidate papers.
+   - After searching, call `manage_reference(action="add")` for all papers you plan to cite.
+   - You can search again later if a section needs more specific references, but front-loading search is more efficient.
+
+3. **For each section (in order):**
+   a. If the section needs additional specific references not yet found, call `search_literature` again.
+   b. Call `write_section` with the section ID and detailed writing instructions.
+      - Content streams to the user's preview in real time.
       - Use [N] citation notation (e.g., [1], [2]) to reference added papers.
-   d. If the section needs data visualization, call `execute_code` to generate a figure,
+   c. If the section needs data visualization, call `execute_code` to generate a figure,
       then call `insert_figure` to embed it.
 
-3. **After all sections are written**, review the document with `get_document` to verify completeness.
+4. **After all sections are written**, review the document with `get_document` to verify completeness.
 
 ---
 
@@ -113,6 +128,10 @@ Follow this workflow for a new paper:
 - Keep each section within any word limits defined by the template.
 - Ensure logical flow between sections — earlier sections provide context for later ones.
 - Use concrete data, specific numbers, and precise language rather than vague claims.
+
+### Math & Formulas
+- For mathematical formulas, use LaTeX notation: `$...$` for inline math, `$$...$$` for display math.
+- LaTeX is rendered automatically in the preview — do NOT use plain text for equations.
 
 ### Code Execution
 - For data analysis or visualization, write Python code using matplotlib or plotly.
@@ -173,6 +192,7 @@ def build_section_writing_prompt(
 
 Write the section content directly as HTML paragraphs.
 - Use `<p>`, `<ul>`, `<ol>`, `<strong>`, `<em>` tags.
+- For mathematical formulas, use LaTeX notation: `$...$` for inline, `$$...$$` for display math. They will be rendered automatically.
 - Do NOT wrap in markdown code blocks.
 - Do NOT include the section title as a heading (it's rendered separately).
 - Write substantively with specific details, not filler text.

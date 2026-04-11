@@ -104,6 +104,7 @@ services:
       - ./storage:/app/storage
       - ${WORKSPACE_DIR:?}:/workspace:ro
       - /var/run/docker.sock:/var/run/docker.sock  # WriterAI 沙箱需要 Docker API
+      - /tmp/sololab-sandbox:/tmp/sololab-sandbox  # 沙箱共享临时目录（DooD 路径对齐）
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,13 +1,44 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { WriterSection } from '@/stores/module-stores/writer-store';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 
 interface SectionRendererProps {
   section: WriterSection;
   isStreaming: boolean;
   isSelected: boolean;
   onSelect: () => void;
+}
+
+/**
+ * Render LaTeX math in an HTML string.
+ * Supports: $$...$$ and \[...\] (display), $...$ and \(...\) (inline).
+ */
+function renderLatexInHTML(html: string): string {
+  // Display math: $$...$$
+  html = html.replace(/\$\$([\s\S]*?)\$\$/g, (_m, tex) => {
+    try { return katex.renderToString(tex.trim(), { displayMode: true, throwOnError: false }); }
+    catch { return _m; }
+  });
+  // Display math: \[...\]
+  html = html.replace(/\\\[([\s\S]*?)\\\]/g, (_m, tex) => {
+    try { return katex.renderToString(tex.trim(), { displayMode: true, throwOnError: false }); }
+    catch { return _m; }
+  });
+  // Inline math: $...$  (exclude $number patterns like $5)
+  html = html.replace(/\$([^\$\n]{2,}?)\$/g, (_m, tex) => {
+    if (/^\d/.test(tex.trim())) return _m; // skip "$5 million" etc.
+    try { return katex.renderToString(tex.trim(), { displayMode: false, throwOnError: false }); }
+    catch { return _m; }
+  });
+  // Inline math: \(...\)
+  html = html.replace(/\\\((.*?)\\\)/g, (_m, tex) => {
+    try { return katex.renderToString(tex.trim(), { displayMode: false, throwOnError: false }); }
+    catch { return _m; }
+  });
+  return html;
 }
 
 export default function SectionRenderer({ section, isStreaming, isSelected, onSelect }: SectionRendererProps) {
@@ -18,6 +49,8 @@ export default function SectionRenderer({ section, isStreaming, isSelected, onSe
       contentRef.current.scrollTop = contentRef.current.scrollHeight;
     }
   }, [section.content, isStreaming]);
+
+  const renderedContent = useMemo(() => renderLatexInHTML(section.content), [section.content]);
 
   return (
     <div
@@ -56,8 +89,10 @@ export default function SectionRenderer({ section, isStreaming, isSelected, onSe
             [&_p]:mb-2 [&_p]:text-justify
             [&_ul]:ml-4 [&_ul]:list-disc [&_ul]:mb-2 [&_ul_li]:mb-0.5
             [&_ol]:ml-4 [&_ol]:list-decimal [&_ol]:mb-2 [&_ol_li]:mb-0.5
-            [&_strong]:font-semibold [&_em]:italic"
-          dangerouslySetInnerHTML={{ __html: section.content }}
+            [&_strong]:font-semibold [&_em]:italic
+            [&_.katex-display]:my-3 [&_.katex-display]:text-center [&_.katex-display]:overflow-x-auto
+            [&_.katex]:text-[0.95em]"
+          dangerouslySetInnerHTML={{ __html: renderedContent }}
         />
       )}
 

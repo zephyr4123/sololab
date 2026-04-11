@@ -19,6 +19,8 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 SANDBOX_IMAGE = "sololab-writer-sandbox"
+# Shared temp dir mounted at same path on host and container (DooD volume alignment)
+SANDBOX_SHARED_DIR = "/tmp/sololab-sandbox"
 
 
 @dataclass
@@ -59,7 +61,8 @@ class SandboxExecutor:
         figures_dir = self.storage_path / "writer" / doc_id / "figures"
         figures_dir.mkdir(parents=True, exist_ok=True)
 
-        tmp_dir = tempfile.mkdtemp(prefix="writer_sandbox_")
+        os.makedirs(SANDBOX_SHARED_DIR, exist_ok=True)
+        tmp_dir = tempfile.mkdtemp(prefix="writer_sandbox_", dir=SANDBOX_SHARED_DIR)
         code_path = os.path.join(tmp_dir, "code.py")
         output_dir = os.path.join(tmp_dir, "output")
         os.makedirs(output_dir, exist_ok=True)
