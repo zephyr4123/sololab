@@ -19,6 +19,9 @@ def main() -> None:
 
     import matplotlib
     matplotlib.use("Agg")
+    # Configure Chinese font support (Noto Sans CJK installed in Docker image)
+    matplotlib.rcParams['font.sans-serif'] = ['Noto Sans CJK SC', 'Noto Sans CJK', 'DejaVu Sans']
+    matplotlib.rcParams['axes.unicode_minus'] = False
     import matplotlib.pyplot as plt
 
     namespace = {

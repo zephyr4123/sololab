@@ -197,6 +197,13 @@ def create_app() -> FastAPI:
     from sololab.core.rate_limiter import RateLimitMiddleware, RateLimitConfig
     app.add_middleware(RateLimitMiddleware, config=RateLimitConfig(enabled=True))
 
+    # 静态文件服务（沙箱生成的图表等）
+    from fastapi.staticfiles import StaticFiles
+    import os
+    storage_dir = settings.storage_path
+    os.makedirs(storage_dir, exist_ok=True)
+    app.mount("/storage", StaticFiles(directory=storage_dir), name="storage")
+
     # 注册路由
     app.include_router(modules.router, prefix="/api", tags=["modules"])
     app.include_router(tasks.router, prefix="/api", tags=["tasks"])

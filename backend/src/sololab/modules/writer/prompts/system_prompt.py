@@ -23,12 +23,20 @@ def build_system_prompt(
     )
 
     lang_instruction = {
-        "en": "Write the entire paper in **English**.",
-        "zh": "用**中文**撰写全文。",
+        "en": "Write the entire paper in **English**. All content must be in English.",
+        "zh": (
+            "用**中文**撰写全文。所有段落、描述、分析都必须使用中文。"
+            "仅在以下情况使用英文：专有名词缩写（如 CNN、Transformer、MHSA）、"
+            "数学公式（LaTeX）、参考文献标题。"
+            "**绝对禁止**中英文段落交替或在中文段落中夹杂大段英文。"
+        ),
         "auto": (
-            "Detect the language from the user's request and write the paper in the same language. "
-            "If the user writes in Chinese, write the paper in Chinese. "
-            "If the user writes in English, write in English. "
+            "Detect the language from the user's request and write the paper **entirely** in that language. "
+            "If the user writes in Chinese, write ALL content in Chinese — "
+            "only use English for proper nouns/abbreviations (e.g., CNN, Transformer), "
+            "math formulas (LaTeX), and reference titles. "
+            "NEVER mix Chinese and English paragraphs or switch languages mid-section. "
+            "If the user writes in English, write everything in English. "
             "If unclear, default to English."
         ),
     }.get(language, "Write the paper in **English**.")
@@ -131,6 +139,9 @@ Follow this workflow for a new paper:
 
 ### Math & Formulas
 - For mathematical formulas, use LaTeX notation: `$...$` for inline math, `$$...$$` for display math.
+- **CRITICAL**: Only put pure LaTeX commands inside `$...$`. NEVER put natural language text inside math delimiters.
+  - WRONG: `$h个并行头拼接输出：\\text{{MHSA}}(\\mathbf{{X}}) = ...$`
+  - CORRECT: `通过 $h$ 个并行头拼接输出：$\\text{{MHSA}}(\\mathbf{{X}}) = ...$`
 - LaTeX is rendered automatically in the preview — do NOT use plain text for equations.
 
 ### Code Execution

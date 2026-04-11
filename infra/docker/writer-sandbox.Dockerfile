@@ -1,5 +1,9 @@
 FROM python:3.12-slim
 
+# Install Chinese fonts for matplotlib CJK rendering
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-noto-cjk \
+    && rm -rf /var/lib/apt/lists/*
+
 # Use Tsinghua mirror for faster downloads in China
 RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple \
     && pip install --no-cache-dir --retries 5 --timeout 120 \
