@@ -8,14 +8,20 @@ export default function ReferenceList() {
   if (references.length === 0) return null;
 
   return (
-    <div className="rounded-lg border border-border p-4">
-      <h3 className="font-semibold text-sm mb-3">References</h3>
-      <ol className="space-y-2">
+    <div className="mt-8 pt-6 border-t border-border/60">
+      <h3 className="text-sm font-bold font-serif uppercase tracking-wide text-foreground/80 mb-4">
+        参考文献
+      </h3>
+      <ol className="space-y-2.5">
         {references.map((ref) => (
           <li key={ref.number} className="text-xs text-muted-foreground leading-relaxed">
-            <span className="font-medium text-foreground">[{ref.number}]</span>{' '}
+            <span className="font-medium text-foreground/70">[{ref.number}]</span>{' '}
             {ref.authors && ref.authors.length > 0 && (
-              <span>{ref.authors.slice(0, 3).join(', ')}{ref.authors.length > 3 ? ' et al.' : ''}. </span>
+              <span>
+                {ref.authors.slice(0, 3).join(', ')}
+                {ref.authors.length > 3 ? ' 等' : ''}
+                .{' '}
+              </span>
             )}
             <span className="font-medium">{ref.title}</span>
             {ref.venue && <span className="italic">. {ref.venue}</span>}

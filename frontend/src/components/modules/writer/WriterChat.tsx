@@ -12,14 +12,14 @@ const MODULE_ID = 'writer';
 
 /* ── Tool display config ── */
 const TOOL_META: Record<string, { icon: string; label: string; color: string }> = {
-  search_literature: { icon: '🔍', label: 'Searching literature', color: 'text-blue-500 dark:text-blue-400' },
-  create_outline: { icon: '📋', label: 'Creating outline', color: 'text-emerald-500 dark:text-emerald-400' },
-  write_section: { icon: '✍️', label: 'Writing section', color: 'text-amber-600 dark:text-amber-400' },
-  manage_reference: { icon: '📚', label: 'Managing references', color: 'text-violet-500 dark:text-violet-400' },
-  execute_code: { icon: '⚡', label: 'Running code', color: 'text-orange-500 dark:text-orange-400' },
-  insert_figure: { icon: '📊', label: 'Inserting figure', color: 'text-teal-500 dark:text-teal-400' },
-  search_knowledge: { icon: '📖', label: 'Searching knowledge', color: 'text-indigo-500 dark:text-indigo-400' },
-  get_document: { icon: '📄', label: 'Reading document', color: 'text-gray-500 dark:text-gray-400' },
+  search_literature: { icon: '🔍', label: '检索文献', color: 'text-blue-500 dark:text-blue-400' },
+  create_outline: { icon: '📋', label: '生成大纲', color: 'text-emerald-500 dark:text-emerald-400' },
+  write_section: { icon: '✍️', label: '撰写章节', color: 'text-amber-600 dark:text-amber-400' },
+  manage_reference: { icon: '📚', label: '管理引用', color: 'text-violet-500 dark:text-violet-400' },
+  execute_code: { icon: '⚡', label: '运行代码', color: 'text-orange-500 dark:text-orange-400' },
+  insert_figure: { icon: '📊', label: '插入图表', color: 'text-teal-500 dark:text-teal-400' },
+  search_knowledge: { icon: '📖', label: '检索知识库', color: 'text-indigo-500 dark:text-indigo-400' },
+  get_document: { icon: '📄', label: '读取文档', color: 'text-gray-500 dark:text-gray-400' },
 };
 
 /* ── Chat entry renderer ── */
@@ -28,8 +28,8 @@ function ChatEntry({ entry }: { entry: WriterChatEntry }) {
 
   if (entry.role === 'user') {
     return (
-      <div className="flex justify-end">
-        <div className="max-w-[85%] bg-primary/10 dark:bg-primary/5 border border-primary/10 rounded-2xl rounded-br-md px-4 py-2.5 text-sm leading-relaxed">
+      <div className="flex justify-end animate-fade-in-up">
+        <div className="max-w-[85%] bg-warm/10 dark:bg-warm/5 border border-warm/10 rounded-2xl rounded-br-sm px-4 py-2.5 text-sm leading-relaxed">
           {entry.content}
         </div>
       </div>
@@ -37,49 +37,46 @@ function ChatEntry({ entry }: { entry: WriterChatEntry }) {
   }
 
   if (entry.role === 'tool') {
-    const meta = TOOL_META[entry.toolName || ''] || { icon: '🔧', label: entry.toolName || 'Tool', color: 'text-gray-500' };
+    const meta = TOOL_META[entry.toolName || ''] || { icon: '🔧', label: entry.toolName || '工具', color: 'text-muted-foreground' };
     const isError = entry.toolStatus === 'error';
     const isRunning = entry.toolStatus === 'running';
 
     return (
       <div
-        className="group flex items-start gap-2.5 px-2 py-1.5 rounded-lg hover:bg-accent/30 transition-colors cursor-pointer"
+        className="group px-2 py-1 rounded-md hover:bg-accent/20 transition-colors cursor-pointer"
         onClick={() => entry.toolInput && setExpanded(!expanded)}
       >
-        <span className="text-sm mt-0.5 shrink-0">{meta.icon}</span>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className={`text-xs font-medium ${isError ? 'text-red-500' : meta.color}`}>
-              {isRunning ? meta.label : isError ? `${meta.label} failed` : `${meta.label}`}
+        <div className="flex items-center gap-2">
+          <span className="text-xs shrink-0">{meta.icon}</span>
+          <span className={`text-[11px] font-medium ${isError ? 'text-red-500' : meta.color}`}>
+            {meta.label}
+          </span>
+          {isRunning && (
+            <span className="flex gap-0.5">
+              {[0, 150, 300].map((delay) => (
+                <span key={delay} className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: `${delay}ms` }} />
+              ))}
             </span>
-            {isRunning && (
-              <span className="flex gap-0.5">
-                <span className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: '300ms' }} />
-              </span>
-            )}
-            {!isRunning && !isError && (
-              <span className="text-[10px] text-green-500">✓</span>
-            )}
-          </div>
-          {entry.toolDetail && (
-            <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">{entry.toolDetail}</p>
           )}
-          {expanded && entry.toolInput && (
-            <pre className="text-[10px] text-muted-foreground/70 mt-1 bg-muted/30 rounded p-2 overflow-x-auto whitespace-pre-wrap max-h-32 overflow-y-auto">
-              {JSON.stringify(entry.toolInput, null, 2)}
-            </pre>
+          {!isRunning && !isError && <span className="text-[10px] text-green-500/70">✓</span>}
+          {isError && <span className="text-[10px] text-red-400">✗</span>}
+          {entry.toolDetail && (
+            <span className="text-[10px] text-muted-foreground/50 truncate ml-auto">{entry.toolDetail}</span>
           )}
         </div>
+        {expanded && entry.toolInput && (
+          <pre className="text-[10px] text-muted-foreground/60 mt-1.5 bg-muted/20 rounded p-2 overflow-x-auto whitespace-pre-wrap max-h-28 overflow-y-auto">
+            {JSON.stringify(entry.toolInput, null, 2)}
+          </pre>
+        )}
       </div>
     );
   }
 
   // assistant
   return (
-    <div className="px-1 py-1">
-      <div className="text-sm leading-relaxed text-foreground/90 whitespace-pre-wrap">
+    <div className="px-1 py-1.5 animate-fade-in">
+      <div className="text-sm leading-relaxed text-foreground/85 whitespace-pre-wrap">
         {entry.content}
       </div>
     </div>
@@ -136,7 +133,6 @@ export default function WriterChat({ moduleId }: { moduleId: string }) {
           });
         }
         if (e.status === 'complete' || e.status === 'error') {
-          // Update the running entry to complete
           const entries = useWriterStore.getState().chatEntries;
           const runIdx = entries.findLastIndex(
             (en) => en.toolName === toolName && en.toolStatus === 'running'
@@ -147,10 +143,9 @@ export default function WriterChat({ moduleId }: { moduleId: string }) {
               ...updated[runIdx],
               toolStatus: e.status,
               toolDetail: e.result_count != null
-                ? `${e.result_count} results found`
+                ? `找到 ${e.result_count} 条结果`
                 : updated[runIdx].toolDetail,
             };
-            // Direct state mutation for performance
             useWriterStore.setState({ chatEntries: updated });
           }
         }
@@ -165,7 +160,7 @@ export default function WriterChat({ moduleId }: { moduleId: string }) {
       onError: (message) => {
         store.setIsStreaming(false);
         store.setAgentStatus(null);
-        store.addChatEntry({ id: `error-${Date.now()}`, role: 'assistant', content: `Error: ${message}`, timestamp: Date.now() });
+        store.addChatEntry({ id: `error-${Date.now()}`, role: 'assistant', content: `错误：${message}`, timestamp: Date.now() });
       },
       onOutlineCreated: (event) => {
         const sections = event.sections.map((s, i) => ({
@@ -177,7 +172,7 @@ export default function WriterChat({ moduleId }: { moduleId: string }) {
         store.addChatEntry({
           id: `outline-${Date.now()}`, role: 'tool', content: '', timestamp: Date.now(),
           toolName: 'create_outline', toolStatus: 'complete',
-          toolDetail: `Outline: ${event.sections.map(s => s.title).join(' → ')}`,
+          toolDetail: `大纲：${event.sections.map(s => s.title).join(' → ')}`,
         });
       },
       onSectionStart: (sectionId) => { store.startSectionStream(sectionId); },
@@ -212,21 +207,21 @@ export default function WriterChat({ moduleId }: { moduleId: string }) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
-  // Agent status display
+  // Agent status — Chinese
   const statusLabel = (() => {
     if (!store.agentStatus) return '';
     const a = store.agentStatus.action;
     const map: Record<string, string> = {
-      thinking: '🧠 Analyzing request...',
-      'Using search_literature...': '🔍 Searching academic papers...',
-      'Using create_outline...': '📋 Generating paper structure...',
-      'Using write_section...': '✍️ Writing section content...',
-      'Using manage_reference...': '📚 Adding citation...',
-      'Using execute_code...': '⚡ Executing code in sandbox...',
-      'Using insert_figure...': '📊 Embedding figure...',
-      'Using search_knowledge...': '📖 Querying knowledge base...',
-      'Using get_document...': '📄 Checking document state...',
-      coding: '⚡ Generating visualization...',
+      thinking: '分析请求中...',
+      'Using search_literature...': '检索学术论文...',
+      'Using create_outline...': '生成论文结构...',
+      'Using write_section...': '撰写章节内容...',
+      'Using manage_reference...': '添加引用...',
+      'Using execute_code...': '在沙箱中执行代码...',
+      'Using insert_figure...': '嵌入图表...',
+      'Using search_knowledge...': '查询知识库...',
+      'Using get_document...': '检查文档状态...',
+      coding: '生成可视化...',
     };
     return map[a] || a;
   })();
@@ -234,41 +229,41 @@ export default function WriterChat({ moduleId }: { moduleId: string }) {
   return (
     <div className="flex h-full">
       {/* ── Left: Chat ── */}
-      <div className="flex flex-col w-[420px] min-w-[340px] border-r border-border/60 bg-background">
+      <div className="flex flex-col w-[380px] min-w-[320px] shrink-0 border-r border-border/50">
         {/* Header */}
-        <div className="px-4 py-3 border-b border-border/40">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/30 flex items-center justify-center">
-              <span className="text-sm">✍️</span>
+        <div className="px-5 py-3.5 border-b border-border/30 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-warm/20 to-warm/5 flex items-center justify-center">
+              <span className="text-base">✍️</span>
             </div>
             <div>
-              <h2 className="text-sm font-semibold">WriterAI</h2>
-              <p className="text-[10px] text-muted-foreground">Academic Paper Writing Assistant</p>
+              <h2 className="text-sm font-semibold tracking-tight">WriterAI</h2>
+              <p className="text-[10px] text-muted-foreground/60">学术论文写作助手</p>
             </div>
           </div>
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2.5">
           {store.chatEntries.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full text-center px-6">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 border border-amber-200/30 dark:border-amber-800/20 flex items-center justify-center mb-5 shadow-sm">
-                <span className="text-3xl">📝</span>
+            <div className="flex flex-col items-center justify-center h-full text-center px-4">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-warm/10 to-warm/5 border border-warm/10 flex items-center justify-center mb-5">
+                <span className="text-2xl">📝</span>
               </div>
-              <h2 className="text-base font-display font-semibold mb-2">Start Writing</h2>
-              <p className="text-xs text-muted-foreground leading-relaxed mb-4">
-                Describe the paper you want to write. Include the topic, target venue, page limit, and any special requirements.
+              <h2 className="text-base font-display font-semibold mb-2 tracking-tight">开始写作</h2>
+              <p className="text-xs text-muted-foreground/60 leading-relaxed mb-5 max-w-[280px]">
+                描述你想写的论文，包括主题、目标期刊/会议、页数限制和特殊要求。
               </p>
-              <div className="w-full space-y-1.5">
+              <div className="w-full space-y-2">
                 {[
-                  'Write a CVPR paper about Vision Transformers for medical image segmentation, 8 pages',
+                  '写一篇关于视觉 Transformer 在医学图像分割中应用的 CVPR 论文，8 页',
                   '写一篇关于大语言模型在代码生成中应用的综述，目标中文期刊',
-                  'Write a Nature article about CRISPR gene editing advances in 2024',
+                  '写一篇关于 2024 年 CRISPR 基因编辑进展的 Nature 文章',
                 ].map((example, i) => (
                   <button
                     key={i}
                     onClick={() => setInput(example)}
-                    className="w-full text-left text-[11px] text-muted-foreground hover:text-foreground px-3 py-2 rounded-lg border border-border/40 hover:border-border hover:bg-accent/20 transition-all"
+                    className="w-full text-left text-[11px] text-muted-foreground/70 hover:text-foreground px-3.5 py-2.5 rounded-lg border border-border/30 hover:border-warm/30 hover:bg-warm/5 transition-all leading-relaxed"
                   >
                     {example}
                   </button>
@@ -283,41 +278,41 @@ export default function WriterChat({ moduleId }: { moduleId: string }) {
 
           {/* Live status */}
           {store.isStreaming && statusLabel && (
-            <div className="flex items-center gap-2 px-2 py-2 rounded-lg bg-accent/20">
+            <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-warm/5 border border-warm/10">
               <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--warm-highlight)] opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--warm-highlight)]" />
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-warm opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-warm" />
               </span>
-              <span className="text-xs text-foreground/70">{statusLabel}</span>
+              <span className="text-xs text-foreground/60">{statusLabel}</span>
             </div>
           )}
           <div ref={chatEndRef} />
         </div>
 
         {/* Input */}
-        <div className="p-3 border-t border-border/40 bg-card/30">
+        <div className="p-4 border-t border-border/30 shrink-0">
           <div className="relative">
             <textarea
               ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Describe your paper..."
-              rows={3}
-              className="w-full resize-none bg-card border border-border/60 rounded-xl px-4 py-3 pr-20 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--warm-highlight)]/30 focus:border-[var(--warm-highlight)]/50 placeholder:text-muted-foreground/40 transition-all"
+              placeholder="描述你想写的论文..."
+              rows={2}
+              className="w-full resize-none bg-card/50 border border-border/40 rounded-xl px-4 py-3 pr-20 text-sm focus:outline-none focus:ring-2 focus:ring-warm/20 focus:border-warm/30 placeholder:text-muted-foreground/30 transition-all"
               disabled={store.isStreaming}
             />
             <button
               onClick={store.isStreaming ? handleStop : handleSend}
               disabled={!store.isStreaming && !input.trim()}
-              className="absolute right-2 bottom-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-30 bg-[var(--warm-highlight)] text-white hover:opacity-90 shadow-sm"
+              className="absolute right-2.5 bottom-2.5 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-20 bg-warm text-warm-foreground hover:opacity-90 shadow-sm"
             >
-              {store.isStreaming ? '■ Stop' : 'Send →'}
+              {store.isStreaming ? '■ 停止' : '发送 →'}
             </button>
           </div>
           {store.costUsd > 0 && (
-            <p className="text-[10px] text-muted-foreground/60 mt-1.5 text-right">
-              Cost: ${store.costUsd.toFixed(4)}
+            <p className="text-[10px] text-muted-foreground/40 mt-2 text-right tabular-nums">
+              费用：${store.costUsd.toFixed(4)}
             </p>
           )}
         </div>

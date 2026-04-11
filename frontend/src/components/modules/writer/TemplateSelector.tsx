@@ -18,24 +18,21 @@ export default function TemplateSelector() {
   }, []);
 
   if (loading) {
-    return <div className="text-xs text-muted-foreground">Loading templates...</div>;
+    return <span className="text-xs text-muted-foreground/60">加载模板...</span>;
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <label className="text-xs text-muted-foreground whitespace-nowrap">Template:</label>
-      <select
-        value={templateId}
-        onChange={(e) => setTemplateId(e.target.value)}
-        className="text-xs bg-card border border-border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[var(--warm-highlight)]"
-      >
-        {templates.map((t) => (
-          <option key={t.id} value={t.id}>
-            {t.name} {t.page_limit ? `(${t.page_limit}p)` : ''}
-          </option>
-        ))}
-        {templates.length === 0 && <option value="nature">Nature Article</option>}
-      </select>
-    </div>
+    <select
+      value={templateId}
+      onChange={(e) => setTemplateId(e.target.value)}
+      className="text-xs bg-transparent border border-border/50 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-warm/40 text-foreground/80 cursor-pointer hover:border-border transition-colors"
+    >
+      {templates.map((t) => (
+        <option key={t.id} value={t.id}>
+          {t.name} {t.page_limit ? `(${t.page_limit}p)` : ''}
+        </option>
+      ))}
+      {templates.length === 0 && <option value="nature">Nature Article</option>}
+    </select>
   );
 }

@@ -11,8 +11,8 @@ export default function FigureDisplay({ figure }: FigureDisplayProps) {
   const imgSrc = figure.url.startsWith('http') ? figure.url : `${apiBase}${figure.url}`;
 
   return (
-    <figure className="rounded-lg border border-border p-3 my-3">
-      <div className="flex justify-center bg-card rounded overflow-hidden">
+    <figure className="rounded-lg border border-border/60 p-4 my-4 bg-card/30">
+      <div className="flex justify-center rounded overflow-hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={imgSrc}
@@ -23,8 +23,9 @@ export default function FigureDisplay({ figure }: FigureDisplayProps) {
           }}
         />
       </div>
-      <figcaption className="text-xs text-muted-foreground mt-2 text-center">
-        <span className="font-medium">Figure {figure.number || figure.order}.</span> {figure.caption}
+      <figcaption className="text-xs text-muted-foreground mt-3 text-center leading-relaxed">
+        <span className="font-semibold text-foreground/70">图 {figure.number || figure.order}.</span>{' '}
+        {figure.caption}
       </figcaption>
     </figure>
   );

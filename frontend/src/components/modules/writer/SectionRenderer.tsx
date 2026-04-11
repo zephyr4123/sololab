@@ -22,23 +22,23 @@ export default function SectionRenderer({ section, isStreaming, isSelected, onSe
   return (
     <div
       className={`group transition-all cursor-pointer rounded-sm ${
-        isSelected ? 'ring-1 ring-[var(--warm-highlight)]/30 bg-amber-50/30 dark:bg-amber-950/10' : 'hover:bg-accent/10'
+        isSelected ? 'ring-1 ring-warm/30 bg-warm/5' : 'hover:bg-accent/10'
       }`}
       onClick={onSelect}
     >
-      {/* Section heading — academic style */}
+      {/* Section heading */}
       <div className="flex items-baseline justify-between mb-1.5 px-1">
         <h2 className="text-[13px] font-bold uppercase tracking-wide text-foreground/80 font-serif">
           {section.title}
         </h2>
         <div className="flex items-center gap-2">
           {section.wordCount > 0 && (
-            <span className="text-[10px] text-muted-foreground/50 font-mono">{section.wordCount}w</span>
+            <span className="text-[10px] text-muted-foreground/50 font-mono tabular-nums">{section.wordCount} 字</span>
           )}
           {isStreaming && (
             <span className="flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--warm-highlight)] animate-pulse" />
-              <span className="text-[10px] text-[var(--warm-highlight)]/80">writing</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-warm animate-pulse" />
+              <span className="text-[10px] text-warm/80">撰写中</span>
             </span>
           )}
         </div>
@@ -47,7 +47,7 @@ export default function SectionRenderer({ section, isStreaming, isSelected, onSe
       {/* Content */}
       {section.status === 'empty' ? (
         <div className="px-1 py-3 border-l-2 border-dashed border-border/30 ml-0.5">
-          <p className="text-xs text-muted-foreground/40 italic font-serif">Awaiting content...</p>
+          <p className="text-xs text-muted-foreground/40 italic font-serif">等待生成...</p>
         </div>
       ) : (
         <div
@@ -63,7 +63,7 @@ export default function SectionRenderer({ section, isStreaming, isSelected, onSe
 
       {/* Streaming cursor */}
       {isStreaming && section.content && (
-        <span className="inline-block w-0.5 h-4 bg-[var(--warm-highlight)] animate-pulse ml-1 -mb-1" />
+        <span className="inline-block w-0.5 h-4 bg-warm animate-pulse ml-1 -mb-1" />
       )}
     </div>
   );
