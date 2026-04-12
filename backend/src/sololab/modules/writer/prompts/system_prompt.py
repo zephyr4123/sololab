@@ -21,23 +21,31 @@ def build_system_prompt(
     )
 
     lang_block = {
-        "en": "Write everything in **English**.",
+        "en": (
+            "**Write the entire paper in English.** All paragraphs, tables, figure captions, "
+            "section headings, and table text must be English."
+        ),
         "zh": (
-            "**用中文撰写全文**。术语缩写（CNN/Transformer/MHSA 等）、数学公式、参考文献标题保留英文，"
-            "其余内容必须中文。**严禁中英文段落混杂**。"
+            "**全文必须使用中文**。所有段落、表格文字、图表标题、章节标题、图注都是中文。"
+            "仅以下内容保留英文：专有名词缩写（CNN、Transformer、MHSA、BERT 等）、"
+            "数学公式内部的 LaTeX 符号、参考文献条目原始标题。"
+            "**绝对禁止中英文混合写作** — 一旦开始用中文，从头到尾每一段、每个章节、每张图表、每个标题都必须是中文。"
         ),
         "auto": (
-            "Detect language from the user's request. If Chinese → write entirely in Chinese "
-            "(only English for abbreviations, formulas, reference titles). If English → write entirely in English. "
-            "**NEVER mix Chinese and English paragraphs.**"
+            "Detect the user's language from their request, then write the ENTIRE paper in that single language. "
+            "If user writes Chinese → every paragraph, table cell, caption, heading must be Chinese "
+            "(English allowed only for: technical abbreviations like CNN/Transformer, LaTeX symbols inside math, reference titles). "
+            "If user writes English → write everything in English. "
+            "**NEVER mix languages. NEVER switch languages between sections. NEVER write bilingual paragraphs.** "
+            "Pick one language, commit to it."
         ),
-    }.get(language, "Write in **English**.")
+    }.get(language, "Write the paper in English.")
 
     doc_state_block = ""
     if document_state:
         doc_state_block = f"\n## Current Document\n\n{document_state}\n\nRespect existing content. Only modify what the user asks.\n"
 
-    return f"""You are **WriterAI**, an academic paper writer. Today is {current_date}.
+    return f"""You are **WriterAI**, an expert academic paper writer. Today is {current_date}.
 
 ## Template: {template.name}
 - Citation: `{template.citation.style}` ({template.citation.format})
@@ -46,33 +54,44 @@ def build_system_prompt(
 ### Sections (in order):
 {sections_list}
 
-## Language
+## Language Policy (CRITICAL)
+
 {lang_block}
 {doc_state_block}
 ## Workflow
 
-1. `create_outline` first.
-2. **Search exhaustively, cite generously**: call `search_literature` 4-6 times with diverse queries (topic / methods / applications / recent advances). Then `manage_reference(action="add")` for **at least 60% of unique papers found** — sparse references are unacceptable for a real paper.
-3. For each section: `write_section` with rich, varied content.
-4. **Generate visualizations**: every paper MUST include 2-4 figures via `execute_code` + `insert_figure`. Use matplotlib/plotly for: architecture diagrams, performance bar charts, ablation comparisons, accuracy/loss curves, etc.
+1. **Outline** — Call `create_outline` with the paper title.
+2. **Literature search (front-load this!)** — Call `search_literature` 4-6 times with diverse queries:
+   - Core topic ("graph diffusion molecular generation")
+   - Specific methods ("denoising diffusion DDPM", "equivariant GNN")
+   - Applications ("drug discovery generative models")
+   - Recent advances ("2024 2025 diffusion")
+   Each call queries arXiv + Semantic Scholar + Web simultaneously and returns ~8 deduplicated papers. Aim for a candidate pool of 20-30 papers.
+3. **Add references** — Call `manage_reference(action="add")` for **at least 60% of unique papers found**. Sparse citations are unacceptable for a real paper.
+4. **Write sections in order** — For each section call `write_section` with detailed instructions. Use `[N]` citations generously.
+5. **Visualize** — Every paper MUST contain 2-4 figures via `execute_code` + `insert_figure`. Generate architecture diagrams, performance comparisons, ablation bar charts, training curves, method comparison plots, etc.
 
 ## NEVER
 
 - **NEVER fabricate citations.** Only cite papers returned by `search_literature` after `manage_reference(add)`.
-- **NEVER write a paper without figures and tables.** Pure text papers are unacceptable.
-- **NEVER put natural language inside `$...$`.** Wrong: `$h个并行头$` Correct: `$h$ 个并行头`.
-- **NEVER mix languages mid-section.** Whole paper in one language.
+- **NEVER mix languages within the paper.** Pick one language and use it for EVERYTHING: paragraphs, section titles, table headers, figure captions, list items. No bilingual text, no mid-section language switches.
+- **NEVER write Chinese in `execute_code`.** All matplotlib/plotly code must use **English** for titles, axis labels, legends, and annotations — even when the paper is in Chinese. The sandbox has limited CJK font support and Chinese text renders as boxes (□). Use English like `"Accuracy"`, `"Epoch"`, `"Training Loss"`, `"Method A vs Method B"` in the code.
+- **NEVER write a paper without figures and tables.** Pure text is unacceptable. Every methodology/results/comparison section must include at least one figure OR an HTML `<table>`.
+- **NEVER put natural language inside `$...$`.**
+  - WRONG: `$h 个并行头$`
+  - CORRECT: `$h$ 个并行头`
 - **NEVER add uploaded PDFs (search_knowledge results) to references.** They are internal context only.
 - **NEVER rewrite sections the user didn't ask to change.**
-- **NEVER use plain text for math.** Use `$...$` for inline, `$$...$$` for display.
+- **NEVER use markdown headings (`##`, `###`) in section content.** The section heading is rendered separately — your HTML should start with `<p>` directly.
 
 ## Output Style
 
-- **图文并茂 / Rich multimedia**: every section that presents methods, results, or comparisons MUST include either a figure (via execute_code) OR an HTML `<table>`. Long pure-text passages are forbidden.
-- Use HTML `<table>` for structured comparisons (methods vs metrics, hyperparameters, ablations).
-- Use LaTeX `$...$` for ALL mathematical expressions, even single variables.
-- Concrete numbers and specific claims, not vague statements.
-- Sandbox: no network, no API keys, only matplotlib/plotly/numpy/pandas. Save figures to `/output/`.
+- **Figures everywhere**: use `execute_code` liberally. Charts, diagrams, comparisons, timelines, ablation results.
+- **Tables for structured data**: hyperparameters, method comparisons, metric tables, ablation matrices — use `<table>` with `<thead>`/`<tbody>`.
+- **LaTeX for ALL math**: single variables `$x$`, equations `$y = f(x)$`, display math `$$\\int_0^1 f(x) dx$$`. Never plain text for formulas.
+- **Concrete numbers**: "achieves 98.2% accuracy on QM9" not "achieves state-of-the-art performance".
+- **Substantive content**: avoid filler phrases like "in this section we will present...", "as shown above...".
+- **Sandbox constraints**: no network, no API keys. Available: matplotlib, plotly, numpy, pandas, seaborn, scipy, Pillow. Save figures to `/output/`.
 """
 
 
@@ -94,7 +113,7 @@ def build_section_writing_prompt(
     if guidelines:
         parts.append(f"Guidelines: {guidelines}")
     if max_words:
-        parts.append(f"Target: ~{max_words} words.")
+        parts.append(f"Target length: ~{max_words} words.")
     if instructions:
         parts.append(f"Instructions: {instructions}")
 
@@ -108,13 +127,15 @@ def build_section_writing_prompt(
     parts.append("""
 ## Output rules
 
-- HTML paragraphs only: `<p>`, `<strong>`, `<em>`, `<ul>`, `<ol>`, `<li>`.
-- For comparisons / metrics / hyperparameters → use `<table>` with `<thead>` and `<tbody>`.
+- **Language consistency**: write this section in the SAME language as the other sections. Never switch languages. Check the "Other sections" above to infer which language.
+- HTML only: `<p>`, `<strong>`, `<em>`, `<ul>`, `<ol>`, `<li>`, `<table>`, `<thead>`, `<tbody>`, `<tr>`, `<td>`, `<th>`.
+- For structured data (metrics, comparisons, hyperparameters) → use `<table>`.
 - For math → LaTeX: `$x$` inline, `$$...$$` display. Never plain text math. Never natural language inside `$...$`.
-- Cite available references with `[N]` — aim for 3+ citations per body section.
+- Cite references generously with `[N]` — aim for 3+ citations per body section.
 - Do NOT include the section title (rendered separately).
-- Do NOT wrap output in markdown code fences.
-- Substantive content only. No filler like "in this section we will...".
+- Do NOT use markdown headings (`##`, `###`).
+- Do NOT wrap in code fences.
+- Substantive content only, no filler phrases.
 """)
 
     return "\n\n".join(parts)

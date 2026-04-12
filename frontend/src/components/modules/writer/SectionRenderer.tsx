@@ -27,10 +27,12 @@ function renderLatexInHTML(html: string): string {
     try { return katex.renderToString(tex.trim(), { displayMode: true, throwOnError: false }); }
     catch { return _m; }
   });
-  // Inline math: $...$  (exclude $number patterns like $5)
-  html = html.replace(/\$([^\$\n]{2,}?)\$/g, (_m, tex) => {
-    if (/^\d/.test(tex.trim())) return _m; // skip "$5 million" etc.
-    try { return katex.renderToString(tex.trim(), { displayMode: false, throwOnError: false }); }
+  // Inline math: $...$ — skip currency like "$5 million" (digit-start + no LaTeX syntax)
+  html = html.replace(/\$([^\$\n]{1,}?)\$/g, (_m, tex) => {
+    const t = tex.trim();
+    // Only skip if it starts with a digit AND has no LaTeX markers (\, ^, _, {, })
+    if (/^\d/.test(t) && !/[\\^_{}]/.test(t)) return _m;
+    try { return katex.renderToString(t, { displayMode: false, throwOnError: false }); }
     catch { return _m; }
   });
   // Inline math: \(...\)
