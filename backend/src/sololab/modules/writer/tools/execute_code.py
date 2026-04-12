@@ -37,24 +37,11 @@ async def execute(args: dict, ctx: WriterToolContext) -> str:
     if not result.success:
         error_msg = result.error or "Unknown error"
         tb = result.traceback or ""
-        ctx.emit({
-            "type": "tool",
-            "tool": "execute_code",
-            "status": "error",
-            "error": error_msg,
-        })
         return (
             f"Code execution failed: {error_msg}\n"
             f"{'Traceback: ' + tb[:500] if tb else ''}\n"
             f"Please fix the code and try again."
         )
-
-    ctx.emit({
-        "type": "tool",
-        "tool": "execute_code",
-        "status": "complete",
-        "figures": result.figure_urls,
-    })
 
     if not result.figure_urls:
         return "Code executed successfully but no figures were generated. Make sure to save figures to /output/."

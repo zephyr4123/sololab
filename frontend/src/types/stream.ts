@@ -23,7 +23,8 @@ export type SSEEvent =
   | { type: 'reference_added'; reference: { number: number; title: string; authors?: string[]; year?: number; venue?: string; doi?: string; url?: string } }
   | { type: 'reference_removed'; ref_number: number }
   | { type: 'figure_created'; figure: { id: string; section_id?: string; caption: string; url: string; number?: number } }
-  | { type: 'code_executing'; description?: string; language?: string };
+  | { type: 'code_executing'; description?: string; language?: string }
+  | { type: 'search_results'; tool: string; query: string; result_count: number; results: Array<{ title: string; authors: string[]; year: number | null; venue: string; url: string; abstract: string; source: string }> };
 
 export interface StreamHandlers {
   onTaskCreated?: (sessionId?: string) => void;
@@ -50,4 +51,5 @@ export interface StreamHandlers {
   onReferenceRemoved?: (refNumber: number) => void;
   onFigureCreated?: (figure: { id: string; section_id?: string; caption: string; url: string; number?: number }) => void;
   onCodeExecuting?: (description?: string) => void;
+  onSearchResults?: (event: SSEEvent & { type: 'search_results' }) => void;
 }

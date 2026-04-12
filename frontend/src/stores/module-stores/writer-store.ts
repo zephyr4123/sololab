@@ -43,6 +43,16 @@ export interface AgentStatus {
 
 /* ── Chat entries ── */
 
+export interface WriterSearchResultItem {
+  title: string;
+  authors: string[];
+  year: number | null;
+  venue: string;
+  url: string;
+  abstract: string;
+  source: string;
+}
+
 export interface WriterChatEntry {
   id: string;
   role: 'user' | 'assistant' | 'tool';
@@ -52,6 +62,7 @@ export interface WriterChatEntry {
   toolStatus?: string;
   toolInput?: Record<string, unknown>;
   toolDetail?: string;
+  toolResults?: WriterSearchResultItem[];
 }
 
 /* ── Store ── */

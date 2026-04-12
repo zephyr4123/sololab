@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useWriterStore, type WriterChatEntry } from '@/stores/module-stores/writer-store';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { useWriterStore, type WriterChatEntry, type WriterSearchResultItem } from '@/stores/module-stores/writer-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useTaskStore } from '@/stores/task-store';
 import { ResilientSSEClient } from '@/lib/sse-client';
@@ -21,6 +23,7 @@ const icons = {
   book: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19v20H6.5a2.5 2.5 0 0 1 0-5H19"/></svg>,
   file: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>,
   tool: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>,
+  chevron: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>,
 };
 
 /* ── Tool display config ── */
@@ -36,6 +39,49 @@ const TOOL_META: Record<string, { icon: React.ReactNode; label: string; color: s
 };
 
 const DEFAULT_TOOL_META = { icon: icons.tool, label: '工具', color: 'text-muted-foreground' };
+
+/* ── Source badge colors ── */
+const SOURCE_BADGE: Record<string, string> = {
+  arxiv: 'bg-red-500/10 text-red-600 dark:text-red-400',
+  scholar: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+  web: 'bg-gray-500/10 text-gray-600 dark:text-gray-400',
+};
+
+/* ── Search result item ── */
+function SearchResultItem({ result }: { result: WriterSearchResultItem }) {
+  const authorsStr = result.authors.slice(0, 3).join(', ') + (result.authors.length > 3 ? ' 等' : '');
+  const badgeCls = SOURCE_BADGE[result.source] || SOURCE_BADGE.web;
+
+  return (
+    <div className="py-2 px-2 border-l-2 border-border/40 hover:border-warm/40 transition-colors">
+      <div className="flex items-start gap-2">
+        <span className={`text-[9px] uppercase font-semibold px-1.5 py-0.5 rounded shrink-0 mt-0.5 ${badgeCls}`}>
+          {result.source}
+        </span>
+        <div className="min-w-0 flex-1">
+          <a
+            href={result.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] font-medium text-foreground/90 hover:text-warm leading-snug line-clamp-2 block"
+          >
+            {result.title}
+          </a>
+          <div className="flex items-center gap-1.5 mt-1 text-[10px] text-muted-foreground/60">
+            {authorsStr && <span className="truncate">{authorsStr}</span>}
+            {result.year && <span className="shrink-0">· {result.year}</span>}
+            {result.venue && result.venue !== result.source && <span className="shrink-0 italic">· {result.venue}</span>}
+          </div>
+          {result.abstract && (
+            <p className="text-[10px] text-muted-foreground/50 mt-1 line-clamp-2 leading-relaxed">
+              {result.abstract}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ── Chat entry renderer ── */
 function ChatEntry({ entry }: { entry: WriterChatEntry }) {
@@ -55,11 +101,13 @@ function ChatEntry({ entry }: { entry: WriterChatEntry }) {
     const meta = TOOL_META[entry.toolName || ''] || { ...DEFAULT_TOOL_META, label: entry.toolName || '工具' };
     const isError = entry.toolStatus === 'error';
     const isRunning = entry.toolStatus === 'running';
+    const hasResults = entry.toolResults && entry.toolResults.length > 0;
+    const canExpand = hasResults || !!entry.toolInput;
 
     return (
       <div
-        className="group px-2 py-1 rounded-md hover:bg-accent/20 transition-colors cursor-pointer"
-        onClick={() => entry.toolInput && setExpanded(!expanded)}
+        className={`group px-2 py-1 rounded-md transition-colors ${canExpand ? 'cursor-pointer hover:bg-accent/20' : ''}`}
+        onClick={() => canExpand && setExpanded(!expanded)}
       >
         <div className="flex items-center gap-2 whitespace-nowrap overflow-hidden min-w-0">
           <span className={`shrink-0 ${isError ? 'text-red-500' : meta.color}`}>{meta.icon}</span>
@@ -78,8 +126,20 @@ function ChatEntry({ entry }: { entry: WriterChatEntry }) {
           {entry.toolDetail && (
             <span className="text-[10px] text-muted-foreground/50 truncate ml-auto">{entry.toolDetail}</span>
           )}
+          {canExpand && (
+            <span className={`text-muted-foreground/40 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}>
+              {icons.chevron}
+            </span>
+          )}
         </div>
-        {expanded && entry.toolInput && (
+        {expanded && hasResults && (
+          <div className="mt-2 space-y-1 bg-muted/10 rounded-md py-1 animate-fade-in">
+            {entry.toolResults!.map((r, i) => (
+              <SearchResultItem key={`${r.url}-${i}`} result={r} />
+            ))}
+          </div>
+        )}
+        {expanded && !hasResults && entry.toolInput && (
           <pre className="text-[10px] text-muted-foreground/60 mt-1.5 bg-muted/20 rounded p-2 overflow-x-auto whitespace-pre-wrap max-h-28 overflow-y-auto">
             {JSON.stringify(entry.toolInput, null, 2)}
           </pre>
@@ -88,14 +148,36 @@ function ChatEntry({ entry }: { entry: WriterChatEntry }) {
     );
   }
 
-  // assistant
+  // assistant — markdown rendering with prose styles
   return (
     <div className="px-1 py-1.5 animate-fade-in">
-      <div className="text-sm leading-relaxed text-foreground/85 whitespace-pre-wrap">
-        {entry.content}
+      <div className="prose prose-sm max-w-none text-foreground/85
+        prose-headings:font-display prose-headings:tracking-tight prose-headings:mt-3 prose-headings:mb-1.5
+        prose-h1:text-sm prose-h2:text-[13px] prose-h3:text-xs
+        prose-p:text-[12.5px] prose-p:leading-relaxed prose-p:my-1.5
+        prose-strong:text-foreground prose-strong:font-semibold
+        prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-li:text-[12.5px]
+        prose-table:text-[11px] prose-th:py-1 prose-td:py-1 prose-th:px-1.5 prose-td:px-1.5
+        prose-code:text-[11px] prose-code:px-1 prose-code:rounded prose-code:bg-muted/40
+        prose-a:text-warm prose-a:no-underline hover:prose-a:underline
+        prose-hr:my-3
+        prose-blockquote:border-l-warm prose-blockquote:text-muted-foreground prose-blockquote:italic">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          {entry.content}
+        </ReactMarkdown>
       </div>
     </div>
   );
+}
+
+/* ── Update a chat entry in-place (finds last running by tool name) ── */
+function updateLastToolEntry(toolName: string, updater: (e: WriterChatEntry) => WriterChatEntry) {
+  const entries = useWriterStore.getState().chatEntries;
+  const idx = entries.findLastIndex((en) => en.toolName === toolName);
+  if (idx < 0) return;
+  const updated = [...entries];
+  updated[idx] = updater(updated[idx]);
+  useWriterStore.setState({ chatEntries: updated });
 }
 
 /* ── Main component ── */
@@ -148,22 +230,21 @@ export default function WriterChat({ moduleId }: { moduleId: string }) {
           });
         }
         if (e.status === 'complete' || e.status === 'error') {
-          const entries = useWriterStore.getState().chatEntries;
-          const runIdx = entries.findLastIndex(
-            (en) => en.toolName === toolName && en.toolStatus === 'running'
-          );
-          if (runIdx >= 0) {
-            const updated = [...entries];
-            updated[runIdx] = {
-              ...updated[runIdx],
-              toolStatus: e.status,
-              toolDetail: e.result_count != null
-                ? `找到 ${e.result_count} 条结果`
-                : updated[runIdx].toolDetail,
-            };
-            useWriterStore.setState({ chatEntries: updated });
-          }
+          updateLastToolEntry(toolName, (en) => ({
+            ...en,
+            toolStatus: e.status,
+            // Preserve existing detail unless we have result_count from the tool event
+            toolDetail: e.result_count != null ? `找到 ${e.result_count} 条结果` : en.toolDetail,
+          }));
         }
+      },
+      onSearchResults: (e) => {
+        // Attach full results to the latest search tool entry
+        updateLastToolEntry(e.tool, (en) => ({
+          ...en,
+          toolResults: e.results,
+          toolDetail: `找到 ${e.result_count} 条结果`,
+        }));
       },
       onDone: (_topIdeas, costUsd) => {
         store.setIsStreaming(false);
@@ -184,11 +265,11 @@ export default function WriterChat({ moduleId }: { moduleId: string }) {
         store.initSections(sections);
         if (event.title) store.setTitle(event.title);
         if (event.doc_id) store.setDocId(event.doc_id);
-        store.addChatEntry({
-          id: `outline-${Date.now()}`, role: 'tool', content: '', timestamp: Date.now(),
-          toolName: 'create_outline', toolStatus: 'complete',
-          toolDetail: `大纲：${event.sections.map(s => s.title).join(' → ')}`,
-        });
+        // Update the existing create_outline entry (instead of creating a new one)
+        updateLastToolEntry('create_outline', (en) => ({
+          ...en,
+          toolDetail: `${event.sections.map(s => s.title).join(' → ')}`,
+        }));
       },
       onSectionStart: (sectionId) => { store.startSectionStream(sectionId); },
       onSectionStream: (sectionId, delta) => { store.appendStreamDelta(sectionId, delta); },

@@ -118,6 +118,7 @@ export class ResilientSSEClient {
       case 'reference_removed': handlers.onReferenceRemoved?.((event as any).ref_number); break;
       case 'figure_created': handlers.onFigureCreated?.((event as any).figure); break;
       case 'code_executing': handlers.onCodeExecuting?.((event as any).description); break;
+      case 'search_results': handlers.onSearchResults?.(event as any); break;
     }
   }
 

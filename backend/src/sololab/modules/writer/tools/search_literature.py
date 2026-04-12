@@ -23,8 +23,6 @@ async def execute(args: dict, ctx: WriterToolContext) -> str:
     if not query:
         return "Error: query is required."
 
-    ctx.emit({"type": "tool", "tool": "search_literature", "status": "running", "query": query})
-
     all_results: list[dict] = []
 
     # arXiv search
@@ -93,11 +91,24 @@ async def execute(args: dict, ctx: WriterToolContext) -> str:
             seen_titles.add(normalized)
             unique_results.append(r)
 
+    # Emit detailed results event (agent.py handles the running/complete status events)
     ctx.emit({
-        "type": "tool",
+        "type": "search_results",
         "tool": "search_literature",
-        "status": "complete",
+        "query": query,
         "result_count": len(unique_results),
+        "results": [
+            {
+                "title": r["title"],
+                "authors": r["authors"][:5],
+                "year": r["year"],
+                "venue": r["venue"],
+                "url": r["url"],
+                "abstract": r.get("abstract", "")[:200],
+                "source": r["source"],
+            }
+            for r in unique_results
+        ],
     })
 
     if not unique_results:

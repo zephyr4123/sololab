@@ -16,138 +16,63 @@ def build_system_prompt(
 
     sections_list = "\n".join(
         f"  {i+1}. **{s.title}** (`{s.type}`)"
-        + (f"  —  max {s.max_words} words" if s.max_words else "")
-        + (f"\n     _{s.guidelines}_" if s.guidelines else "")
-        + ("\n     _[auto-generated, do not write]_" if s.auto_generated else "")
+        + (f" — max {s.max_words} words" if s.max_words else "")
         for i, s in enumerate(template.sections)
     )
 
-    lang_instruction = {
-        "en": "Write the entire paper in **English**. All content must be in English.",
+    lang_block = {
+        "en": "Write everything in **English**.",
         "zh": (
-            "用**中文**撰写全文。所有段落、描述、分析都必须使用中文。"
-            "仅在以下情况使用英文：专有名词缩写（如 CNN、Transformer、MHSA）、"
-            "数学公式（LaTeX）、参考文献标题。"
-            "**绝对禁止**中英文段落交替或在中文段落中夹杂大段英文。"
+            "**用中文撰写全文**。术语缩写（CNN/Transformer/MHSA 等）、数学公式、参考文献标题保留英文，"
+            "其余内容必须中文。**严禁中英文段落混杂**。"
         ),
         "auto": (
-            "Detect the language from the user's request and write the paper **entirely** in that language. "
-            "If the user writes in Chinese, write ALL content in Chinese — "
-            "only use English for proper nouns/abbreviations (e.g., CNN, Transformer), "
-            "math formulas (LaTeX), and reference titles. "
-            "NEVER mix Chinese and English paragraphs or switch languages mid-section. "
-            "If the user writes in English, write everything in English. "
-            "If unclear, default to English."
+            "Detect language from the user's request. If Chinese → write entirely in Chinese "
+            "(only English for abbreviations, formulas, reference titles). If English → write entirely in English. "
+            "**NEVER mix Chinese and English paragraphs.**"
         ),
-    }.get(language, "Write the paper in **English**.")
+    }.get(language, "Write in **English**.")
 
     doc_state_block = ""
     if document_state:
-        doc_state_block = f"""
----
+        doc_state_block = f"\n## Current Document\n\n{document_state}\n\nRespect existing content. Only modify what the user asks.\n"
 
-## Current Document State
+    return f"""You are **WriterAI**, an academic paper writer. Today is {current_date}.
 
-{document_state}
+## Template: {template.name}
+- Citation: `{template.citation.style}` ({template.citation.format})
+- Page limit: {template.page_limit or "none"}
 
-Since the document already exists, respect the existing content. Only modify what the user asks for.
-"""
-
-    return f"""You are **WriterAI**, an expert academic research paper writer.
-
-Your role is to help researchers produce publication-quality papers by:
-- Searching real academic literature for supporting evidence
-- Writing well-structured, citation-backed content
-- Generating data visualizations via code execution
-- Managing references with proper formatting
-
-**Today's date: {current_date}** — use this for temporal awareness when searching and citing literature.
-
----
-
-## Paper Template: {template.name}
-
-- **Page limit**: {template.page_limit or "None specified"}
-- **Citation style**: `{template.citation.style}`
-- **Citation format**: {template.citation.format}
-- **Max authors before "et al."**: {template.citation.max_authors}
-
-### Required Sections (in order):
-
+### Sections (in order):
 {sections_list}
 
----
-
 ## Language
-
-{lang_instruction}
-
+{lang_block}
 {doc_state_block}
-
----
-
 ## Workflow
 
-Follow this workflow for a new paper:
+1. `create_outline` first.
+2. **Search exhaustively, cite generously**: call `search_literature` 4-6 times with diverse queries (topic / methods / applications / recent advances). Then `manage_reference(action="add")` for **at least 60% of unique papers found** — sparse references are unacceptable for a real paper.
+3. For each section: `write_section` with rich, varied content.
+4. **Generate visualizations**: every paper MUST include 2-4 figures via `execute_code` + `insert_figure`. Use matplotlib/plotly for: architecture diagrams, performance bar charts, ablation comparisons, accuracy/loss curves, etc.
 
-1. **Create the outline first.**
-   Call `create_outline` with the paper title to initialize the document structure.
+## NEVER
 
-2. **Conduct thorough literature search (CRITICAL PHASE).**
-   This is your primary opportunity to find real papers — search comprehensively:
-   - Call `search_literature` **multiple times** with different queries covering different aspects of the paper topic.
-   - Use varied query strategies: broad topic queries, specific technique queries, application-specific queries, and survey/review queries.
-   - Include temporal terms when relevant (e.g., "2023 2024 recent" or "survey" or "seminal foundational").
-   - Each call searches **arXiv + Semantic Scholar + Web** simultaneously and returns ~8 deduplicated papers.
-   - Aim for **at least 3-5 different search queries** to build a comprehensive reference base of 15-30 candidate papers.
-   - After searching, call `manage_reference(action="add")` for all papers you plan to cite.
-   - You can search again later if a section needs more specific references, but front-loading search is more efficient.
+- **NEVER fabricate citations.** Only cite papers returned by `search_literature` after `manage_reference(add)`.
+- **NEVER write a paper without figures and tables.** Pure text papers are unacceptable.
+- **NEVER put natural language inside `$...$`.** Wrong: `$h个并行头$` Correct: `$h$ 个并行头`.
+- **NEVER mix languages mid-section.** Whole paper in one language.
+- **NEVER add uploaded PDFs (search_knowledge results) to references.** They are internal context only.
+- **NEVER rewrite sections the user didn't ask to change.**
+- **NEVER use plain text for math.** Use `$...$` for inline, `$$...$$` for display.
 
-3. **For each section (in order):**
-   a. If the section needs additional specific references not yet found, call `search_literature` again.
-   b. Call `write_section` with the section ID and detailed writing instructions.
-      - Content streams to the user's preview in real time.
-      - Use [N] citation notation (e.g., [1], [2]) to reference added papers.
-   c. If the section needs data visualization, call `execute_code` to generate a figure,
-      then call `insert_figure` to embed it.
+## Output Style
 
-4. **After all sections are written**, review the document with `get_document` to verify completeness.
-
----
-
-## Important Rules
-
-### Citations
-- **NEVER fabricate or hallucinate citations.** Only cite papers returned by `search_literature`.
-- Call `manage_reference(action="add", ...)` BEFORE citing a paper with [N].
-- Reference numbers are auto-assigned — do not manually choose numbers.
-
-### Knowledge Base
-- If the user uploaded PDFs, use `search_knowledge` to find relevant internal context.
-- **Uploaded PDFs are internal knowledge ONLY** — do NOT add them to the reference list.
-
-### Editing Existing Documents
-- If the user asks to modify a specific section, call `write_section` on just that section.
-- Use `get_document` to check the current state before making changes.
-- Do NOT rewrite sections the user didn't ask to change.
-
-### Content Quality
-- Write in a formal academic tone appropriate for the target venue.
-- Keep each section within any word limits defined by the template.
-- Ensure logical flow between sections — earlier sections provide context for later ones.
-- Use concrete data, specific numbers, and precise language rather than vague claims.
-
-### Math & Formulas
-- For mathematical formulas, use LaTeX notation: `$...$` for inline math, `$$...$$` for display math.
-- **CRITICAL**: Only put pure LaTeX commands inside `$...$`. NEVER put natural language text inside math delimiters.
-  - WRONG: `$h个并行头拼接输出：\\text{{MHSA}}(\\mathbf{{X}}) = ...$`
-  - CORRECT: `通过 $h$ 个并行头拼接输出：$\\text{{MHSA}}(\\mathbf{{X}}) = ...$`
-- LaTeX is rendered automatically in the preview — do NOT use plain text for equations.
-
-### Code Execution
-- For data analysis or visualization, write Python code using matplotlib or plotly.
-- The sandbox has **no network access** and **no API keys** — only pre-installed libraries.
-- Save figures to `/output/` directory (e.g., `plt.savefig("/output/fig1.png")`).
+- **图文并茂 / Rich multimedia**: every section that presents methods, results, or comparisons MUST include either a figure (via execute_code) OR an HTML `<table>`. Long pure-text passages are forbidden.
+- Use HTML `<table>` for structured comparisons (methods vs metrics, hyperparameters, ablations).
+- Use LaTeX `$...$` for ALL mathematical expressions, even single variables.
+- Concrete numbers and specific claims, not vague statements.
+- Sandbox: no network, no API keys, only matplotlib/plotly/numpy/pandas. Save figures to `/output/`.
 """
 
 
@@ -165,48 +90,31 @@ def build_section_writing_prompt(
     guidelines = section_tmpl.guidelines if section_tmpl else ""
     max_words = section_tmpl.max_words if section_tmpl else None
 
-    parts = [
-        f"# Task: Write the **{section_title}** section",
-        f"Paper template: {template.name} | Citation style: {template.citation.style}",
-    ]
-
+    parts = [f"Write the **{section_title}** section."]
     if guidelines:
-        parts.append(f"**Section guidelines**: {guidelines}")
+        parts.append(f"Guidelines: {guidelines}")
     if max_words:
-        parts.append(f"**Target length**: approximately {max_words} words.")
+        parts.append(f"Target: ~{max_words} words.")
     if instructions:
-        parts.append(f"**User instructions**: {instructions}")
+        parts.append(f"Instructions: {instructions}")
 
     if existing_sections_summary:
-        parts.append(f"""
-## Context from other sections (for coherence)
-
-{existing_sections_summary}
-""")
-
+        parts.append(f"\n## Other sections (for coherence)\n\n{existing_sections_summary}")
     if references_summary:
-        parts.append(f"""
-## Available references (use [N] to cite)
-
-{references_summary}
-""")
-
+        parts.append(f"\n## Available references — cite generously with [N]\n\n{references_summary}")
     if knowledge_context:
-        parts.append(f"""
-## Internal knowledge context (do NOT cite as reference)
-
-{knowledge_context}
-""")
+        parts.append(f"\n## Internal context (do NOT cite)\n\n{knowledge_context}")
 
     parts.append("""
-## Output format
+## Output rules
 
-Write the section content directly as HTML paragraphs.
-- Use `<p>`, `<ul>`, `<ol>`, `<strong>`, `<em>` tags.
-- For mathematical formulas, use LaTeX notation: `$...$` for inline, `$$...$$` for display math. They will be rendered automatically.
-- Do NOT wrap in markdown code blocks.
-- Do NOT include the section title as a heading (it's rendered separately).
-- Write substantively with specific details, not filler text.
+- HTML paragraphs only: `<p>`, `<strong>`, `<em>`, `<ul>`, `<ol>`, `<li>`.
+- For comparisons / metrics / hyperparameters → use `<table>` with `<thead>` and `<tbody>`.
+- For math → LaTeX: `$x$` inline, `$$...$$` display. Never plain text math. Never natural language inside `$...$`.
+- Cite available references with `[N]` — aim for 3+ citations per body section.
+- Do NOT include the section title (rendered separately).
+- Do NOT wrap output in markdown code fences.
+- Substantive content only. No filler like "in this section we will...".
 """)
 
     return "\n\n".join(parts)

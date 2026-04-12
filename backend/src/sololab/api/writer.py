@@ -137,8 +137,9 @@ async def export_document(request: Request, doc_id: str):
     from urllib.parse import quote
 
     title = doc.get("title", "paper")
-    # ASCII-safe filename for Content-Disposition
-    safe_title = re.sub(r'[^\w\s-]', '', title).replace(" ", "_")[:50] or "paper"
+    # Strict ASCII-safe filename for Content-Disposition (Python \w matches Unicode by default,
+    # which would keep Chinese chars and break latin-1 encoding in HTTP headers)
+    safe_title = re.sub(r'[^A-Za-z0-9_\s-]', '', title).replace(" ", "_")[:50] or "paper"
     filename_ascii = f"{safe_title}.docx"
     filename_utf8 = quote(f"{title[:50]}.docx")
 
