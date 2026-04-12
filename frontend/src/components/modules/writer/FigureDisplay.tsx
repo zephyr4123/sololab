@@ -1,6 +1,8 @@
 'use client';
 
+import { useMemo } from 'react';
 import type { WriterFigure } from '@/stores/module-stores/writer-store';
+import { renderLatexInText } from '@/lib/latex-render';
 
 interface FigureDisplayProps {
   figure: WriterFigure;
@@ -9,6 +11,8 @@ interface FigureDisplayProps {
 export default function FigureDisplay({ figure }: FigureDisplayProps) {
   const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   const imgSrc = figure.url.startsWith('http') ? figure.url : `${apiBase}${figure.url}`;
+
+  const captionHtml = useMemo(() => renderLatexInText(figure.caption || ''), [figure.caption]);
 
   return (
     <figure className="rounded-lg border border-border/60 p-4 my-4 bg-card/30">
@@ -23,9 +27,9 @@ export default function FigureDisplay({ figure }: FigureDisplayProps) {
           }}
         />
       </div>
-      <figcaption className="text-xs text-muted-foreground mt-3 text-center leading-relaxed">
+      <figcaption className="text-xs text-muted-foreground mt-3 text-center leading-relaxed [&_.katex]:text-[0.9em]">
         <span className="font-semibold text-foreground/70">图 {figure.number || figure.order}.</span>{' '}
-        {figure.caption}
+        <span dangerouslySetInnerHTML={{ __html: captionHtml }} />
       </figcaption>
     </figure>
   );

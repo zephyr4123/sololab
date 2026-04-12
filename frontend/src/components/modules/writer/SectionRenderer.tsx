@@ -2,45 +2,13 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import type { WriterSection } from '@/stores/module-stores/writer-store';
-import katex from 'katex';
-import 'katex/dist/katex.min.css';
+import { renderLatexInHTML } from '@/lib/latex-render';
 
 interface SectionRendererProps {
   section: WriterSection;
   isStreaming: boolean;
   isSelected: boolean;
   onSelect: () => void;
-}
-
-/**
- * Render LaTeX math in an HTML string.
- * Supports: $$...$$ and \[...\] (display), $...$ and \(...\) (inline).
- */
-function renderLatexInHTML(html: string): string {
-  // Display math: $$...$$
-  html = html.replace(/\$\$([\s\S]*?)\$\$/g, (_m, tex) => {
-    try { return katex.renderToString(tex.trim(), { displayMode: true, throwOnError: false }); }
-    catch { return _m; }
-  });
-  // Display math: \[...\]
-  html = html.replace(/\\\[([\s\S]*?)\\\]/g, (_m, tex) => {
-    try { return katex.renderToString(tex.trim(), { displayMode: true, throwOnError: false }); }
-    catch { return _m; }
-  });
-  // Inline math: $...$ — skip currency like "$5 million" (digit-start + no LaTeX syntax)
-  html = html.replace(/\$([^\$\n]{1,}?)\$/g, (_m, tex) => {
-    const t = tex.trim();
-    // Only skip if it starts with a digit AND has no LaTeX markers (\, ^, _, {, })
-    if (/^\d/.test(t) && !/[\\^_{}]/.test(t)) return _m;
-    try { return katex.renderToString(t, { displayMode: false, throwOnError: false }); }
-    catch { return _m; }
-  });
-  // Inline math: \(...\)
-  html = html.replace(/\\\((.*?)\\\)/g, (_m, tex) => {
-    try { return katex.renderToString(tex.trim(), { displayMode: false, throwOnError: false }); }
-    catch { return _m; }
-  });
-  return html;
 }
 
 export default function SectionRenderer({ section, isStreaming, isSelected, onSelect }: SectionRendererProps) {

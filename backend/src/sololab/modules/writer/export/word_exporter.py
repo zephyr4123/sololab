@@ -29,74 +29,93 @@ logger = logging.getLogger(__name__)
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "docx"
 
-# ── LaTeX → Unicode 简易转换表 ────────────────────────
-_LATEX_UNICODE = {
-    # 小写希腊字母
-    r"\alpha": "α", r"\beta": "β", r"\gamma": "γ", r"\delta": "δ",
-    r"\epsilon": "ε", r"\varepsilon": "ε", r"\zeta": "ζ", r"\eta": "η",
-    r"\theta": "θ", r"\vartheta": "ϑ", r"\iota": "ι", r"\kappa": "κ",
-    r"\lambda": "λ", r"\mu": "μ", r"\nu": "ν", r"\xi": "ξ",
-    r"\pi": "π", r"\varpi": "ϖ", r"\rho": "ρ", r"\varrho": "ϱ",
-    r"\sigma": "σ", r"\varsigma": "ς", r"\tau": "τ", r"\upsilon": "υ",
-    r"\phi": "φ", r"\varphi": "φ", r"\chi": "χ", r"\psi": "ψ", r"\omega": "ω",
-    # 大写希腊字母
-    r"\Gamma": "Γ", r"\Delta": "Δ", r"\Theta": "Θ", r"\Lambda": "Λ",
-    r"\Xi": "Ξ", r"\Pi": "Π", r"\Sigma": "Σ", r"\Upsilon": "Υ",
-    r"\Phi": "Φ", r"\Psi": "Ψ", r"\Omega": "Ω",
-    # 运算符与符号
-    r"\sum": "∑", r"\prod": "∏", r"\int": "∫", r"\oint": "∮",
-    r"\partial": "∂", r"\nabla": "∇", r"\infty": "∞",
-    r"\pm": "±", r"\mp": "∓", r"\times": "×", r"\div": "÷",
-    r"\cdot": "·", r"\cdots": "⋯", r"\ldots": "…", r"\dots": "…",
-    r"\leq": "≤", r"\le": "≤", r"\geq": "≥", r"\ge": "≥",
-    r"\neq": "≠", r"\ne": "≠", r"\approx": "≈", r"\equiv": "≡",
-    r"\sim": "∼", r"\propto": "∝", r"\ll": "≪", r"\gg": "≫",
-    r"\subset": "⊂", r"\supset": "⊃", r"\subseteq": "⊆", r"\supseteq": "⊇",
-    r"\in": "∈", r"\notin": "∉", r"\ni": "∋",
-    r"\cup": "∪", r"\cap": "∩", r"\emptyset": "∅", r"\varnothing": "∅",
-    r"\forall": "∀", r"\exists": "∃", r"\nexists": "∄",
-    r"\rightarrow": "→", r"\leftarrow": "←", r"\leftrightarrow": "↔",
-    r"\Rightarrow": "⇒", r"\Leftarrow": "⇐", r"\Leftrightarrow": "⇔",
-    r"\to": "→", r"\mapsto": "↦", r"\implies": "⟹", r"\iff": "⟺",
-    r"\langle": "⟨", r"\rangle": "⟩", r"\hbar": "ℏ", r"\ell": "ℓ",
-    r"\Re": "ℜ", r"\Im": "ℑ", r"\aleph": "ℵ",
-    # 常见函数（去掉反斜杠）
-    r"\sin": "sin", r"\cos": "cos", r"\tan": "tan", r"\cot": "cot",
-    r"\sec": "sec", r"\csc": "csc",
-    r"\log": "log", r"\ln": "ln", r"\exp": "exp",
-    r"\max": "max", r"\min": "min", r"\sup": "sup", r"\inf": "inf",
-    r"\arg": "arg", r"\det": "det", r"\dim": "dim", r"\ker": "ker",
-}
+# ── LaTeX → Unicode 转换（基于 pylatexenc + 后处理） ────────────────────────
+try:
+    from pylatexenc.latex2text import LatexNodes2Text
 
-# 上标 / 下标的常见 Unicode 映射（仅数字和少量字符）
-_SUPERSCRIPT = str.maketrans("0123456789+-=()n", "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿ")
-_SUBSCRIPT = str.maketrans("0123456789+-=()", "₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎")
+    _PYLATEX_CONV = LatexNodes2Text(math_mode="text", strict_latex_spaces=False)
+except ImportError:  # pragma: no cover
+    _PYLATEX_CONV = None
+
+# 单字符上下标 Unicode 映射，用于 pylatexenc 输出之后的 `^2` / `_i` 美化
+_SUPERSCRIPT_MAP = str.maketrans(
+    "0123456789+-=()abcdefghijklmnoprstuvwxyzABDEGHIJKLMNOPRTUVW",
+    "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻᴬᴮᴰᴱᴳᴴᴵᴶᴷᴸᴹᴺᴼᴾᴿᵀᵁⱽᵂ",
+)
+_SUBSCRIPT_MAP = str.maketrans(
+    "0123456789+-=()aehijklmnoprstuvx",
+    "₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎ₐₑₕᵢⱼₖₗₘₙₒₚᵣₛₜᵤᵥₓ",
+)
+
+
+def _apply_unicode_sub_sup(text: str) -> str:
+    """Post-process `_x` / `^x` / `_{abc}` / `^{abc}` → Unicode sub/superscript.
+
+    pylatexenc keeps literal `_` and `^`; we upgrade to Unicode only when every
+    char in the sub/superscript maps cleanly — otherwise leave the literal marker
+    so the reader still sees the original LaTeX semantics.
+    """
+
+    def _fully_mapped(body: str, mapping: dict[int, int]) -> str | None:
+        mapped = body.translate(mapping)
+        return mapped if mapped != body and all(ord(c) > 127 for c in mapped) else None
+
+    def sup_braces(m: re.Match) -> str:
+        out = _fully_mapped(m.group(1), _SUPERSCRIPT_MAP)
+        return out if out is not None else m.group(0)
+
+    def sub_braces(m: re.Match) -> str:
+        out = _fully_mapped(m.group(1), _SUBSCRIPT_MAP)
+        return out if out is not None else m.group(0)
+
+    def sup_char(m: re.Match) -> str:
+        c = m.group(1)
+        mc = c.translate(_SUPERSCRIPT_MAP)
+        return mc if mc != c else m.group(0)
+
+    def sub_char(m: re.Match) -> str:
+        c = m.group(1)
+        mc = c.translate(_SUBSCRIPT_MAP)
+        return mc if mc != c else m.group(0)
+
+    # Braced forms first (even though pylatexenc usually strips braces)
+    text = re.sub(r"\^\{([^{}]{1,6})\}", sup_braces, text)
+    text = re.sub(r"_\{([^{}]{1,6})\}", sub_braces, text)
+    # Single char followed by non-alnum/underscore — so `_n` in `_node` or `^d` in
+    # `^d_emb` is left alone (avoids partial translations of multi-char scripts)
+    text = re.sub(r"\^([0-9a-zA-Z+\-=()])(?![0-9a-zA-Z_])", sup_char, text)
+    text = re.sub(r"_([0-9a-zA-Z+\-=()])(?![0-9a-zA-Z_])", sub_char, text)
+    return text
 
 
 def _latex_to_unicode(latex: str) -> str:
-    """Convert simple LaTeX to readable Unicode text. Best-effort, not full parser."""
+    """Convert LaTeX math to readable Unicode text via pylatexenc + post-processing."""
     s = latex.strip()
-    # 去掉常见包装：\text{...} \mathbf{...} 等
-    for cmd in ("text", "mathbf", "mathit", "mathrm", "mathbb", "mathcal", "mathsf", "mathtt", "operatorname"):
+    # pylatexenc 会丢弃 \| 定界符，先人工替换为 ‖（不在 LaTeX 命令集中，原样穿透）
+    s = s.replace(r"\|", "‖")
+    if _PYLATEX_CONV is not None:
+        try:
+            out = _PYLATEX_CONV.latex_to_text(s)
+            # 折叠 pylatexenc 输出中可能出现的多余空白
+            out = re.sub(r"[ \t]+", " ", out).strip()
+            return _apply_unicode_sub_sup(out)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("pylatexenc parse failed for %r: %s", s[:60], e)
+    # Fallback：原始简易正则流水线（pylatexenc 未安装或解析失败时）
+    return _fallback_latex_to_unicode(s)
+
+
+def _fallback_latex_to_unicode(s: str) -> str:
+    """Minimal regex-based fallback when pylatexenc is unavailable."""
+    for cmd in ("text", "mathbf", "mathit", "mathrm", "mathbb", "mathcal", "mathsf", "mathtt", "operatorname", "boldsymbol"):
         s = re.sub(r"\\" + cmd + r"\s*\{([^{}]*)\}", r"\1", s)
-    # \frac{a}{b} → (a)/(b)
+    s = re.sub(r"\\left", "", s)
+    s = re.sub(r"\\right", "", s)
     s = re.sub(r"\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}", r"(\1)/(\2)", s)
-    # \sqrt[n]{a} → ⁿ√(a)；\sqrt{a} → √(a)
-    s = re.sub(r"\\sqrt\s*\[([^\]]+)\]\s*\{([^{}]+)\}", r"\1√(\2)", s)
     s = re.sub(r"\\sqrt\s*\{([^{}]+)\}", r"√(\1)", s)
-    # 替换符号表（按长度降序，避免短前缀误匹配）
-    for cmd, ch in sorted(_LATEX_UNICODE.items(), key=lambda x: -len(x[0])):
-        s = s.replace(cmd, ch)
-    # 上下标：x_2 → x₂，x^2 → x²；{...} 形式简单处理单字符
-    s = re.sub(r"\^\{([^{}]+)\}", lambda m: m.group(1).translate(_SUPERSCRIPT), s)
-    s = re.sub(r"_\{([^{}]+)\}", lambda m: m.group(1).translate(_SUBSCRIPT), s)
-    s = re.sub(r"\^(.)", lambda m: m.group(1).translate(_SUPERSCRIPT), s)
-    s = re.sub(r"_(.)", lambda m: m.group(1).translate(_SUBSCRIPT), s)
-    # 去掉剩余未识别命令的反斜杠
+    s = _apply_unicode_sub_sup(s)
     s = re.sub(r"\\([a-zA-Z]+)", r"\1", s)
-    # 清理大括号
-    s = s.replace("{", "").replace("}", "")
-    return s
+    return s.replace("{", "").replace("}", "")
 
 
 def _split_latex_segments(text: str) -> list[tuple[str, bool]]:
