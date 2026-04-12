@@ -352,9 +352,10 @@ export default function WriterChat({ moduleId }: { moduleId: string }) {
               </p>
               <div className="w-full space-y-2">
                 {[
-                  '写一篇关于视觉 Transformer 在医学图像分割中应用的 CVPR 论文，8 页',
-                  '写一篇关于大语言模型在代码生成中应用的综述，目标中文期刊',
-                  '写一篇关于 2024 年 CRISPR 基因编辑进展的 Nature 文章',
+                  '我在准备一篇 CVPR 投稿，主题是 3D 高斯泼溅的内存优化。需要架构对比图、消融实验表，以及与 NeRF 系列的渲染速度 benchmark',
+                  '帮我写一篇 Nature 综述：AlphaFold 3 在药物发现中的应用。要图文并茂，包含技术演进时间线、性能对比表和典型案例分析',
+                  '目标《自动化学报》，多智能体强化学习用于自动驾驶决策的中文综述。需要数学公式推导、算法伪代码框图、主流 benchmark 对比',
+                  '撰写一篇关于扩散模型在分子生成中应用的 ICML 论文。包含模型架构图、训练损失曲线、与 GraphRNN/MolGAN 的定量对比表',
                 ].map((example, i) => (
                   <button
                     key={i}
