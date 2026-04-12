@@ -116,8 +116,12 @@ async def export_document(request: Request, doc_id: str):
         raise HTTPException(status_code=404, detail=f"Document '{doc_id}' not found")
 
     from fastapi.responses import Response
-    from sololab.modules.writer.export.word_exporter import WordExporter
     from sololab.config.settings import get_settings
+    from sololab.modules.writer.export.pandoc_exporter import (
+        PandocExporter,
+        PandocNotInstalled,
+    )
+    from sololab.modules.writer.export.word_exporter import WordExporter
 
     # Resolve citation style from template
     template_registry = _get_template_registry(request)
@@ -125,13 +129,28 @@ async def export_document(request: Request, doc_id: str):
     citation_style = template.citation.style if template else "nature-numeric"
 
     settings = get_settings()
-    exporter = WordExporter(storage_path=settings.storage_path)
+
+    # Pandoc produces native Word OMML math + proper tables; fall back to the
+    # legacy python-docx exporter only if the binary is missing or pandoc errors.
+    try:
+        exporter: PandocExporter | WordExporter = PandocExporter(storage_path=settings.storage_path)
+    except PandocNotInstalled:
+        logger.warning("pandoc not installed; falling back to legacy WordExporter")
+        exporter = WordExporter(storage_path=settings.storage_path)
 
     try:
         docx_bytes = await exporter.export(doc, citation_style=citation_style)
     except Exception as e:
         logger.exception("Word export failed for doc %s", doc_id)
-        raise HTTPException(status_code=500, detail=f"Export failed: {e}")
+        if isinstance(exporter, PandocExporter):
+            logger.warning("pandoc export failed, retrying with legacy WordExporter")
+            try:
+                fallback = WordExporter(storage_path=settings.storage_path)
+                docx_bytes = await fallback.export(doc, citation_style=citation_style)
+            except Exception as e2:
+                raise HTTPException(status_code=500, detail=f"Export failed: {e2}")
+        else:
+            raise HTTPException(status_code=500, detail=f"Export failed: {e}")
 
     import re
     from urllib.parse import quote
