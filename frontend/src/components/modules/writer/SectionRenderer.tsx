@@ -92,6 +92,11 @@ export default function SectionRenderer({ section, isStreaming, isSelected, onSe
             [&_ul]:ml-4 [&_ul]:list-disc [&_ul]:mb-2 [&_ul_li]:mb-0.5
             [&_ol]:ml-4 [&_ol]:list-decimal [&_ol]:mb-2 [&_ol_li]:mb-0.5
             [&_strong]:font-semibold [&_em]:italic
+            [&_table]:w-full [&_table]:border-collapse [&_table]:my-4 [&_table]:text-[12px] [&_table]:font-sans
+            [&_thead]:bg-muted/40 [&_thead]:border-b-2 [&_thead]:border-border
+            [&_th]:border [&_th]:border-border/50 [&_th]:px-2.5 [&_th]:py-1.5 [&_th]:font-semibold [&_th]:text-left [&_th]:text-foreground
+            [&_td]:border [&_td]:border-border/50 [&_td]:px-2.5 [&_td]:py-1.5 [&_td]:align-top
+            [&_tbody_tr:hover]:bg-muted/20
             [&_.katex-display]:my-3 [&_.katex-display]:text-center [&_.katex-display]:overflow-x-auto
             [&_.katex]:text-[0.95em]"
           dangerouslySetInnerHTML={{ __html: renderedContent }}

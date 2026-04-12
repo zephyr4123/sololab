@@ -19,8 +19,11 @@ def main() -> None:
 
     import matplotlib
     matplotlib.use("Agg")
-    # Configure Chinese font support (Noto Sans CJK installed in Docker image)
-    matplotlib.rcParams['font.sans-serif'] = ['Noto Sans CJK SC', 'Noto Sans CJK', 'DejaVu Sans']
+    # Chinese font support: fonts-noto-cjk installs .ttc TrueType Collections that
+    # matplotlib registers under the "JP" name (the first variant in the TTC).
+    # Despite the JP name, this font contains the full shared CJK glyph database
+    # and renders Chinese/Japanese/Korean correctly.
+    matplotlib.rcParams['font.sans-serif'] = ['Noto Sans CJK JP', 'DejaVu Sans']
     matplotlib.rcParams['axes.unicode_minus'] = False
     import matplotlib.pyplot as plt
 

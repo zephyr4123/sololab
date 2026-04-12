@@ -75,7 +75,7 @@ def build_system_prompt(
 
 - **NEVER fabricate citations.** Only cite papers returned by `search_literature` after `manage_reference(add)`.
 - **NEVER mix languages within the paper.** Pick one language and use it for EVERYTHING: paragraphs, section titles, table headers, figure captions, list items. No bilingual text, no mid-section language switches.
-- **NEVER write Chinese in `execute_code`.** All matplotlib/plotly code must use **English** for titles, axis labels, legends, and annotations — even when the paper is in Chinese. The sandbox has limited CJK font support and Chinese text renders as boxes (□). Use English like `"Accuracy"`, `"Epoch"`, `"Training Loss"`, `"Method A vs Method B"` in the code.
+- **Figure text language**: the sandbox has CJK font support via `Noto Sans CJK JP` (works for Chinese too). If the paper is in Chinese, figure labels/titles SHOULD be in Chinese for consistency. You do NOT need to force English labels. matplotlib fonts are pre-configured — just write `plt.title("训练损失曲线")`, `ax.set_xlabel("迭代次数")` directly and they render correctly.
 - **NEVER write a paper without figures and tables.** Pure text is unacceptable. Every methodology/results/comparison section must include at least one figure OR an HTML `<table>`.
 - **NEVER put natural language inside `$...$`.**
   - WRONG: `$h 个并行头$`
