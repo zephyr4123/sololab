@@ -27,7 +27,7 @@ export default function DocumentToolbar({ showOutline, onToggleOutline, showKnow
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'paper.docx';
+        a.download = 'paper.pdf';
         a.click();
         URL.revokeObjectURL(url);
       }
@@ -90,7 +90,7 @@ export default function DocumentToolbar({ showOutline, onToggleOutline, showKnow
               disabled={isExporting || !docId}
               className="text-xs px-3 py-1.5 rounded-md border border-border/50 hover:bg-accent/40 transition-colors disabled:opacity-30 text-foreground/70"
             >
-              {isExporting ? '导出中...' : '导出 Word'}
+              {isExporting ? '导出中...' : '导出 PDF'}
             </button>
           </>
         )}

@@ -28,13 +28,10 @@ export default function DocumentPreview() {
     if (!showKnowledge) setShowOutline(false);
   };
 
-  // Group figures by section
-  const figuresBySection = new Map<string, typeof figures>();
-  for (const fig of figures) {
-    const sid = fig.sectionId || '__global__';
-    if (!figuresBySection.has(sid)) figuresBySection.set(sid, []);
-    figuresBySection.get(sid)!.push(fig);
-  }
+  // Figures with a section_id are inlined into section.content via the
+  // `insert_figure` tool, so we only need to render document-level (global)
+  // figures separately. Section-level figures appear inside SectionRenderer.
+  const globalFigures = figures.filter((f) => !f.sectionId);
 
   const isDouble = templateId === 'cvpr' || templateId === 'iccv' || templateId === 'acm';
 
@@ -84,7 +81,7 @@ export default function DocumentPreview() {
                   </div>
                 )}
 
-                {/* Sections */}
+                {/* Sections — figures are inlined inside section.content */}
                 <div className={isDouble ? 'columns-2 gap-6' : ''}>
                   {sections.map((section) => (
                     <div key={section.id} className={isDouble ? 'break-inside-avoid mb-4' : 'mb-6'}>
@@ -94,9 +91,6 @@ export default function DocumentPreview() {
                         isSelected={selectedSectionId === section.id}
                         onSelect={() => setSelectedSection(section.id)}
                       />
-                      {figuresBySection.get(section.id)?.map((fig) => (
-                        <FigureDisplay key={fig.id} figure={fig} />
-                      ))}
                     </div>
                   ))}
                 </div>
@@ -104,8 +98,8 @@ export default function DocumentPreview() {
                 {/* References */}
                 <ReferenceList />
 
-                {/* Global figures */}
-                {figuresBySection.get('__global__')?.map((fig) => (
+                {/* Global figures — those without a section_id */}
+                {globalFigures.map((fig) => (
                   <FigureDisplay key={fig.id} figure={fig} />
                 ))}
               </div>

@@ -20,7 +20,14 @@ export default function SectionRenderer({ section, isStreaming, isSelected, onSe
     }
   }, [section.content, isStreaming]);
 
-  const renderedContent = useMemo(() => renderLatexInHTML(section.content), [section.content]);
+  const renderedContent = useMemo(() => {
+    let html = renderLatexInHTML(section.content);
+    // Inline figures live in section.content as `<img src="/storage/...">`. The
+    // browser needs the absolute backend URL to fetch them through the API host.
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    html = html.replace(/<img(\s[^>]*?)src="(\/storage\/[^"]+)"/g, `<img$1src="${apiBase}$2"`);
+    return html;
+  }, [section.content]);
 
   return (
     <div
@@ -55,7 +62,7 @@ export default function SectionRenderer({ section, isStreaming, isSelected, onSe
       ) : (
         <div
           ref={contentRef}
-          className="px-1 text-[13px] leading-[1.7] text-foreground/85 font-serif max-h-[500px] overflow-y-auto
+          className="px-1 text-[13px] leading-[1.7] text-foreground/85 font-serif max-h-[600px] overflow-y-auto
             [&_p]:mb-2 [&_p]:text-justify
             [&_ul]:ml-4 [&_ul]:list-disc [&_ul]:mb-2 [&_ul_li]:mb-0.5
             [&_ol]:ml-4 [&_ol]:list-decimal [&_ol]:mb-2 [&_ol_li]:mb-0.5
@@ -65,6 +72,9 @@ export default function SectionRenderer({ section, isStreaming, isSelected, onSe
             [&_th]:border [&_th]:border-border/50 [&_th]:px-2.5 [&_th]:py-1.5 [&_th]:font-semibold [&_th]:text-left [&_th]:text-foreground
             [&_td]:border [&_td]:border-border/50 [&_td]:px-2.5 [&_td]:py-1.5 [&_td]:align-top
             [&_tbody_tr:hover]:bg-muted/20
+            [&_figure]:my-4 [&_figure]:flex [&_figure]:flex-col [&_figure]:items-center [&_figure]:rounded-md [&_figure]:border [&_figure]:border-border/40 [&_figure]:bg-card/40 [&_figure]:p-3
+            [&_figure_img]:max-w-full [&_figure_img]:max-h-[360px] [&_figure_img]:object-contain
+            [&_figcaption]:text-[11px] [&_figcaption]:text-muted-foreground [&_figcaption]:mt-2 [&_figcaption]:text-center [&_figcaption]:leading-relaxed
             [&_.katex-display]:my-3 [&_.katex-display]:text-center [&_.katex-display]:overflow-x-auto
             [&_.katex]:text-[0.95em]"
           dangerouslySetInnerHTML={{ __html: renderedContent }}

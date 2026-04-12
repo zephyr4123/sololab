@@ -20,6 +20,7 @@ export type SSEEvent =
   | { type: 'section_start'; section_id: string; title: string }
   | { type: 'section_stream'; section_id: string; delta: string }
   | { type: 'section_complete'; section_id: string; word_count: number }
+  | { type: 'section_content_updated'; section_id: string; content: string }
   | { type: 'reference_added'; reference: { number: number; title: string; authors?: string[]; year?: number; venue?: string; doi?: string; url?: string } }
   | { type: 'reference_removed'; ref_number: number }
   | { type: 'figure_created'; figure: { id: string; section_id?: string; caption: string; url: string; number?: number } }
@@ -47,6 +48,7 @@ export interface StreamHandlers {
   onSectionStart?: (sectionId: string, title: string) => void;
   onSectionStream?: (sectionId: string, delta: string) => void;
   onSectionComplete?: (sectionId: string, wordCount: number) => void;
+  onSectionContentUpdated?: (sectionId: string, content: string) => void;
   onReferenceAdded?: (ref: { number: number; title: string; authors?: string[]; year?: number; venue?: string }) => void;
   onReferenceRemoved?: (refNumber: number) => void;
   onFigureCreated?: (figure: { id: string; section_id?: string; caption: string; url: string; number?: number }) => void;

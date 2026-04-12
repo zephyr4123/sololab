@@ -109,19 +109,19 @@ async def delete_document(request: Request, doc_id: str):
 
 @router.post("/documents/{doc_id}/export")
 async def export_document(request: Request, doc_id: str):
-    """导出文档为 Word (.docx) 文件。"""
+    """导出文档为 PDF 文件 — 与预览像素一致。"""
     doc_manager = _get_document_manager(request)
     doc = await doc_manager.get(doc_id)
     if doc is None:
         raise HTTPException(status_code=404, detail=f"Document '{doc_id}' not found")
 
+    import re
+    from urllib.parse import quote
+
     from fastapi.responses import Response
+
     from sololab.config.settings import get_settings
-    from sololab.modules.writer.export.pandoc_exporter import (
-        PandocExporter,
-        PandocNotInstalled,
-    )
-    from sololab.modules.writer.export.word_exporter import WordExporter
+    from sololab.modules.writer.export.pdf_exporter import PDFExporter
 
     # Resolve citation style from template
     template_registry = _get_template_registry(request)
@@ -129,43 +129,30 @@ async def export_document(request: Request, doc_id: str):
     citation_style = template.citation.style if template else "nature-numeric"
 
     settings = get_settings()
-
-    # Pandoc produces native Word OMML math + proper tables; fall back to the
-    # legacy python-docx exporter only if the binary is missing or pandoc errors.
-    try:
-        exporter: PandocExporter | WordExporter = PandocExporter(storage_path=settings.storage_path)
-    except PandocNotInstalled:
-        logger.warning("pandoc not installed; falling back to legacy WordExporter")
-        exporter = WordExporter(storage_path=settings.storage_path)
+    exporter = PDFExporter(storage_path=settings.storage_path)
 
     try:
-        docx_bytes = await exporter.export(doc, citation_style=citation_style)
+        pdf_bytes = await exporter.export(doc, citation_style=citation_style)
     except Exception as e:
-        logger.exception("Word export failed for doc %s", doc_id)
-        if isinstance(exporter, PandocExporter):
-            logger.warning("pandoc export failed, retrying with legacy WordExporter")
-            try:
-                fallback = WordExporter(storage_path=settings.storage_path)
-                docx_bytes = await fallback.export(doc, citation_style=citation_style)
-            except Exception as e2:
-                raise HTTPException(status_code=500, detail=f"Export failed: {e2}")
-        else:
-            raise HTTPException(status_code=500, detail=f"Export failed: {e}")
-
-    import re
-    from urllib.parse import quote
+        logger.exception("PDF export failed for doc %s", doc_id)
+        raise HTTPException(status_code=500, detail=f"Export failed: {e}")
 
     title = doc.get("title", "paper")
-    # Strict ASCII-safe filename for Content-Disposition (Python \w matches Unicode by default,
-    # which would keep Chinese chars and break latin-1 encoding in HTTP headers)
-    safe_title = re.sub(r'[^A-Za-z0-9_\s-]', '', title).replace(" ", "_")[:50] or "paper"
-    filename_ascii = f"{safe_title}.docx"
-    filename_utf8 = quote(f"{title[:50]}.docx")
+    # Strict ASCII filename for Content-Disposition + UTF-8 fallback for clients
+    # that honour `filename*` (HTTP headers are latin-1 by spec).
+    safe_title = re.sub(r"[^A-Za-z0-9_\s-]", "", title).replace(" ", "_")[:50] or "paper"
+    filename_ascii = f"{safe_title}.pdf"
+    filename_utf8 = quote(f"{title[:50]}.pdf")
 
     return Response(
-        content=docx_bytes,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": f"attachment; filename=\"{filename_ascii}\"; filename*=UTF-8''{filename_utf8}"},
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{filename_ascii}"; '
+                f"filename*=UTF-8''{filename_utf8}"
+            )
+        },
     )
 
 

@@ -26,7 +26,9 @@ export function renderLatexInHTML(html: string): string {
   });
   html = html.replace(/\$([^\$\n]{1,}?)\$/g, (_m, tex) => {
     const t = tex.trim();
-    if (/^\d/.test(t) && !/[\\^_{}]/.test(t)) return _m;
+    // Skip currency only — digits/commas followed by whitespace + word (e.g. "$5 million", "$1.5 USD")
+    // Numeric tuples like "0.4, 0.4, 0.2" or "{256, 512, 1024}" still render as math.
+    if (/^\d[\d.,]*\s+\w/.test(t)) return _m;
     try { return katex.renderToString(t, { displayMode: false, throwOnError: false }); }
     catch { return _m; }
   });

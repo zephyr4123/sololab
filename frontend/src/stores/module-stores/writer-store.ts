@@ -108,6 +108,7 @@ interface WriterActions {
   startSectionStream: (sectionId: string) => void;
   appendStreamDelta: (sectionId: string, delta: string) => void;
   completeSection: (sectionId: string, wordCount: number) => void;
+  setSectionContent: (sectionId: string, content: string) => void;
 
   // References & Figures
   addReference: (ref: WriterReference) => void;
@@ -193,6 +194,13 @@ export const useWriterStore = create<WriterState & WriterActions>((set, get) => 
         wordCount: sections.reduce((sum, s) => sum + s.wordCount, 0),
       };
     }),
+
+  setSectionContent: (sectionId, content) =>
+    set((state) => ({
+      sections: state.sections.map((s) =>
+        s.id === sectionId ? { ...s, content } : s
+      ),
+    })),
 
   // ── References ──
   addReference: (ref) =>

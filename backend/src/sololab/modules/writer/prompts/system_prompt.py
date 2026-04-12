@@ -131,6 +131,7 @@ def build_section_writing_prompt(
 - HTML only: `<p>`, `<strong>`, `<em>`, `<ul>`, `<ol>`, `<li>`, `<table>`, `<thead>`, `<tbody>`, `<tr>`, `<td>`, `<th>`.
 - For structured data (metrics, comparisons, hyperparameters) → use `<table>`.
 - For math → LaTeX: `$x$` inline, `$$...$$` display. Never plain text math. Never natural language inside `$...$`.
+- **Figure placeholders**: when this section needs a figure, write `[FIGURE: short_name]` on its own line at the exact spot the image should appear, surrounded by prose like "如图 X 所示" / "As shown in Figure X". After this section is written, you'll call `execute_code` then `insert_figure(..., placeholder="short_name")` to swap the marker for the real image. Never put a figure marker without actually planning to insert one.
 - Cite references generously with `[N]` — aim for 3+ citations per body section.
 - Do NOT include the section title (rendered separately).
 - Do NOT use markdown headings (`##`, `###`).

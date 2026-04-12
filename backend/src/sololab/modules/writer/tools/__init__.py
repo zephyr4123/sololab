@@ -119,16 +119,17 @@ WRITER_TOOLS: list[dict] = [
         "type": "function",
         "function": {
             "name": "insert_figure",
-            "description": "Insert a generated figure into a document section. Call after execute_code produces a figure.",
+            "description": "Insert a generated figure into a document section. Call AFTER execute_code produces a figure. The figure replaces the inline `[FIGURE: <placeholder>]` marker you wrote earlier in the section text — always pass `placeholder` so the image flows with the prose instead of piling up at the end.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "section_id": {"type": "string", "description": "Target section ID"},
                     "figure_url": {"type": "string", "description": "Figure URL from execute_code output"},
                     "caption": {"type": "string", "description": "Figure caption (required for academic papers)"},
+                    "placeholder": {"type": "string", "description": "Name of the inline `[FIGURE: <name>]` marker previously written into the section text. The marker is replaced with the actual image at that exact spot."},
                     "code": {"type": "string", "description": "Python code that generated the figure (for reproducibility)"},
                 },
-                "required": ["figure_url", "caption"],
+                "required": ["figure_url", "caption", "placeholder"],
             },
         },
     },

@@ -274,6 +274,7 @@ export default function WriterChat({ moduleId }: { moduleId: string }) {
       onSectionStart: (sectionId) => { store.startSectionStream(sectionId); },
       onSectionStream: (sectionId, delta) => { store.appendStreamDelta(sectionId, delta); },
       onSectionComplete: (sectionId, wordCount) => { store.completeSection(sectionId, wordCount); },
+      onSectionContentUpdated: (sectionId, content) => { store.setSectionContent(sectionId, content); },
       onReferenceAdded: (ref) => {
         store.addReference({ number: ref.number, title: ref.title, authors: ref.authors || [], year: ref.year, venue: ref.venue });
       },

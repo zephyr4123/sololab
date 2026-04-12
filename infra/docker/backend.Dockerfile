@@ -10,11 +10,10 @@ RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debia
 RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ \
     && pip config set global.trusted-host mirrors.aliyun.com
 
-# 安装系统依赖 + Docker CLI（WriterAI 沙箱需要通过 Docker socket 调用）+ pandoc（Word 导出）
+# 安装系统依赖 + Docker CLI（WriterAI 沙箱需要通过 Docker socket 调用）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
-    pandoc \
     && curl -fsSL https://download.docker.com/linux/static/stable/$(uname -m)/docker-27.5.1.tgz \
        | tar xz --strip-components=1 -C /usr/local/bin docker/docker \
     && rm -rf /var/lib/apt/lists/*
@@ -24,6 +23,9 @@ COPY backend/ backend/
 COPY infra/docker/entrypoint.sh /entrypoint.sh
 COPY infra/docker/writer-sandbox.Dockerfile /app/infra/docker/writer-sandbox.Dockerfile
 RUN pip install --no-cache-dir backend/ && chmod +x /entrypoint.sh
+
+# Playwright + Chromium（PDF 导出引擎，与预览像素一致）
+RUN playwright install --with-deps chromium
 
 ENV PYTHONPATH=/app/backend/src
 
