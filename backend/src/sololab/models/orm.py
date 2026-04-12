@@ -169,6 +169,7 @@ class WriterDocumentRecord(Base):
     sections: Mapped[Optional[str]] = mapped_column(JSONB, nullable=False, default=[])
     references: Mapped[Optional[str]] = mapped_column(JSONB, nullable=False, default=[])
     figures: Mapped[Optional[str]] = mapped_column(JSONB, nullable=False, default=[])
+    conversation: Mapped[Optional[list]] = mapped_column(JSONB, nullable=False, default=[])
     metadata_json: Mapped[Optional[str]] = mapped_column(JSONB, nullable=True, default={})
     word_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

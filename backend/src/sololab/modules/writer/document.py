@@ -306,6 +306,68 @@ class DocumentManager:
             await session.refresh(record)
             return self._record_to_dict(record)
 
+    # ── Conversation history ────────────────────────────────
+
+    async def get_conversation(self, doc_id: str, max_turns: int = 5) -> list[dict]:
+        """Return up to the last `max_turns` conversation turns for a document.
+
+        Each turn is a dict `{"messages": [...], "timestamp": "..."}` where
+        `messages` is the full sequence of OpenAI-format role messages from
+        that turn (user → assistant → tool ... → assistant).
+        """
+        self._ensure_db()
+        from sololab.models.orm import WriterDocumentRecord
+
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(WriterDocumentRecord).where(WriterDocumentRecord.doc_id == doc_id)
+            )
+            record = result.scalar_one_or_none()
+            if not record:
+                return []
+            turns = record.conversation or []
+            return turns[-max_turns:] if max_turns > 0 else list(turns)
+
+    async def append_conversation_turn(
+        self,
+        doc_id: str,
+        messages: list[dict],
+        max_turns: int = 5,
+    ) -> dict | None:
+        """Append a new turn to the document's conversation history.
+
+        The turn carries the COMPLETE message sequence from one user request
+        (no truncation within a turn — tool_call IDs must stay paired). Older
+        turns beyond `max_turns` are dropped from the persisted history.
+        """
+        self._ensure_db()
+        if not messages:
+            return None
+        from sololab.models.orm import WriterDocumentRecord
+
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(WriterDocumentRecord).where(WriterDocumentRecord.doc_id == doc_id)
+            )
+            record = result.scalar_one_or_none()
+            if not record:
+                return None
+
+            turns = list(record.conversation or [])
+            turns.append({
+                "messages": messages,
+                "timestamp": _now().isoformat(),
+            })
+            if max_turns > 0 and len(turns) > max_turns:
+                turns = turns[-max_turns:]
+
+            record.conversation = turns
+            flag_modified(record, "conversation")
+            record.updated_at = _now()
+            await session.commit()
+            await session.refresh(record)
+            return self._record_to_dict(record)
+
     # ── Delete ──────────────────────────────────────────────
 
     async def delete(self, doc_id: str) -> bool:
@@ -338,6 +400,7 @@ class DocumentManager:
             "sections": record.sections or [],
             "references": record.references or [],
             "figures": record.figures or [],
+            "conversation": getattr(record, "conversation", None) or [],
             "metadata": record.metadata_json or {},
             "word_count": record.word_count or 0,
             "created_at": record.created_at.isoformat() if record.created_at else None,

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import AsyncGenerator
 
 from sololab.config.settings import Settings
@@ -29,6 +30,8 @@ from sololab.modules.writer.tools import (
 logger = logging.getLogger(__name__)
 
 MAX_TOOL_ROUNDS = 30  # Safety limit to prevent infinite loops
+MAX_CONVERSATION_TURNS = 5  # How many prior turns to replay into context
+SNIPPET_MAX_CHARS = 200  # Length of section content snippet in doc state summary
 
 
 class WriterAgent:
@@ -127,10 +130,28 @@ class WriterAgent:
             emit=emit,
         )
 
+        # Replay up to the last MAX_CONVERSATION_TURNS turns of prior conversation.
+        # Each turn is the FULL message sequence (user → assistant → tool ... → assistant)
+        # so tool_call IDs stay paired. The system prompt is always rebuilt fresh
+        # so the latest doc state is reflected.
+        prior_messages: list[dict] = []
+        if doc_id:
+            try:
+                prior_turns = await self.document_manager.get_conversation(
+                    doc_id, max_turns=MAX_CONVERSATION_TURNS
+                )
+                for turn in prior_turns:
+                    prior_messages.extend(turn.get("messages", []))
+            except Exception:  # noqa: BLE001
+                logger.exception("Failed to load conversation history for doc %s", doc_id)
+
         messages = [
             {"role": "system", "content": system_prompt},
+            *prior_messages,
             {"role": "user", "content": prompt},
         ]
+        new_turn_start = len(messages) - 1  # Slice index where this turn's messages begin
+        turn_completed_cleanly = False
 
         total_cost = 0.0
 
@@ -162,6 +183,11 @@ class WriterAgent:
                 content = response.get("content", "")
                 if content:
                     yield {"type": "agent", "action": "done", "content": content}
+                # Persist the final assistant message so the next turn sees it
+                final_msg = response.get("raw_assistant_message")
+                if final_msg is not None:
+                    messages.append(final_msg)
+                turn_completed_cleanly = True
                 break
 
             # Append assistant message (with tool_calls) for multi-turn
@@ -215,6 +241,19 @@ class WriterAgent:
         else:
             yield {"type": "agent", "action": "done", "content": "Reached maximum tool rounds. Paper may be incomplete."}
 
+        # Persist this turn's messages so the next turn can replay them.
+        # Only save on clean exit — partial turns can leave dangling tool_call
+        # ids that would break OpenAI validation on the next call.
+        if turn_completed_cleanly and doc_id:
+            try:
+                await self.document_manager.append_conversation_turn(
+                    doc_id,
+                    messages[new_turn_start:],
+                    max_turns=MAX_CONVERSATION_TURNS,
+                )
+            except Exception:  # noqa: BLE001
+                logger.exception("Failed to persist conversation turn for doc %s", doc_id)
+
         # Final done event
         yield {
             "type": "done",
@@ -232,7 +271,12 @@ class WriterAgent:
 
 
 def _format_document_state(doc: dict) -> str:
-    """Format document state for system prompt injection."""
+    """Format document state for system prompt injection.
+
+    Includes a short snippet of each completed section's content so the agent
+    has continuity across turns without having to call `get_document` for every
+    edit. Snippets are length-capped to keep token usage predictable.
+    """
     lines = [
         f"Title: {doc.get('title', 'Untitled')}",
         f"Template: {doc['template_id']} | Language: {doc['language']} | Status: {doc['status']}",
@@ -243,12 +287,40 @@ def _format_document_state(doc: dict) -> str:
         lines.append("Sections:")
         for sec in doc["sections"]:
             icon = {"empty": "○", "writing": "◐", "complete": "●"}.get(sec["status"], "?")
-            lines.append(f"  {icon} [{sec['id']}] {sec['title']} — {sec.get('word_count', 0)} words")
+            lines.append(
+                f"  {icon} [{sec['id']}] {sec['title']} — {sec.get('word_count', 0)} words"
+            )
+            content = sec.get("content", "")
+            if content and sec.get("status") in ("complete", "writing"):
+                snippet = _make_snippet(content, SNIPPET_MAX_CHARS)
+                if snippet:
+                    lines.append(f"      ↳ {snippet}")
 
     if doc["references"]:
         lines.append(f"References: {len(doc['references'])} cited")
+        # Compact reference list (number + first author + year + title-prefix)
+        for ref in doc["references"][:30]:
+            num = ref.get("number", "?")
+            authors = ref.get("authors", []) or []
+            first = authors[0] if authors else "?"
+            year = ref.get("year", "?")
+            title = (ref.get("title", "") or "")[:80]
+            lines.append(f"  [{num}] {first} ({year}) — {title}")
 
     if doc["figures"]:
         lines.append(f"Figures: {len(doc['figures'])}")
+        for fig in doc["figures"][:20]:
+            order = fig.get("order", "?")
+            cap = (fig.get("caption", "") or "")[:80]
+            lines.append(f"  Fig {order}: {cap}")
 
     return "\n".join(lines)
+
+
+def _make_snippet(html: str, max_chars: int) -> str:
+    """Strip HTML, collapse whitespace, and truncate for context preview."""
+    text = re.sub(r"<[^>]+>", " ", html)
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) > max_chars:
+        text = text[:max_chars].rstrip() + "…"
+    return text
