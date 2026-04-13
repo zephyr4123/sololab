@@ -1,32 +1,16 @@
 'use client';
 
-import { useState } from 'react';
 import { useWriterStore } from '@/stores/module-stores/writer-store';
 import SectionRenderer from './SectionRenderer';
 import ReferenceList from './ReferenceList';
 import FigureDisplay from './FigureDisplay';
 import DocumentToolbar from './DocumentToolbar';
-import OutlineNav from './OutlineNav';
-import KnowledgePanel from './KnowledgePanel';
 
 export default function DocumentPreview() {
   const {
     title, phase, sections, figures, streamingSectionId,
     selectedSectionId, setSelectedSection, wordCount, templateId,
   } = useWriterStore();
-
-  const [showOutline, setShowOutline] = useState(false);
-  const [showKnowledge, setShowKnowledge] = useState(false);
-
-  const handleToggleOutline = () => {
-    setShowOutline((v) => !v);
-    if (!showOutline) setShowKnowledge(false);
-  };
-
-  const handleToggleKnowledge = () => {
-    setShowKnowledge((v) => !v);
-    if (!showKnowledge) setShowOutline(false);
-  };
 
   // Figures with a section_id are inlined into section.content via the
   // `insert_figure` tool, so we only need to render document-level (global)
@@ -37,26 +21,14 @@ export default function DocumentPreview() {
 
   return (
     <div className="flex flex-col h-full bg-[#FAFAF8] dark:bg-[#161614]">
-      <DocumentToolbar
-        showOutline={showOutline}
-        onToggleOutline={handleToggleOutline}
-        showKnowledge={showKnowledge}
-        onToggleKnowledge={handleToggleKnowledge}
-      />
+      <DocumentToolbar />
 
       <div className="flex flex-1 min-h-0">
-        {/* Outline panel — collapsible left */}
-        {showOutline && (
-          <div className="w-48 shrink-0 border-r border-border/30 overflow-y-auto bg-card/40 animate-fade-in">
-            <OutlineNav />
-          </div>
-        )}
-
         {/* Paper canvas */}
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-[780px] mx-auto my-6 px-6">
+          <div className="max-w-[940px] mx-auto my-5 px-4">
             <div className="bg-white dark:bg-[#1E1D1B] rounded-sm shadow-[0_1px_3px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.04)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.3),0_8px_24px_rgba(0,0,0,0.2)] border border-black/[0.04] dark:border-white/[0.04]">
-              <div className="px-10 py-8">
+              <div className="px-12 py-10">
                 {/* Empty state */}
                 {phase === 'idle' && sections.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -74,7 +46,7 @@ export default function DocumentPreview() {
                 {/* Title */}
                 {title && (
                   <div className="text-center mb-8">
-                    <h1 className="text-xl font-bold leading-tight tracking-tight font-serif text-foreground">
+                    <h1 className="text-2xl font-bold leading-tight tracking-tight font-serif text-foreground">
                       {title}
                     </h1>
                     <div className="w-16 h-px bg-border mx-auto mt-4" />
@@ -115,13 +87,6 @@ export default function DocumentPreview() {
             )}
           </div>
         </div>
-
-        {/* Knowledge drawer — collapsible right */}
-        {showKnowledge && (
-          <div className="w-64 shrink-0 border-l border-border/30 bg-card/40 animate-slide-in-right">
-            <KnowledgePanel onClose={() => setShowKnowledge(false)} />
-          </div>
-        )}
       </div>
     </div>
   );

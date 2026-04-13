@@ -326,7 +326,7 @@ export default function WriterChat({ moduleId }: { moduleId: string }) {
   return (
     <div className="flex h-full">
       {/* ── Left: Chat ── */}
-      <div className="flex flex-col w-[380px] min-w-[320px] shrink-0 border-r border-border/50">
+      <div className="flex flex-col w-[440px] min-w-[400px] max-w-[480px] shrink-0 border-r border-border/50">
         {/* Header */}
         <div className="px-5 py-3.5 border-b border-border/30 shrink-0">
           <div className="flex items-center gap-2.5">

@@ -4,14 +4,7 @@ import { useWriterStore } from '@/stores/module-stores/writer-store';
 import { writerApi } from '@/lib/api-client';
 import TemplateSelector from './TemplateSelector';
 
-interface DocumentToolbarProps {
-  showOutline: boolean;
-  onToggleOutline: () => void;
-  showKnowledge: boolean;
-  onToggleKnowledge: () => void;
-}
-
-export default function DocumentToolbar({ showOutline, onToggleOutline, showKnowledge, onToggleKnowledge }: DocumentToolbarProps) {
+export default function DocumentToolbar() {
   const { docId, wordCount, phase, sections, isExporting, setIsExporting } = useWriterStore();
 
   const completedSections = sections.filter((s) => s.status === 'complete').length;
@@ -42,30 +35,6 @@ export default function DocumentToolbar({ showOutline, onToggleOutline, showKnow
     <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/40 bg-card/30 shrink-0">
       <div className="flex items-center gap-2">
         <TemplateSelector />
-
-        {totalSections > 0 && <div className="w-px h-4 bg-border/40" />}
-
-        {/* Outline toggle */}
-        <button
-          onClick={onToggleOutline}
-          className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md transition-colors ${
-            showOutline ? 'bg-warm/10 text-warm' : 'text-muted-foreground hover:text-foreground hover:bg-accent/40'
-          }`}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M16 12H3"/><path d="M16 6H3"/><path d="M10 18H3"/></svg>
-          大纲
-        </button>
-
-        {/* Knowledge toggle */}
-        <button
-          onClick={onToggleKnowledge}
-          className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md transition-colors ${
-            showKnowledge ? 'bg-warm/10 text-warm' : 'text-muted-foreground hover:text-foreground hover:bg-accent/40'
-          }`}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19v20H6.5a2.5 2.5 0 0 1 0-5H19"/></svg>
-          知识库
-        </button>
       </div>
 
       <div className="flex items-center gap-3">
