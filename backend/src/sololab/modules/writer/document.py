@@ -306,6 +306,36 @@ class DocumentManager:
             await session.refresh(record)
             return self._record_to_dict(record)
 
+    # ── Metadata ────────────────────────────────────────────
+
+    async def update_metadata(self, doc_id: str, patch: dict) -> dict | None:
+        """Shallow-merge `patch` into the document's `metadata_json` JSONB.
+
+        Used by the agent-side state hooks to persist things like `language_lock`
+        and `pending_placeholders` without a dedicated column per concern.
+        """
+        self._ensure_db()
+        if not patch:
+            return None
+        from sololab.models.orm import WriterDocumentRecord
+
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(WriterDocumentRecord).where(WriterDocumentRecord.doc_id == doc_id)
+            )
+            record = result.scalar_one_or_none()
+            if not record:
+                return None
+
+            current = copy.deepcopy(record.metadata_json) if record.metadata_json else {}
+            current.update(patch)
+            record.metadata_json = current
+            flag_modified(record, "metadata_json")
+            record.updated_at = _now()
+            await session.commit()
+            await session.refresh(record)
+            return self._record_to_dict(record)
+
     # ── Conversation history ────────────────────────────────
 
     async def get_conversation(self, doc_id: str, max_turns: int = 5) -> list[dict]:

@@ -75,6 +75,10 @@ async def execute(args: dict, ctx: WriterToolContext) -> AsyncGenerator[dict | s
             ref_lines.append(f"[{ref['number']}] {ref.get('title', '')} ({ref.get('year', 'N/A')})")
         refs_summary = "\n".join(ref_lines)
 
+    # Propagate the doc-level language lock into this inner LLM call so the
+    # writer never re-detects language from scratch (which drifts between runs).
+    language_lock = (doc.get("metadata") or {}).get("language_lock")
+
     # Build the section-writing prompt
     writing_prompt = build_section_writing_prompt(
         section_type=target_section["type"],
@@ -83,6 +87,7 @@ async def execute(args: dict, ctx: WriterToolContext) -> AsyncGenerator[dict | s
         template=template,
         existing_sections_summary=existing_sections_summary,
         references_summary=refs_summary,
+        language_lock=language_lock,
     )
 
     # Mark section as writing
@@ -94,9 +99,24 @@ async def execute(args: dict, ctx: WriterToolContext) -> AsyncGenerator[dict | s
         "title": target_section["title"],
     }
 
+    # Inner system prompt re-states the language lock so the writer LLM can't
+    # miss it even if the user-message prompt gets truncated or reordered.
+    inner_system = (
+        "You are an expert academic writer. Output section content as clean "
+        "HTML paragraphs."
+    )
+    if language_lock:
+        lang_name = {"zh": "Chinese (中文)", "en": "English"}.get(language_lock, language_lock)
+        inner_system += (
+            f"\n\n🔒 LANGUAGE LOCK: this paper is written in {lang_name}. "
+            f"Write this section EXCLUSIVELY in {lang_name}. No mixing, no "
+            "translating. Technical abbreviations (CNN, BERT, Transformer) "
+            "stay as-is. LaTeX math is language-neutral."
+        )
+
     # Stream the LLM response
     messages = [
-        {"role": "system", "content": "You are an expert academic writer. Output section content as clean HTML paragraphs."},
+        {"role": "system", "content": inner_system},
         {"role": "user", "content": writing_prompt},
     ]
 

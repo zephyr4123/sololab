@@ -1,22 +1,36 @@
 """WriterAgent — single-agent orchestrator for academic paper writing.
 
+Architecture: multi-layer prompt system
+  Layer 1  static system prompt        (prompts/system_prompt.py — role, rules, workflow)
+  Layer 2  dynamic state anchor        (prompts/state.py — injected per turn)
+  Layer 3  tool result augmentation    (prompts/state.py — post-tool guidance)
+  Layer 4  agent-side invariant hooks  (this file — language lock, placeholder queue)
+
 Implements a tool-loop pattern:
-  LLM call → parse tool_calls → execute tools → feed results back → repeat
+  LLM call → parse tool_calls → execute tools → feed augmented results back → repeat
 until the LLM finishes without tool calls (paper complete or user query answered).
 
-write_section is special: it's a streaming tool that yields SSE events
-during execution, enabling real-time preview updates.
+write_section is a streaming tool that yields SSE events during execution,
+enabling real-time preview updates.
 """
 from __future__ import annotations
 
 import json
 import logging
-import re
 from typing import AsyncGenerator
 
 from sololab.config.settings import Settings
 from sololab.core.llm_gateway import LLMConfig, LLMGateway
 from sololab.modules.writer.document import DocumentManager
+from sololab.modules.writer.prompts.state import (
+    augment_insert_figure_result,
+    augment_write_section_result,
+    build_state_anchor,
+    detect_paper_language,
+    extract_placeholders,
+    merge_pending_placeholders,
+    pop_pending_placeholder,
+)
 from sololab.modules.writer.prompts.system_prompt import build_system_prompt
 from sololab.modules.writer.sandbox.executor import SandboxExecutor
 from sololab.modules.writer.templates.registry import TemplateRegistry
@@ -31,7 +45,6 @@ logger = logging.getLogger(__name__)
 
 MAX_TOOL_ROUNDS = 30  # Safety limit to prevent infinite loops
 MAX_CONVERSATION_TURNS = 5  # How many prior turns to replay into context
-SNIPPET_MAX_CHARS = 200  # Length of section content snippet in doc state summary
 
 
 class WriterAgent:
@@ -93,19 +106,17 @@ class WriterAgent:
             if existing:
                 doc_id = existing["doc_id"]
 
-        # Build document state summary
-        doc_state = ""
+        # Load the latest document state (used for state anchor + template resolution)
+        doc_snapshot: dict | None = None
         if doc_id:
-            doc = await self.document_manager.get(doc_id)
-            if doc:
-                doc_state = _format_document_state(doc)
-                template_id = doc.get("template_id", template_id)
+            doc_snapshot = await self.document_manager.get(doc_id)
+            if doc_snapshot:
+                template_id = doc_snapshot.get("template_id", template_id)
                 template = self.template_registry.get(template_id) or template
 
-        # Build system prompt
+        # Layer 1 — static system prompt (role, rules, workflow protocol)
         system_prompt = build_system_prompt(
             template=template,
-            document_state=doc_state,
             language=language,
         )
 
@@ -145,10 +156,23 @@ class WriterAgent:
             except Exception:  # noqa: BLE001
                 logger.exception("Failed to load conversation history for doc %s", doc_id)
 
+        # Layer 2 — dynamic state anchor, injected into the user message so it
+        # sits in the LLM's most recent attention window (not diluted by prior
+        # turn history). Only present when we have an actual document to anchor.
+        meta = (doc_snapshot.get("metadata") if doc_snapshot else None) or {}
+        language_lock = meta.get("language_lock")
+        pending_placeholders: list[dict] = meta.get("pending_placeholders", []) or []
+
+        if doc_snapshot:
+            anchor = build_state_anchor(doc_snapshot, language_lock, pending_placeholders)
+            user_content = f"{anchor}\n\n---\n\n# User Request\n\n{prompt}"
+        else:
+            user_content = prompt
+
         messages = [
             {"role": "system", "content": system_prompt},
             *prior_messages,
-            {"role": "user", "content": prompt},
+            {"role": "user", "content": user_content},
         ]
         new_turn_start = len(messages) - 1  # Slice index where this turn's messages begin
         turn_completed_cleanly = False
@@ -230,6 +254,16 @@ class WriterAgent:
                 if ctx.doc_id and ctx.doc_id != doc_id:
                     doc_id = ctx.doc_id
 
+                # Layer 4 — post-tool state hooks. Soft guidance only: we update
+                # metadata and augment the tool result string, but never reject
+                # or silently rewrite the LLM's work.
+                tool_result_str = await self._apply_state_hooks(
+                    tool_name=tool_name,
+                    tool_args=tool_args,
+                    tool_result_str=tool_result_str,
+                    doc_id=doc_id,
+                )
+
                 yield {"type": "tool", "tool": tool_name, "status": "complete"}
 
                 # Append tool result to messages
@@ -269,58 +303,120 @@ class WriterAgent:
         doc = await self.document_manager.get(doc_id)
         return doc.get("word_count", 0) if doc else 0
 
+    async def _apply_state_hooks(
+        self,
+        *,
+        tool_name: str,
+        tool_args: dict,
+        tool_result_str: str,
+        doc_id: str,
+    ) -> str:
+        """Post-tool invariant hooks + tool-result augmentation (Layers 3 & 4).
 
-def _format_document_state(doc: dict) -> str:
-    """Format document state for system prompt injection.
+        - write_section: detect/lock language, extract placeholders into
+          pending queue, enrich return with next-action guidance.
+        - insert_figure: pop filled placeholder from queue, show remaining.
+        - All other tools: pass through unchanged.
 
-    Includes a short snippet of each completed section's content so the agent
-    has continuity across turns without having to call `get_document` for every
-    edit. Snippets are length-capped to keep token usage predictable.
-    """
-    lines = [
-        f"Title: {doc.get('title', 'Untitled')}",
-        f"Template: {doc['template_id']} | Language: {doc['language']} | Status: {doc['status']}",
-        f"Total words: {doc['word_count']}",
-    ]
+        Soft only — we never reject work or silently modify the LLM's output.
+        """
+        if not doc_id:
+            return tool_result_str
 
-    if doc["sections"]:
-        lines.append("Sections:")
-        for sec in doc["sections"]:
-            icon = {"empty": "○", "writing": "◐", "complete": "●"}.get(sec["status"], "?")
-            lines.append(
-                f"  {icon} [{sec['id']}] {sec['title']} — {sec.get('word_count', 0)} words"
+        try:
+            if tool_name == "write_section":
+                return await self._hook_write_section(tool_args, tool_result_str, doc_id)
+            if tool_name == "insert_figure":
+                return await self._hook_insert_figure(tool_args, tool_result_str, doc_id)
+        except Exception:  # noqa: BLE001
+            logger.exception("State hook failed for tool '%s' — returning raw result", tool_name)
+        return tool_result_str
+
+    async def _hook_write_section(
+        self, tool_args: dict, tool_result_str: str, doc_id: str
+    ) -> str:
+        section_id = tool_args.get("section_id", "")
+        if not section_id:
+            return tool_result_str
+
+        fresh = await self.document_manager.get(doc_id)
+        if not fresh:
+            return tool_result_str
+        section = next(
+            (s for s in fresh.get("sections", []) if s.get("id") == section_id),
+            None,
+        )
+        if not section or not section.get("content"):
+            return tool_result_str
+
+        meta = fresh.get("metadata") or {}
+        current_lock = meta.get("language_lock")
+        existing_pending = meta.get("pending_placeholders", []) or []
+
+        # Language detection & lock
+        detected = detect_paper_language(section["content"])
+        language_violation: tuple[str, str] | None = None
+        metadata_patch: dict = {}
+
+        if detected:
+            if not current_lock:
+                metadata_patch["language_lock"] = detected
+                logger.info(
+                    "Language lock set to '%s' for doc %s (from section '%s')",
+                    detected,
+                    doc_id,
+                    section.get("title"),
+                )
+            elif detected != current_lock:
+                language_violation = (current_lock, detected)
+                logger.warning(
+                    "Language mismatch in write_section for doc %s: locked=%s, detected=%s",
+                    doc_id,
+                    current_lock,
+                    detected,
+                )
+
+        # Placeholder extraction → pending queue
+        placeholders = extract_placeholders(section["content"])
+        if placeholders or any(p.get("section_id") == section_id for p in existing_pending):
+            new_pending = merge_pending_placeholders(
+                existing_pending,
+                placeholders,
+                section_id=section_id,
+                section_title=section.get("title", ""),
             )
-            content = sec.get("content", "")
-            if content and sec.get("status") in ("complete", "writing"):
-                snippet = _make_snippet(content, SNIPPET_MAX_CHARS)
-                if snippet:
-                    lines.append(f"      ↳ {snippet}")
+            metadata_patch["pending_placeholders"] = new_pending
 
-    if doc["references"]:
-        lines.append(f"References: {len(doc['references'])} cited")
-        # Compact reference list (number + first author + year + title-prefix)
-        for ref in doc["references"][:30]:
-            num = ref.get("number", "?")
-            authors = ref.get("authors", []) or []
-            first = authors[0] if authors else "?"
-            year = ref.get("year", "?")
-            title = (ref.get("title", "") or "")[:80]
-            lines.append(f"  [{num}] {first} ({year}) — {title}")
+        if metadata_patch:
+            await self.document_manager.update_metadata(doc_id, metadata_patch)
 
-    if doc["figures"]:
-        lines.append(f"Figures: {len(doc['figures'])}")
-        for fig in doc["figures"][:20]:
-            order = fig.get("order", "?")
-            cap = (fig.get("caption", "") or "")[:80]
-            lines.append(f"  Fig {order}: {cap}")
+        return augment_write_section_result(
+            tool_result_str,
+            placeholders=placeholders,
+            section_id=section_id,
+            section_title=section.get("title", ""),
+            language_violation=language_violation,
+        )
 
-    return "\n".join(lines)
+    async def _hook_insert_figure(
+        self, tool_args: dict, tool_result_str: str, doc_id: str
+    ) -> str:
+        placeholder = (tool_args.get("placeholder") or "").strip()
+        section_id = tool_args.get("section_id", "")
 
+        fresh = await self.document_manager.get(doc_id)
+        if not fresh:
+            return tool_result_str
+        meta = fresh.get("metadata") or {}
+        existing_pending = meta.get("pending_placeholders", []) or []
 
-def _make_snippet(html: str, max_chars: int) -> str:
-    """Strip HTML, collapse whitespace, and truncate for context preview."""
-    text = re.sub(r"<[^>]+>", " ", html)
-    text = re.sub(r"\s+", " ", text).strip()
-    if len(text) > max_chars:
-        text = text[:max_chars].rstrip() + "…"
-    return text
+        if placeholder and section_id:
+            remaining = pop_pending_placeholder(existing_pending, placeholder, section_id)
+            if len(remaining) != len(existing_pending):
+                await self.document_manager.update_metadata(
+                    doc_id, {"pending_placeholders": remaining}
+                )
+        else:
+            remaining = existing_pending
+
+        return augment_insert_figure_result(tool_result_str, remaining)
