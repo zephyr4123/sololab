@@ -106,9 +106,9 @@ export default function WriterSidebar() {
   };
 
   return (
-    <div className="flex flex-col h-full w-[260px] min-w-[260px] shrink-0 border-r border-border/40 bg-card/30">
-      {/* Header */}
-      <div className="px-4 py-3.5 border-b border-border/30 shrink-0 flex items-center justify-between">
+    <div className="flex flex-col h-full w-[260px] min-w-[260px] shrink-0 border-r border-border/30 bg-card/30">
+      {/* Header — h-[52px] aligns with WriterChat header + DocumentToolbar */}
+      <div className="h-[52px] px-4 border-b border-border/30 shrink-0 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <BookOpen className="h-4 w-4 text-warm/70" />
           <span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/60">

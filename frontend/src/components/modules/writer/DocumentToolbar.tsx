@@ -32,7 +32,7 @@ export default function DocumentToolbar() {
   };
 
   return (
-    <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/40 bg-card/30 shrink-0">
+    <div className="h-[52px] flex items-center justify-between px-4 border-b border-border/30 bg-card/30 shrink-0">
       <div className="flex items-center gap-2">
         <TemplateSelector />
       </div>

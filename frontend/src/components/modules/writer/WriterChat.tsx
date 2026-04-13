@@ -181,12 +181,34 @@ function updateLastToolEntry(toolName: string, updater: (e: WriterChatEntry) => 
   useWriterStore.setState({ chatEntries: updated });
 }
 
+const SIDEBAR_COLLAPSED_KEY = 'sololab.writer.sidebarCollapsed';
+const SMALL_SCREEN_THRESHOLD = 1440;
+
 /* ── Main component ── */
 export default function WriterChat({ moduleId }: { moduleId: string }) {
   const [input, setInput] = useState('');
   const sseRef = useRef<ResilientSSEClient | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Sidebar collapsed state — persist user preference; default to collapsed
+  // on narrow viewports so the 4-column layout doesn't feel crowded.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const persisted = window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+    if (persisted !== null) return persisted === '1';
+    return window.innerWidth < SMALL_SCREEN_THRESHOLD;
+  });
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((v) => {
+      const next = !v;
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0');
+      }
+      return next;
+    });
+  }, []);
 
   const store = useWriterStore();
   const sessionStore = useSessionStore();
@@ -334,21 +356,39 @@ export default function WriterChat({ moduleId }: { moduleId: string }) {
 
   return (
     <div className="flex h-full">
-      {/* ── Far Left: Document sidebar (CRUD) ── */}
-      <WriterSidebar />
+      {/* ── Far Left: Document sidebar (collapsible) ── */}
+      <div
+        className={`shrink-0 overflow-hidden transition-[width] duration-300 ease-out ${
+          sidebarCollapsed ? 'w-0' : 'w-[260px]'
+        }`}
+      >
+        <div className="w-[260px] h-full">
+          <WriterSidebar />
+        </div>
+      </div>
 
       {/* ── Middle: Chat ── */}
-      <div className="flex flex-col w-[440px] min-w-[400px] max-w-[480px] shrink-0 border-r border-border/50">
-        {/* Header */}
-        <div className="px-5 py-3.5 border-b border-border/30 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-warm/20 to-warm/5 flex items-center justify-center text-warm">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838.838-2.872a2 2 0 0 1 .506-.855z"/></svg>
+      <div className="flex flex-col w-[440px] min-w-[400px] max-w-[480px] shrink-0 border-r border-border/30">
+        {/* Header — h-[52px] matches sidebar + toolbar for pixel-aligned column rules */}
+        <div className="h-[52px] px-4 border-b border-border/30 shrink-0 flex items-center gap-2">
+          <button
+            onClick={toggleSidebar}
+            title={sidebarCollapsed ? '展开文档列表' : '收起文档列表'}
+            className="p-1.5 rounded-md text-muted-foreground/60 hover:text-foreground hover:bg-accent/40 transition-colors"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect width="18" height="18" x="3" y="3" rx="2"/>
+              <path d="M9 3v18"/>
+              {sidebarCollapsed ? <path d="m14 9 3 3-3 3"/> : <path d="m16 15-3-3 3-3"/>}
+            </svg>
+          </button>
+          <div className="w-px h-5 bg-border/40" />
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div className="w-6 h-6 rounded-md bg-gradient-to-br from-warm/20 to-warm/5 flex items-center justify-center text-warm shrink-0">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838.838-2.872a2 2 0 0 1 .506-.855z"/></svg>
             </div>
-            <div>
-              <h2 className="text-sm font-semibold tracking-tight">WriterAI</h2>
-              <p className="text-[10px] text-muted-foreground/60">学术论文写作助手</p>
-            </div>
+            <h2 className="text-[13px] font-semibold tracking-tight truncate">WriterAI</h2>
+            <span className="text-[10px] text-muted-foreground/40 truncate">学术论文写作助手</span>
           </div>
         </div>
 
