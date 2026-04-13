@@ -9,6 +9,7 @@ import { useTaskStore } from '@/stores/task-store';
 import { ResilientSSEClient } from '@/lib/sse-client';
 import type { StreamHandlers } from '@/types/stream';
 import DocumentPreview from './DocumentPreview';
+import WriterSidebar from './WriterSidebar';
 
 const MODULE_ID = 'writer';
 
@@ -191,6 +192,14 @@ export default function WriterChat({ moduleId }: { moduleId: string }) {
   const sessionStore = useSessionStore();
   const taskStore = useTaskStore();
 
+  // Restore the user's last document on mount (persisted via localStorage)
+  useEffect(() => {
+    if (!store.docId) {
+      void store.loadLastDocument();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Auto-scroll to bottom
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -325,7 +334,10 @@ export default function WriterChat({ moduleId }: { moduleId: string }) {
 
   return (
     <div className="flex h-full">
-      {/* ── Left: Chat ── */}
+      {/* ── Far Left: Document sidebar (CRUD) ── */}
+      <WriterSidebar />
+
+      {/* ── Middle: Chat ── */}
       <div className="flex flex-col w-[440px] min-w-[400px] max-w-[480px] shrink-0 border-r border-border/50">
         {/* Header */}
         <div className="px-5 py-3.5 border-b border-border/30 shrink-0">
