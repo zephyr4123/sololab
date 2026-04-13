@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import { writerApi } from '@/lib/api-client';
+import { writerApi, type WriterAttachment } from '@/lib/api-client';
 
 const LAST_DOC_KEY = 'sololab.writer.lastDocId';
 
@@ -96,6 +96,10 @@ interface WriterState {
   // UI
   selectedSectionId: string | null;
   isExporting: boolean;
+
+  // Attachments — per-document, scoped by doc_id on the backend
+  attachments: WriterAttachment[];
+  attachmentsLoading: boolean;
 }
 
 interface WriterActions {
@@ -129,11 +133,24 @@ interface WriterActions {
   setSelectedSection: (id: string | null) => void;
   setIsExporting: (v: boolean) => void;
 
+  // Attachments
+  loadAttachments: (docId: string) => Promise<void>;
+  addAttachment: (att: WriterAttachment) => void;
+  updateAttachment: (attachmentId: string, patch: Partial<WriterAttachment>) => void;
+  removeAttachment: (attachmentId: string) => void;
+
   // Lifecycle
   restoreFromDocument: (doc: Record<string, unknown>) => void;
   loadDocument: (docId: string) => Promise<boolean>;
   loadLastDocument: () => Promise<void>;
   newDocument: () => void;
+  /**
+   * Guarantee a docId exists. Returns current docId if set; otherwise
+   * pre-creates an empty document shell on the backend, persists its
+   * doc_id, and returns the new id. Used by the attachment menu so
+   * users can upload files before sending their first chat message.
+   */
+  ensureDocId: () => Promise<string>;
   reset: () => void;
 }
 
@@ -234,6 +251,8 @@ const initialState: WriterState = {
   chatEntries: [],
   selectedSectionId: null,
   isExporting: false,
+  attachments: [],
+  attachmentsLoading: false,
 };
 
 export const useWriterStore = create<WriterState & WriterActions>((set, get) => ({
@@ -318,6 +337,37 @@ export const useWriterStore = create<WriterState & WriterActions>((set, get) => 
   setSelectedSection: (id) => set({ selectedSectionId: id }),
   setIsExporting: (v) => set({ isExporting: v }),
 
+  // ── Attachments ──
+  loadAttachments: async (docId) => {
+    if (!docId) {
+      set({ attachments: [], attachmentsLoading: false });
+      return;
+    }
+    set({ attachmentsLoading: true });
+    try {
+      const list = await writerApi.listAttachments(docId);
+      set({ attachments: Array.isArray(list) ? list : [], attachmentsLoading: false });
+    } catch (e) {
+      console.error('Failed to load attachments', e);
+      set({ attachments: [], attachmentsLoading: false });
+    }
+  },
+
+  addAttachment: (att) =>
+    set((state) => ({ attachments: [att, ...state.attachments] })),
+
+  updateAttachment: (attachmentId, patch) =>
+    set((state) => ({
+      attachments: state.attachments.map((a) =>
+        a.doc_id === attachmentId ? { ...a, ...patch } : a
+      ),
+    })),
+
+  removeAttachment: (attachmentId) =>
+    set((state) => ({
+      attachments: state.attachments.filter((a) => a.doc_id !== attachmentId),
+    })),
+
   // ── Lifecycle ──
   restoreFromDocument: (doc) => {
     const docId = (doc.doc_id as string) || null;
@@ -356,7 +406,13 @@ export const useWriterStore = create<WriterState & WriterActions>((set, get) => 
       agentStatus: null,
       isStreaming: false,
       isExporting: false,
+      attachments: [],
+      attachmentsLoading: false,
     });
+    // Fire-and-forget attachment fetch so the + menu reflects the new doc.
+    if (docId) {
+      void get().loadAttachments(docId);
+    }
   },
 
   loadDocument: async (docId) => {
@@ -379,6 +435,28 @@ export const useWriterStore = create<WriterState & WriterActions>((set, get) => 
   newDocument: () => {
     persistDocId(null);
     set(initialState);
+  },
+
+  ensureDocId: async () => {
+    const current = get().docId;
+    if (current) return current;
+
+    // Pre-create an empty document shell so the user can upload
+    // attachments (or take other doc-scoped actions) before sending
+    // their first chat message.
+    const { templateId, language } = get();
+    try {
+      const doc = await writerApi.createDocument({
+        template_id: templateId || 'nature',
+        language: language || 'auto',
+      });
+      // Restore to hydrate docId / persist / clear old state.
+      get().restoreFromDocument(doc);
+      return (doc.doc_id as string) || '';
+    } catch (e) {
+      console.error('Failed to pre-create writer document', e);
+      throw e;
+    }
   },
 
   reset: () => {

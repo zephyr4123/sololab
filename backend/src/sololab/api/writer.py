@@ -1,17 +1,26 @@
-"""WriterAI API 路由 — 文档管理、模板列表、Word 导出、知识库。
+"""WriterAI API 路由 — 文档管理、模板列表、PDF 导出、附件。
 
 写作流式端点复用 /api/modules/writer/stream（通用模块流式路由）。
 此文件提供 Writer 模块特有的文档操作端点。
+
+附件隔离策略：每篇文档的附件存储在 project_id = f"writer:{doc_id}" 命名空间，
+search_knowledge 工具查询时也只会命中当前文档的附件，A 文档不会污染 B 文档。
 """
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Query
-from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+
+
+def _attachment_scope(doc_id: str) -> str:
+    """Namespace key for per-document attachment storage."""
+    return f"writer:{doc_id}"
 
 router = APIRouter(prefix="/writer", tags=["writer"])
 
@@ -78,6 +87,38 @@ async def get_template(request: Request, template_id: str):
 
 
 # ── 文档 CRUD ───────────────────────────────────────────
+
+
+class CreateDocumentPayload(BaseModel):
+    template_id: str = "nature"
+    language: str = "auto"
+    title: Optional[str] = None
+    session_id: Optional[str] = None
+
+
+@router.post("/documents")
+async def create_document(request: Request, payload: CreateDocumentPayload):
+    """预创建一个空的 writer 文档 shell。
+
+    用于：用户在新对话里直接上传附件时，需要一个 doc_id 挂载附件。
+    不通过 SSE agent，只调用 DocumentManager.create 生成空记录。
+    返回 session_id 和 doc_id，前端把两个都存下来，后续发 chat 消息时
+    沿用同一个 session_id，agent 就能通过 get_by_session 找到这篇文档。
+    """
+    doc_manager = _get_document_manager(request)
+    session_id = payload.session_id or str(uuid.uuid4())
+    try:
+        doc = await doc_manager.create(
+            session_id=session_id,
+            template_id=payload.template_id,
+            language=payload.language,
+            title=payload.title,
+        )
+    except Exception as e:
+        logger.exception("create_document failed")
+        raise HTTPException(status_code=500, detail=f"Create failed: {e}")
+    return doc
+
 
 @router.get("/documents")
 async def list_documents(request: Request, session_id: Optional[str] = Query(None)):
@@ -156,47 +197,57 @@ async def export_document(request: Request, doc_id: str):
     )
 
 
-# ── 知识库（参考 PDF 管理）──────────────────────────────
+# ── 附件（按 writer 文档隔离的内部知识库）──────────────
 
 @router.post("/knowledge")
 async def upload_knowledge(
     request: Request,
     file: UploadFile = File(...),
-    project_id: str = Query(default="writer"),
+    doc_id: str = Query(..., description="Writer 文档 ID — 附件按此隔离"),
 ):
-    """上传参考 PDF 到知识库。
+    """上传附件到当前文档。
 
-    复用 DocumentPipeline 进行 PDF 解析、分块、嵌入。
-    解析后的内容作为 Agent 的内部知识，不可作为论文引用。
+    附件存储在 project_id = f"writer:{doc_id}" 命名空间，
+    保证 A 文档的附件不会污染 B 文档的搜索结果。
     """
     document_pipeline = getattr(request.app.state, "document_pipeline", None)
     if document_pipeline is None:
         raise HTTPException(status_code=503, detail="Document pipeline not available")
+
+    # 验证 writer 文档存在（拒绝孤儿附件）
+    doc_manager = _get_document_manager(request)
+    writer_doc = await doc_manager.get(doc_id)
+    if writer_doc is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Writer document '{doc_id}' not found. Create the document first.",
+        )
 
     try:
         content = await file.read()
         result = await document_pipeline.upload_and_process(
             filename=file.filename or "unknown.pdf",
             content=content,
-            project_id=project_id,
+            project_id=_attachment_scope(doc_id),
         )
         return {
             "doc_id": result.get("doc_id"),
             "filename": result.get("filename"),
             "status": result.get("status", "processing"),
-            "message": "PDF uploaded for knowledge extraction. Content will be used as internal context only.",
+            "writer_doc_id": doc_id,
+            "message": "Attachment uploaded. Content will be used as internal context for this document only.",
         }
     except Exception as e:
-        logger.exception("Knowledge upload failed")
+        logger.exception("Attachment upload failed")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/knowledge")
 async def list_knowledge(
     request: Request,
-    project_id: str = Query(default="writer"),
+    doc_id: str = Query(..., description="Writer 文档 ID — 只列出该文档的附件"),
 ):
-    """列出已上传的知识库文档。"""
+    """列出指定 writer 文档的附件。"""
     db_session_factory = getattr(request.app.state, "db_session", None)
     if db_session_factory is None:
         raise HTTPException(status_code=503, detail="Database not available")
@@ -204,10 +255,12 @@ async def list_knowledge(
     from sololab.models.orm import DocumentRecord
     from sqlalchemy import select
 
+    scope = _attachment_scope(doc_id)
+
     async with db_session_factory() as session:
         result = await session.execute(
             select(DocumentRecord)
-            .where(DocumentRecord.project_id == project_id)
+            .where(DocumentRecord.project_id == scope)
             .order_by(DocumentRecord.created_at.desc())
         )
         records = result.scalars().all()
@@ -226,9 +279,13 @@ async def list_knowledge(
     ]
 
 
-@router.delete("/knowledge/{doc_id}")
-async def delete_knowledge(request: Request, doc_id: str):
-    """删除知识库中的参考文档。"""
+@router.delete("/knowledge/{attachment_id}")
+async def delete_knowledge(request: Request, attachment_id: str):
+    """删除某个附件。
+
+    注意：这里的 attachment_id 是附件自己的 doc_id（DocumentRecord 主键），
+    不是 writer 文档的 doc_id。前端从 listKnowledge 返回的条目里拿。
+    """
     db_session_factory = getattr(request.app.state, "db_session", None)
     if db_session_factory is None:
         raise HTTPException(status_code=503, detail="Database not available")
@@ -238,11 +295,11 @@ async def delete_knowledge(request: Request, doc_id: str):
 
     async with db_session_factory() as session:
         result = await session.execute(
-            sa_delete(DocumentRecord).where(DocumentRecord.doc_id == doc_id)
+            sa_delete(DocumentRecord).where(DocumentRecord.doc_id == attachment_id)
         )
         await session.commit()
 
     if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail=f"Knowledge document '{doc_id}' not found")
+        raise HTTPException(status_code=404, detail=f"Attachment '{attachment_id}' not found")
 
-    return {"status": "deleted", "doc_id": doc_id}
+    return {"status": "deleted", "doc_id": attachment_id}

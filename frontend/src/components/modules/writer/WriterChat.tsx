@@ -10,6 +10,7 @@ import { ResilientSSEClient } from '@/lib/sse-client';
 import type { StreamHandlers } from '@/types/stream';
 import DocumentPreview from './DocumentPreview';
 import WriterSidebar from './WriterSidebar';
+import PlusMenu from './PlusMenu';
 
 const MODULE_ID = 'writer';
 
@@ -449,9 +450,13 @@ export default function WriterChat({ moduleId }: { moduleId: string }) {
               onKeyDown={handleKeyDown}
               placeholder="描述你想写的论文..."
               rows={2}
-              className="w-full resize-none bg-card/50 border border-border/40 rounded-xl px-4 py-3 pr-20 text-sm focus:outline-none focus:ring-2 focus:ring-warm/20 focus:border-warm/30 placeholder:text-muted-foreground/30 transition-all"
+              className="w-full resize-none bg-card/50 border border-border/40 rounded-xl pl-[52px] pr-20 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-warm/20 focus:border-warm/30 placeholder:text-muted-foreground/30 transition-all"
               disabled={store.isStreaming}
             />
+            {/* + menu (attachments + future slots) pinned bottom-left */}
+            <div className="absolute left-2.5 bottom-2.5">
+              <PlusMenu />
+            </div>
             <button
               onClick={store.isStreaming ? handleStop : handleSend}
               disabled={!store.isStreaming && !input.trim()}

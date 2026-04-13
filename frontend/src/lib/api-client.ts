@@ -264,9 +264,33 @@ export interface WriterDocumentSummary {
   updated_at: string;
 }
 
+export interface WriterAttachment {
+  doc_id: string;
+  filename: string;
+  title?: string;
+  status: string;
+  total_pages: number;
+  total_chunks: number;
+  created_at: string;
+}
+
 export const writerApi = {
   listTemplates: () => fetchAPI<WriterTemplate[]>('/api/writer/templates'),
   getTemplate: (id: string) => fetchAPI<WriterTemplate>(`/api/writer/templates/${id}`),
+  createDocument: async (payload: { template_id?: string; language?: string; title?: string; session_id?: string } = {}) => {
+    const res = await fetch(`${API_BASE}/api/writer/documents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        template_id: payload.template_id ?? 'nature',
+        language: payload.language ?? 'auto',
+        title: payload.title ?? null,
+        session_id: payload.session_id ?? null,
+      }),
+    });
+    if (!res.ok) throw new Error(`Create document failed: ${res.statusText}`);
+    return res.json() as Promise<Record<string, unknown>>;
+  },
   listDocuments: (sessionId?: string) => {
     const params = sessionId ? `?session_id=${sessionId}` : '';
     return fetchAPI<WriterDocumentSummary[]>(`/api/writer/documents${params}`);
@@ -281,20 +305,25 @@ export const writerApi = {
     const res = await fetch(`${API_BASE}/api/writer/documents/${docId}/export`, { method: 'POST' });
     return res;
   },
-  uploadKnowledge: async (file: File, projectId = 'writer') => {
+  /** Upload an attachment scoped to a specific writer document. */
+  uploadAttachment: async (docId: string, file: File) => {
     const formData = new FormData();
     formData.append('file', file);
-    const res = await fetch(`${API_BASE}/api/writer/knowledge?project_id=${projectId}`, {
+    const res = await fetch(`${API_BASE}/api/writer/knowledge?doc_id=${encodeURIComponent(docId)}`, {
       method: 'POST',
       body: formData,
     });
     if (!res.ok) throw new Error(`Upload failed: ${res.statusText}`);
-    return res.json();
+    return res.json() as Promise<{ doc_id: string; filename: string; status: string; writer_doc_id: string }>;
   },
-  listKnowledge: (projectId = 'writer') =>
-    fetchAPI<Array<{ doc_id: string; filename: string; title?: string; status: string; total_pages: number; total_chunks: number; created_at: string }>>(`/api/writer/knowledge?project_id=${projectId}`),
-  deleteKnowledge: async (docId: string) => {
-    const res = await fetch(`${API_BASE}/api/writer/knowledge/${docId}`, { method: 'DELETE' });
+  /** List attachments for a specific writer document. */
+  listAttachments: (docId: string) =>
+    fetchAPI<WriterAttachment[]>(`/api/writer/knowledge?doc_id=${encodeURIComponent(docId)}`),
+  /** Delete a single attachment by its own (attachment) doc_id. */
+  deleteAttachment: async (attachmentId: string) => {
+    const res = await fetch(`${API_BASE}/api/writer/knowledge/${encodeURIComponent(attachmentId)}`, {
+      method: 'DELETE',
+    });
     if (!res.ok) throw new Error(`Delete failed: ${res.statusText}`);
     return res.json();
   },
