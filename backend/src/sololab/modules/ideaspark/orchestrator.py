@@ -98,26 +98,39 @@ class Orchestrator:
             idea_groups = await self._cluster_ideas(ideas, num_groups=num_groups)
             yield {"type": "status", "phase": "together", "round": round_num, "group_count": len(idea_groups)}
 
-            # 阶段 2：汇聚 - 分组讨论（各组并行）
-            async def _run_group(group, group_idx):
-                events = []
-                async for event in self._together_phase_grouped(group, group_idx, iterations=2):
-                    events.append(event)
-                return events
+            # 阶段 2：汇聚 - 分组讨论（各组并行 + 事件实时流式输出）
+            group_queue: asyncio.Queue = asyncio.Queue()
+            _GROUP_SENTINEL = object()
 
-            group_tasks = [_run_group(group, idx) for idx, group in enumerate(idea_groups)]
-            group_results = await asyncio.gather(*group_tasks, return_exceptions=True)
+            async def _run_group_streaming(group, group_idx):
+                try:
+                    async for event in self._together_phase_grouped(group, group_idx, iterations=2):
+                        await group_queue.put(event)
+                except Exception as e:
+                    await group_queue.put({"type": "agent", "agent": "unknown", "action": "error", "error": str(e)})
+                finally:
+                    await group_queue.put(_GROUP_SENTINEL)
 
+            group_tasks = [
+                asyncio.create_task(_run_group_streaming(group, idx))
+                for idx, group in enumerate(idea_groups)
+            ]
             refined_ideas = []
-            for result in group_results:
-                if isinstance(result, Exception):
-                    yield {"type": "agent", "agent": "unknown", "action": "error", "error": str(result)}
-                    continue
-                for event in result:
-                    if isinstance(event, dict):
-                        yield event
-                    if isinstance(event, Message):
-                        refined_ideas.append(event)
+            remaining_groups = len(group_tasks)
+            try:
+                while remaining_groups > 0:
+                    item = await group_queue.get()
+                    if item is _GROUP_SENTINEL:
+                        remaining_groups -= 1
+                        continue
+                    if isinstance(item, dict):
+                        yield item
+                    if isinstance(item, Message):
+                        refined_ideas.append(item)
+            finally:
+                for t in group_tasks:
+                    if not t.done():
+                        t.cancel()
             # 保留未讨论的原始 idea
             refined_ids = {m.id for m in refined_ideas}
             for idea in ideas:
@@ -201,38 +214,46 @@ class Orchestrator:
                 "上一轮已有的创意已在上下文中提供。"
             )
 
-        # 并行执行（传入上一轮创意作为 context_messages）
+        # 并行执行 + 实时流式输出事件（通过 asyncio.Queue 让每个 agent 完成时立即吐出，
+        # 而不是等所有 agent 完成后一次性批量 yield）
+        queue: asyncio.Queue = asyncio.Queue()
+        _SENTINEL = object()
+
         async def _run_agent(name, runner):
-            return name, await runner.run(
-                topic,
-                context_messages=self._history_seed_ideas if self._is_continuation else None,
-                task_prompt=continuation_prompt if continuation_prompt else "",
-                doc_context=self.doc_context,
-                is_continuation=self._is_continuation,
-            )
+            try:
+                messages = await runner.run(
+                    topic,
+                    context_messages=self._history_seed_ideas if self._is_continuation else None,
+                    task_prompt=continuation_prompt if continuation_prompt else "",
+                    doc_context=self.doc_context,
+                    is_continuation=self._is_continuation,
+                )
+                self.agent_states[name] = runner.state
+                for tool_event in runner.tool_events:
+                    await queue.put(tool_event)
+                await queue.put({"type": "agent", "agent": name, "action": "done", "message_count": len(messages)})
+                for msg in messages:
+                    self.blackboard.append(msg)
+                    await queue.put({"type": "idea", "id": msg.id, "content": msg.content, "author": name})
+                    await queue.put(msg)  # Message 对象供上层聚类使用
+            except Exception as e:
+                await queue.put({"type": "agent", "agent": name, "action": "error", "error": str(e)})
+            finally:
+                await queue.put(_SENTINEL)
 
-        tasks = [_run_agent(name, runner) for name, runner in runners]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        for result in results:
-            if isinstance(result, Exception):
-                yield {"type": "agent", "agent": "unknown", "action": "error", "error": str(result)}
-                continue
-            name, messages = result
-            # 更新状态
-            runner = next(r for n, r in runners if n == name)
-            self.agent_states[name] = runner.state
-
-            # 发送工具调用事件（让前端看到搜索过程）
-            for tool_event in runner.tool_events:
-                yield tool_event
-
-            yield {"type": "agent", "agent": name, "action": "done", "message_count": len(messages)}
-
-            for msg in messages:
-                self.blackboard.append(msg)
-                yield {"type": "idea", "id": msg.id, "content": msg.content, "author": name}
-                yield msg  # 传递 Message 对象
+        tasks = [asyncio.create_task(_run_agent(name, runner)) for name, runner in runners]
+        remaining = len(tasks)
+        try:
+            while remaining > 0:
+                item = await queue.get()
+                if item is _SENTINEL:
+                    remaining -= 1
+                    continue
+                yield item
+        finally:
+            for t in tasks:
+                if not t.done():
+                    t.cancel()
 
     async def _cluster_ideas(self, ideas: List[Message], num_groups: int = 4) -> List[List[Message]]:
         """使用 K-Means + 嵌入按语义相似度聚类创意。"""

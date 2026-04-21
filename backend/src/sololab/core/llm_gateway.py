@@ -24,6 +24,9 @@ MODEL_PRICING: Dict[str, tuple[float, float]] = {
     "o1-mini": (3.0, 12.0),
     "o3-mini": (1.1, 4.4),
     # Anthropic (通过兼容 API)
+    "claude-opus-4-7": (5.0, 25.0),
+    "claude-opus-4-6": (5.0, 25.0),
+    "claude-sonnet-4-6": (3.0, 15.0),
     "claude-sonnet-4-20250514": (3.0, 15.0),
     "claude-3-5-sonnet-20241022": (3.0, 15.0),
     "claude-3-5-haiku-20241022": (0.8, 4.0),
