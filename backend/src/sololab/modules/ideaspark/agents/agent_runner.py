@@ -1,38 +1,41 @@
-"""智能体执行引擎 —— 单个角色智能体的 LLM 调用 + 原生 function calling。"""
+"""单 agent 主循环 —— 协调 LLM / ToolDispatcher / OutputParser。
 
-import json
+重构后职责单一化：
+- LLM 多轮调用 + tools 决策 → 本类
+- 工具执行 + query 改写 → ToolDispatcher
+- 输出解析（DSML 剥离 / 类型识别 / 引用追加）→ OutputParser
+- 系统提示 + 上下文消息构造 → _build_messages（agent 私有，规模小不抽出）
+
+公开 API（AgentRunner.run / run_stream / state / tool_events）保持向后兼容。
+"""
+
+from __future__ import annotations
+
 import logging
-import re
-import uuid
+from datetime import datetime
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from sololab.core.llm_gateway import LLMGateway
 from sololab.core.tool_registry import ToolRegistry
-from sololab.models.agent import AgentConfig, AgentState, Message, MessageType
+from sololab.models.agent import AgentConfig, AgentState, Message
+from sololab.modules.ideaspark.agents.output_parser import OutputParser
+from sololab.modules.ideaspark.agents.tool_dispatcher import ToolDispatcher
 from sololab.modules.ideaspark.prompts.system_prompts import get_prompt
-
-# DeepSeek V4 偶发把内部 DSML tool-call 标记泄漏到 content（兼容层翻译失败）
-# 同时兼容 ASCII | 与全角 ｜ 两种竖线变体
-_DSML_BLOCK_RE = re.compile(
-    r"<[\|｜]\s*DSML\s*[\|｜][^>]*>.*?<\/[\|｜]\s*DSML\s*[\|｜][^>]*>",
-    re.DOTALL,
-)
-_DSML_TAG_RE = re.compile(r"<\/?[\|｜]\s*DSML\s*[\|｜][^>]*>")
 
 logger = logging.getLogger(__name__)
 
-# 最大工具调用轮次，防止死循环
+# 最大工具调用轮次（防死循环）
 MAX_TOOL_ROUNDS = 3
 
 
 class AgentRunner:
-    """执行单个角色智能体的完整生命周期。
+    """执行单 persona 的完整生命周期。
 
+    流程：
     1. 构建 system prompt + context messages
-    2. 调用 LLM generate（带 tools 参数）
-    3. 如果 LLM 返回 tool_calls，执行工具并将结果注入上下文
-    4. 循环直到 LLM 给出最终文本回复
-    5. 解析输出为 Message 对象
+    2. 调用 LLM（流式 generate_stream）+ 多轮工具调用循环
+    3. 工具调用委派给 ToolDispatcher
+    4. 最终内容委派给 OutputParser → Message 列表
     """
 
     def __init__(
@@ -45,117 +48,65 @@ class AgentRunner:
         self.llm = llm_gateway
         self.tools = tool_registry
         self.state = AgentState(name=config.name)
-        self.tool_events: List[Dict[str, Any]] = []  # 收集工具调用事件，供 orchestrator yield
+        # 子组件
+        self._dispatcher = ToolDispatcher(
+            persona_name=config.name,
+            allowed_tools=config.tools,
+            registry=tool_registry,
+            llm=llm_gateway,
+        )
+        self._parser = OutputParser(persona_name=config.name)
+
+    # ───────────────────── 兼容旧调用：tool_events 属性 ─────────────────────
+
+    @property
+    def tool_events(self) -> List[Dict[str, Any]]:
+        return self._dispatcher.events
+
+    # ───────────────────── 非流式入口 ─────────────────────────────────────
 
     async def run(
         self,
         topic: str,
-        context_messages: List[Message] = None,
+        context_messages: Optional[List[Message]] = None,
         task_prompt: str = "",
         doc_context: str = "",
         is_continuation: bool = False,
     ) -> List[Message]:
-        """执行智能体，返回生成的消息列表。"""
-        self.state.status = "thinking"
-
-        from datetime import datetime
-        system_prompt = get_prompt(
-            self.config.name,
-            topic=topic or "(见上下文)",
-            timestamp=datetime.now().strftime("%Y-%m-%d %H:%M"),
+        """非流式：跑完整轮 + 返回最终 Message 列表（消费 run_stream）。"""
+        messages: List[Message] = []
+        async for ev in self.run_stream(
+            topic,
+            context_messages=context_messages,
+            task_prompt=task_prompt,
+            doc_context=doc_context,
             is_continuation=is_continuation,
-        )
-        messages: List[Dict[str, Any]] = [{"role": "system", "content": system_prompt}]
-        messages.extend(self._build_messages(topic, context_messages or [], task_prompt, doc_context))
+        ):
+            if ev["type"] == "agent_done_with_messages":
+                messages = ev["messages"]
+        return messages
 
-        # 获取 OpenAI function calling 格式的工具定义
-        openai_tools = None
-        if self.tools and self.config.tools:
-            openai_tools = self.tools.get_openai_tools(self.config.tools)
-            if not openai_tools:
-                openai_tools = None
-
-        # 多轮工具调用循环
-        content = ""
-        for round_num in range(MAX_TOOL_ROUNDS + 1):
-            result = await self.llm.generate(
-                messages=messages,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-                tools=openai_tools,
-            )
-
-            self.state.tokens_used += result["usage"]["prompt_tokens"] + result["usage"]["completion_tokens"]
-            self.state.cost_usd += result["usage"]["cost_usd"]
-
-            tool_calls = result.get("tool_calls")
-            if not tool_calls:
-                # LLM 给出了最终文本回复
-                content = result["content"]
-                break
-
-            # LLM 请求调用工具 —— 执行并注入结果
-            # 使用原始 assistant message 保留完整结构（含 thinking 签名等）
-            raw_msg = result.get("raw_assistant_message")
-            if raw_msg:
-                messages.append(raw_msg)
-            else:
-                messages.append({
-                    "role": "assistant",
-                    "content": result["content"] or None,
-                    "tool_calls": [
-                        {
-                            "id": tc["id"],
-                            "type": "function",
-                            "function": tc["function"],
-                        }
-                        for tc in tool_calls
-                    ],
-                })
-
-            for tc in tool_calls:
-                tool_result = await self._execute_tool_call(tc)
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc["id"],
-                    "content": json.dumps(tool_result, ensure_ascii=False),
-                })
-
-            # 工具结果已注入，下一轮不再传 tools 参数，强制 LLM 给出最终回复
-            if round_num >= MAX_TOOL_ROUNDS - 1:
-                openai_tools = None
-        else:
-            # 超过最大轮次，用最后一次的 content
-            content = result.get("content", "")
-
-        # 解析输出为 Message
-        parsed = self._parse_output(content)
-        self.state.status = "done"
-        self.state.messages_sent += len(parsed)
-        self.state.last_action = f"generated {len(parsed)} message(s)"
-        return parsed
+    # ───────────────────── 流式入口（核心） ────────────────────────────────
 
     async def run_stream(
         self,
         topic: str,
-        context_messages: List[Message] = None,
+        context_messages: Optional[List[Message]] = None,
         task_prompt: str = "",
         doc_context: str = "",
         is_continuation: bool = False,
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        """流式执行智能体 —— 逐 token yield 增量事件，等价于 run() 但实时输出。
+        """流式执行，逐 token yield 增量事件。
 
         Yields:
-            {"type": "agent_reasoning_delta", "agent": str, "delta": str}  思考增量
-            {"type": "agent_content_delta",   "agent": str, "delta": str}  正文增量
-            {"type": "tool", ...}                                          工具结果（同 run()）
-            {"type": "agent_done_with_messages", "messages": [Message]}    最终消息列表
-
-        无 fallback：流式 LLM 出错直接 propagate（首字节后切模型会破坏 token 序列）。
+            {"type": "agent_reasoning_delta", "agent": str, "delta": str}
+            {"type": "agent_content_delta",   "agent": str, "delta": str}
+            {"type": "tool", ...}                       工具结果（同步）
+            {"type": "agent_done_with_messages", "messages": [Message]}
         """
         self.state.status = "thinking"
 
-        from datetime import datetime
+        # ── 构造消息序列 ──
         system_prompt = get_prompt(
             self.config.name,
             topic=topic or "(见上下文)",
@@ -163,14 +114,16 @@ class AgentRunner:
             is_continuation=is_continuation,
         )
         messages: List[Dict[str, Any]] = [{"role": "system", "content": system_prompt}]
-        messages.extend(self._build_messages(topic, context_messages or [], task_prompt, doc_context))
+        messages.extend(
+            self._build_messages(topic, context_messages or [], task_prompt, doc_context)
+        )
 
-        openai_tools = None
+        # ── 工具白名单（OpenAI function 形式）──
+        openai_tools: Optional[List[Dict[str, Any]]] = None
         if self.tools and self.config.tools:
-            openai_tools = self.tools.get_openai_tools(self.config.tools)
-            if not openai_tools:
-                openai_tools = None
+            openai_tools = self.tools.get_openai_tools(self.config.tools) or None
 
+        # ── 多轮工具循环 ──
         content = ""
         result: Optional[Dict[str, Any]] = None
         for round_num in range(MAX_TOOL_ROUNDS + 1):
@@ -181,27 +134,29 @@ class AgentRunner:
                 max_tokens=self.config.max_tokens,
                 tools=openai_tools,
             ):
-                ctype = chunk["type"]
-                if ctype == "reasoning":
+                t = chunk["type"]
+                if t == "reasoning":
                     yield {
                         "type": "agent_reasoning_delta",
                         "agent": self.config.name,
                         "delta": chunk["delta"],
                     }
-                elif ctype == "content":
+                elif t == "content":
                     yield {
                         "type": "agent_content_delta",
                         "agent": self.config.name,
                         "delta": chunk["delta"],
                     }
-                elif ctype == "done":
+                elif t == "done":
                     result = chunk
-                # tool_call_init / tool_call_arg_delta 不向上传递（前端无需 partial JSON）
+                # tool_call_init / tool_call_arg_delta：不向上传，前端无需 partial JSON
 
             if not result:
                 raise RuntimeError("LLM stream ended without 'done' event")
 
-            self.state.tokens_used += result["usage"]["prompt_tokens"] + result["usage"]["completion_tokens"]
+            self.state.tokens_used += (
+                result["usage"]["prompt_tokens"] + result["usage"]["completion_tokens"]
+            )
             self.state.cost_usd += result["usage"]["cost_usd"]
 
             tool_calls = result.get("tool_calls")
@@ -209,293 +164,116 @@ class AgentRunner:
                 content = result["content"]
                 break
 
-            # 工具调用：保留完整 raw assistant message（含 reasoning_content，DeepSeek 强制要求）
+            # ── 注入 raw assistant message（含 reasoning_content 等扩展字段）──
             raw_msg = result.get("raw_assistant_message")
             if raw_msg:
                 messages.append(raw_msg)
             else:
-                messages.append({
-                    "role": "assistant",
-                    "content": result["content"] or None,
-                    "tool_calls": [
-                        {"id": tc["id"], "type": "function", "function": tc["function"]}
-                        for tc in tool_calls
-                    ],
-                })
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": result["content"] or None,
+                        "tool_calls": [
+                            {"id": tc["id"], "type": "function", "function": tc["function"]}
+                            for tc in tool_calls
+                        ],
+                    }
+                )
 
-            # 执行工具，每个工具完成立即 yield 对应事件
+            # ── 通过 dispatcher 执行每个 tool_call，事件实时上吐 ──
             for tc in tool_calls:
-                existing = len(self.tool_events)
-                tool_result = await self._execute_tool_call(tc)
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc["id"],
-                    "content": json.dumps(tool_result, ensure_ascii=False),
-                })
-                for ev in self.tool_events[existing:]:
+                existing = len(self._dispatcher.events)
+                tool_result = await self._dispatcher.execute(tc)
+                import json as _json
+
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "content": _json.dumps(tool_result, ensure_ascii=False),
+                    }
+                )
+                # yield dispatcher 新追加的事件（通常每次 1 条）
+                for ev in self._dispatcher.events[existing:]:
                     yield ev
 
+            # 进入最后一轮前禁用 tools，强制 LLM 给最终回复
             if round_num >= MAX_TOOL_ROUNDS - 1:
                 openai_tools = None
         else:
             # 超过最大轮次，用最后一次的 content
             content = (result or {}).get("content", "")
 
-        parsed = self._parse_output(content)
+        # ── 把 dispatcher 的 query rewrite 成本累加进 agent state ──
+        self.state.tokens_used += self._dispatcher.tokens_used
+        self.state.cost_usd += self._dispatcher.cost_usd
+
+        # ── 解析输出 → Message 列表 ──
+        parsed = self._parser.parse(content, self._dispatcher.events)
         self.state.status = "done"
         self.state.messages_sent += len(parsed)
         self.state.last_action = f"generated {len(parsed)} message(s)"
 
         yield {"type": "agent_done_with_messages", "messages": parsed}
 
-    async def _execute_tool_call(self, tool_call: Dict[str, Any]) -> Dict[str, Any]:
-        """执行单个工具调用并返回结果。"""
-        func = tool_call["function"]
-        tool_name = func["name"]
-        try:
-            arguments = json.loads(func["arguments"])
-        except json.JSONDecodeError:
-            return {"error": f"Invalid arguments JSON: {func['arguments']}"}
-
-        if tool_name not in self.config.tools:
-            return {"error": f"Tool {tool_name} not allowed for this agent"}
-
-        tool = self.tools.get_tool(tool_name) if self.tools else None
-        if not tool:
-            return {"error": f"Tool {tool_name} not found in registry"}
-
-        self.state.status = "executing"
-        self.state.last_action = f"calling {tool_name}"
-
-        # Query 改写：用 LLM 将原始 query 优化为更精确的搜索词
-        original_query = arguments.get("query", "")
-        rewritten_query = await self._rewrite_query(original_query, tool_name)
-        arguments["query"] = rewritten_query
-
-        logger.info(
-            "智能体 %s 调用工具 %s: %s → %s",
-            self.config.name, tool_name, original_query, rewritten_query,
-        )
-
-        tool_result = await tool.execute(arguments)
-
-        # 提取搜索结果明细供前端展示
-        raw_results = tool_result.data.get("results", []) if tool_result.data else []
-        results_detail = [
-            {
-                "title": r.get("title", ""),
-                "url": r.get("url", ""),
-                "snippet": (r.get("content", "") or r.get("abstract", "") or r.get("summary", ""))[:200],
-            }
-            for r in raw_results[:5]
-        ]
-
-        # 收集工具事件供前端展示
-        self.tool_events.append({
-            "type": "tool",
-            "agent": self.config.name,
-            "tool": tool_name,
-            "query": rewritten_query,
-            "original_query": original_query,
-            "success": tool_result.success,
-            "result_preview": (tool_result.data.get("answer", "") or "")[:200] if tool_result.data else "",
-            "result_count": len(raw_results),
-            "results": results_detail,
-            "error": tool_result.error,
-        })
-        return {
-            "tool": tool_name,
-            "query": rewritten_query,
-            "success": tool_result.success,
-            "data": tool_result.data,
-            "error": tool_result.error,
-        }
-
-    async def _rewrite_query(self, query: str, tool_name: str) -> str:
-        """用 LLM 将 agent 的搜索 query 改写为更精确的搜索词。
-
-        对 arXiv/Scholar 等英文学术库，强制输出英文。
-        """
-        if not query.strip():
-            return query
-
-        is_academic = tool_name in ("arxiv_search", "scholar_search")
-        target = "学术论文" if is_academic else "网页"
-        lang_hint = "必须使用英文" if is_academic else "英文"
-
-        try:
-            result = await self.llm.generate(
-                messages=[{
-                    "role": "user",
-                    "content": (
-                        f"将以下搜索意图改写为 1 条精确的{target}搜索查询词（{lang_hint}，3-5 个关键词）。\n"
-                        f"只输出关键词，用空格分隔，不要写完整句子。禁止输出中文。\n"
-                        f"禁止使用 a/an/the/in/on/for/of/with/using/based 等停用词。\n\n"
-                        f"原始意图：{query}"
-                    ),
-                }],
-                temperature=0.0,
-                max_tokens=60,
-            )
-            rewritten = result["content"].strip().strip('"').strip("'")
-            self.state.tokens_used += result["usage"]["prompt_tokens"] + result["usage"]["completion_tokens"]
-            self.state.cost_usd += result["usage"]["cost_usd"]
-
-            # 对学术搜索，验证输出确实是英文（检测是否包含中文字符）
-            if is_academic and rewritten and self._contains_chinese(rewritten):
-                logger.warning("Query 改写仍含中文，丢弃: %s", rewritten)
-                # 降级：用原始 query 中的英文部分，或直接用原 query
-                fallback = self._extract_english(query)
-                return fallback if fallback else query
-
-            return rewritten if rewritten else query
-        except Exception:
-            return query  # 改写失败，使用原始 query
-
-    @staticmethod
-    def _contains_chinese(text: str) -> bool:
-        """检查文本是否包含中文字符。"""
-        return any('\u4e00' <= c <= '\u9fff' for c in text)
-
-    @staticmethod
-    def _extract_english(text: str) -> str:
-        """从混合文本中提取英文单词。"""
-        words = re.findall(r'[a-zA-Z][\w-]*', text)
-        return ' '.join(words) if words else ""
+    # ───────────────────── 私有：上下文消息构造 ─────────────────────────────
 
     def _build_messages(
-        self, topic: str, context: List[Message], task_prompt: str, doc_context: str = ""
+        self,
+        topic: str,
+        context: List[Message],
+        task_prompt: str,
+        doc_context: str = "",
     ) -> List[Dict[str, str]]:
-        """构建发送给 LLM 的消息列表。
+        """构造发给 LLM 的 user/system/assistant 消息序列。
 
-        上下文传递策略：
-        - 按消息类型分类呈现（创意/批评/综合），而非按时间堆砌
-        - 传递完整内容，不做截断
-        - 标注消息来源和类型，便于 LLM 理解结构
-        - 如果有文档上下文，作为独立消息注入
+        策略：
+        - 文档参考置于最前，提示其为背景而非替代
+        - 上下文消息按类型分组（创意/批评/综合/评审）呈现，不做截断
+        - 当前任务作为最后一条 user message
         """
         msgs: List[Dict[str, str]] = []
 
-        # 文档参考文献上下文（放在最前面，让 agent 先看到参考资料）
         if doc_context:
-            msgs.append({
-                "role": "user",
-                "content": (
-                    f"以下是用户上传的参考文献摘要（仅供背景参考，不能替代网络搜索）：\n\n{doc_context}\n\n"
-                    f"重要：这些文献只是起点。你仍然必须使用搜索工具查找该领域的最新进展和其他相关工作，"
-                    f"不要仅依赖上述文献。"
-                ),
-            })
+            msgs.append(
+                {
+                    "role": "user",
+                    "content": (
+                        f"以下是用户上传的参考文献摘要（仅供背景参考，不能替代网络搜索）：\n\n"
+                        f"{doc_context}\n\n"
+                        f"重要：这些文献只是起点。你仍然必须使用搜索工具查找该领域的最新进展和其他相关工作，"
+                        f"不要仅依赖上述文献。"
+                    ),
+                }
+            )
 
         if context:
-            # 按类型分组
             by_type: Dict[str, List[str]] = {}
             for m in context:
                 key = m.msg_type.value
                 by_type.setdefault(key, []).append(f"- [{m.sender}]: {m.content}")
 
-            TYPE_LABELS = {
+            type_labels = {
                 "idea": "已有的研究创意",
                 "critique": "审辩意见",
                 "synthesis": "综合方案",
                 "vote": "评审结果",
             }
-
             parts = []
             for msg_type, items in by_type.items():
-                label = TYPE_LABELS.get(msg_type, msg_type)
+                label = type_labels.get(msg_type, msg_type)
                 parts.append(f"### {label}\n" + "\n".join(items))
 
-            context_text = "\n\n".join(parts)
-            msgs.append({
-                "role": "user",
-                "content": f"以下是之前的讨论内容，请基于这些信息展开你的工作：\n\n{context_text}",
-            })
+            msgs.append(
+                {
+                    "role": "user",
+                    "content": (
+                        f"以下是之前的讨论内容，请基于这些信息展开你的工作：\n\n"
+                        f"{chr(10).join(['', *parts, ''])}".strip()
+                    ),
+                }
+            )
 
-        # 当前任务
         prompt = task_prompt or f"研究主题：{topic}\n\n请基于这个主题提出你的创意和分析。"
         msgs.append({"role": "user", "content": prompt})
         return msgs
-
-    def _parse_output(self, content: str) -> List[Message]:
-        """解析 LLM 输出为 Message 对象列表。"""
-        # 剥离 DeepSeek V4 偶发泄漏的 DSML tool-call 标记
-        content = _DSML_BLOCK_RE.sub("", content)
-        content = _DSML_TAG_RE.sub("", content)
-
-        msg_type = self._detect_msg_type(content)
-
-        # 清理认知规划部分（前 3 行反思），保留实质内容
-        lines = content.strip().split("\n")
-        clean_lines = []
-        skip_planning = True
-        for line in lines:
-            stripped = line.strip()
-            if skip_planning and (
-                stripped.startswith("1.") or stripped.startswith("2.") or stripped.startswith("3.")
-            ):
-                continue
-            skip_planning = False
-            # 跳过 [msg_type: xxx] 标记行
-            if re.match(r'^\[msg_type:\s*\w+\]', stripped):
-                continue
-            clean_lines.append(line)
-
-        clean_content = "\n".join(clean_lines).strip()
-        if not clean_content:
-            clean_content = content.strip()
-
-        # 自动附加搜索来源引用（兜底机制，确保即使 LLM 忘记引用也有来源记录）
-        citations = self._collect_citations()
-        if citations and "**参考文献**" not in clean_content and "**参考来源**" not in clean_content:
-            clean_content += "\n\n---\n**参考来源（工具检索）**\n" + citations
-
-        return [
-            Message(
-                id=str(uuid.uuid4()),
-                sender=self.config.name,
-                content=clean_content,
-                msg_type=msg_type,
-            )
-        ]
-
-    def _collect_citations(self) -> str:
-        """从工具调用事件中提取论文引用，格式化为参考文献列表。"""
-        seen_titles = set()
-        citation_lines = []
-
-        for event in self.tool_events:
-            if not event.get("success"):
-                continue
-            tool_name = event.get("tool", "")
-            results = event.get("results", [])
-
-            for r in results:
-                title = r.get("title", "").strip()
-                if not title or title in seen_titles:
-                    continue
-                seen_titles.add(title)
-
-                url = r.get("url", "")
-                # 格式化引用条目
-                if "arxiv.org" in url:
-                    citation_lines.append(f"- {title} ({url})")
-                elif "semanticscholar.org" in url or tool_name == "scholar_search":
-                    citation_lines.append(f"- {title} ({url})" if url else f"- {title}")
-                elif url:
-                    citation_lines.append(f"- {title} ({url})")
-                else:
-                    citation_lines.append(f"- {title}")
-
-        return "\n".join(citation_lines[:10])  # 最多保留 10 条
-
-    def _detect_msg_type(self, content: str) -> MessageType:
-        """从输出内容检测消息类型。"""
-        content_lower = content.lower()
-        if "[msg_type: vote]" in content_lower or "winner:" in content_lower:
-            return MessageType.VOTE
-        if "[msg_type: critique]" in content_lower:
-            return MessageType.CRITIQUE
-        if "[msg_type: synthesis]" in content_lower:
-            return MessageType.SYNTHESIS
-        return MessageType.IDEA

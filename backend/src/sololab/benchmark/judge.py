@@ -1,4 +1,7 @@
-"""LLM-as-Judge 评分模块 - 使用独立 LLM 对创意进行多维度评分。"""
+"""LLM-as-Judge 评分模块 - 使用独立 LLM 对创意进行多维度评分。
+
+通过 LLMGateway 统一接入 provider，避免裸用 AsyncOpenAI 绕过 provider 抽象。
+"""
 
 from __future__ import annotations
 
@@ -8,7 +11,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from openai import AsyncOpenAI
+from sololab.core.llm_gateway import LLMConfig, LLMGateway
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +146,18 @@ class IdeaJudge:
         temperature: float = 0.3,
         max_tokens: int = 2048,
     ) -> None:
-        self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        # 复用 LLMGateway → 自动走 ProviderRegistry，享受 cost 计算 / quirks 处理
+        # （embedding 用不到，但配置必填字段，复用同一份配置）
+        self._gateway = LLMGateway(
+            LLMConfig(
+                base_url=base_url,
+                api_key=api_key,
+                default_model=model,
+                embedding_base_url=base_url,
+                embedding_api_key=api_key,
+                embedding_model=model,
+            )
+        )
         self._model = model
         self._temperature = temperature
         self._max_tokens = max_tokens
@@ -179,16 +193,16 @@ class IdeaJudge:
         )
 
         try:
-            response = await self._client.chat.completions.create(
-                model=self._model,
+            response = await self._gateway.generate(
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt},
                 ],
+                model=self._model,
                 temperature=self._temperature,
                 max_tokens=self._max_tokens,
             )
-            raw = response.choices[0].message.content or ""
+            raw = response.get("content") or ""
             return self._parse_response(raw, idea_id)
         except Exception as e:
             logger.error("Judge 评分失败 (idea_id=%s): %s", idea_id, e)

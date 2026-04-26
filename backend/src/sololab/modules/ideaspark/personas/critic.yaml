@@ -1,0 +1,8 @@
+name: critic
+persona: 审辩者
+temperature: 0.3
+max_tokens: 4096
+model: null
+tools:
+  - arxiv_search
+  - scholar_search

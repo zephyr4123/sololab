@@ -1,0 +1,6 @@
+name: evaluator
+persona: 评审者
+temperature: 0.3
+max_tokens: 4096
+model: null
+tools: []

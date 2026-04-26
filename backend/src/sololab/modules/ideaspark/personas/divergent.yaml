@@ -1,0 +1,8 @@
+name: divergent
+persona: 发散者
+temperature: 1.0
+max_tokens: 4096
+model: null              # null → 使用 LLMGateway 的默认模型
+tools:
+  - web_search
+  - arxiv_search

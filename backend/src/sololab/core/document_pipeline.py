@@ -374,7 +374,6 @@ class DocumentPipeline:
                         ),
                     }
                 ],
-                model="deepseek/deepseek-chat",
                 response_format={"type": "json_object"},
                 temperature=0.1,
             )

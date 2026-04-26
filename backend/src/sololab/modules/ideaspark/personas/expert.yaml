@@ -1,0 +1,9 @@
+name: expert
+persona: 领域专家
+temperature: 0.5
+max_tokens: 4096
+model: null
+tools:
+  - arxiv_search
+  - scholar_search
+  - doc_parse

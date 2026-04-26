@@ -1,73 +1,101 @@
-"""IdeaSpark 编排器 - 管理分离-汇聚协作流程。"""
+"""IdeaSpark 流程编排 —— Pipeline 组合器（Strategy 模式）。
+
+职责仅剩三件：
+1. 构造 PhaseContext（注入依赖、初始化输入字段）
+2. 按顺序驱动 phases 列表，分流 Message 与 dict 事件
+3. 多轮收敛检查 + Top-K refine 输出
+
+具体阶段算法全部下沉到 sololab.modules.ideaspark.phases.*。
+新增/替换阶段只需改 self.phases 列表，无需触碰本类。
+"""
+
+from __future__ import annotations
 
 import asyncio
-import random
+import re
 import uuid
-from typing import Any, AsyncGenerator, Dict, List, Optional
-
-import numpy as np
-from sklearn.cluster import KMeans
+from typing import Any, AsyncGenerator, List, Optional
 
 from sololab.core.llm_gateway import LLMGateway
 from sololab.core.tool_registry import ToolRegistry
-from sololab.models.agent import AgentState, Message, MessageType
-from sololab.modules.ideaspark.agents.agent_runner import AgentRunner
-from sololab.modules.ideaspark.agents.personas import PERSONAS, get_persona
+from sololab.models.agent import Message, MessageType
+from sololab.modules.ideaspark.phases import (
+    ClusterPhase,
+    Phase,
+    PhaseContext,
+    SeparatePhase,
+    SynthesizePhase,
+    TogetherPhase,
+    TournamentPhase,
+)
 
 
 class Orchestrator:
-    """
-    控制分离-汇聚协作流程：
+    """IdeaSpark Pipeline 组合器。
 
-    1. 分离阶段：多元智能体并行独立生成创意
-    2. 语义聚类：将相似创意分组以便聚焦讨论
-    3. 汇聚阶段：分组讨论，进行扩展/组合/优化
-    4. 全局综合：连接者智能体跨组融合
-    5. 锦标赛评估：基于 Elo 的成对比较
-    6. Top-K 选择与收敛检查
-    7. 未收敛则迭代
-
-    支持通过 cancel_event 主动取消。
+    默认流水线：Separate → Cluster → Together → Synthesize → Tournament
+    替换/新增 phase 通过构造参数注入即可。
     """
 
-    def __init__(self, llm_gateway: LLMGateway, tool_registry: Optional[ToolRegistry] = None) -> None:
+    DEFAULT_PHASES: List[Phase] = []  # 占位，__init__ 时动态填
+
+    def __init__(
+        self,
+        llm_gateway: LLMGateway,
+        tool_registry: Optional[ToolRegistry] = None,
+        phases: Optional[List[Phase]] = None,
+    ) -> None:
         self.llm = llm_gateway
         self.tools = tool_registry
-        self.blackboard: List[Message] = []
-        self.agent_states: Dict[str, AgentState] = {}
-        self.elo_scores: Dict[str, float] = {}
-        self.user_topic: str = ""  # 用户原始主题，供所有 agent 锚定
-        self._prev_top_ids: List[str] = []
-        self._cancel_event: Optional[asyncio.Event] = None
-
-    def _is_cancelled(self) -> bool:
-        """检查是否已收到取消信号。"""
-        return self._cancel_event is not None and self._cancel_event.is_set()
+        self.phases: List[Phase] = phases or [
+            SeparatePhase(),
+            ClusterPhase(),
+            TogetherPhase(iterations=2),
+            SynthesizePhase(),
+            TournamentPhase(num_pairs=10),
+        ]
 
     async def run(
-        self, user_input: str, max_rounds: int = 3, top_k: int = 5,
-        doc_context: str = "", cancel_event: Optional[asyncio.Event] = None,
+        self,
+        user_input: str,
+        max_rounds: int = 3,
+        top_k: int = 5,
+        doc_context: str = "",
+        cancel_event: Optional[asyncio.Event] = None,
         history: Optional[list] = None,
     ) -> AsyncGenerator[Any, None]:
-        """执行完整的分离-汇聚流程。支持取消信号和会话历史上下文。"""
-        self.user_topic = user_input
-        self.doc_context = doc_context
-        self._cancel_event = cancel_event
-        self._history = history
+        """执行完整 IdeaSpark 流程，逐 token / phase 实时上吐事件。"""
+        # 从历史中提取上一轮种子创意（多轮对话用）
+        history_seed_ideas: List[Message] = []
+        is_continuation = False
+        if history and len(history) > 1:
+            is_continuation = True
+            history_seed_ideas = self._extract_seed_ideas_from_history(history)
+
+        ctx = PhaseContext(
+            current_input=user_input,
+            original_topic=user_input,
+            doc_context=doc_context,
+            history_seed_ideas=history_seed_ideas,
+            is_continuation=is_continuation,
+            cancel_event=cancel_event,
+            max_rounds=max_rounds,
+            top_k=top_k,
+            llm=self.llm,
+            tools=self.tools,
+        )
+
+        prev_top_ids: List[str] = []
         total_cost = 0.0
 
-        # 从会话历史中提取上一轮的创意作为种子（结构化方式，非字符串拼接）
-        self._history_seed_ideas: List[Message] = []
-        self._is_continuation = False
-        if history and len(history) > 1:
-            self._is_continuation = True
-            self._history_seed_ideas = self._extract_seed_ideas_from_history(history)
-
         for round_num in range(1, max_rounds + 1):
-            # 取消检查点
-            if self._is_cancelled():
+            ctx.round = round_num
+
+            # 取消检查
+            if ctx.is_cancelled():
                 yield {"type": "status", "phase": "cancelled", "round": round_num}
                 return
+
             # 文档上下文注入通知（仅第一轮）
             if round_num == 1 and doc_context:
                 yield {
@@ -76,388 +104,72 @@ class Orchestrator:
                     "preview": doc_context[:300] + "..." if len(doc_context) > 300 else doc_context,
                 }
 
-            yield {"type": "status", "phase": "separate", "round": round_num}
+            # 重置本轮临时流转字段（跨轮持久字段不动）
+            ctx.ideas = []
+            ctx.idea_groups = []
+            ctx.refined_ideas = []
+            ctx.synthesized = []
+            ctx.top_ideas = []
 
-            # 阶段 1：分离 - 并行生成创意
-            ideas = []
-            async for event in self._separate_phase(user_input):
-                if isinstance(event, dict) and event.get("type") in ("agent", "tool", "idea"):
-                    yield event
-                if isinstance(event, Message):
-                    ideas.append(event)
-
-            yield {"type": "status", "phase": "cluster", "round": round_num, "idea_count": len(ideas)}
-
-            # 取消检查点：分离阶段完成后
-            if self._is_cancelled():
-                yield {"type": "status", "phase": "cancelled", "round": round_num}
-                return
-
-            # 阶段 1.5：语义聚类
-            num_groups = min(4, max(2, len(ideas) // 3))
-            idea_groups = await self._cluster_ideas(ideas, num_groups=num_groups)
-            yield {"type": "status", "phase": "together", "round": round_num, "group_count": len(idea_groups)}
-
-            # 阶段 2：汇聚 - 分组讨论（各组并行 + 事件实时流式输出）
-            group_queue: asyncio.Queue = asyncio.Queue()
-            _GROUP_SENTINEL = object()
-
-            async def _run_group_streaming(group, group_idx):
-                try:
-                    async for event in self._together_phase_grouped(group, group_idx, iterations=2):
-                        await group_queue.put(event)
-                except Exception as e:
-                    await group_queue.put({"type": "agent", "agent": "unknown", "action": "error", "error": str(e)})
-                finally:
-                    await group_queue.put(_GROUP_SENTINEL)
-
-            group_tasks = [
-                asyncio.create_task(_run_group_streaming(group, idx))
-                for idx, group in enumerate(idea_groups)
-            ]
-            refined_ideas = []
-            remaining_groups = len(group_tasks)
-            try:
-                while remaining_groups > 0:
-                    item = await group_queue.get()
-                    if item is _GROUP_SENTINEL:
-                        remaining_groups -= 1
+            # 按顺序驱动 phases；Message 对象由各 phase 自己写入 ctx，本层只需透传 dict
+            for phase in self.phases:
+                async for event in phase.run(ctx):
+                    if isinstance(event, Message):
+                        # 流转数据由 phase 自己写入 ctx，对外 SSE 不重复发
                         continue
-                    if isinstance(item, dict):
-                        yield item
-                    if isinstance(item, Message):
-                        refined_ideas.append(item)
-            finally:
-                for t in group_tasks:
-                    if not t.done():
-                        t.cancel()
-            # 保留未讨论的原始 idea
-            refined_ids = {m.id for m in refined_ideas}
-            for idea in ideas:
-                if idea.id not in refined_ids:
-                    refined_ideas.append(idea)
+                    yield event
+                if ctx.is_cancelled():
+                    yield {"type": "status", "phase": "cancelled", "round": round_num}
+                    return
 
-            yield {"type": "status", "phase": "synthesize", "round": round_num}
-
-            # 取消检查点：汇聚阶段完成后
-            if self._is_cancelled():
-                yield {"type": "status", "phase": "cancelled", "round": round_num}
-                return
-
-            # 阶段 2.5：全局综合
-            synthesized = await self._global_synthesis(refined_ideas)
-            yield {"type": "status", "phase": "evaluate", "round": round_num, "candidate_count": len(synthesized)}
-
-            # 取消检查点：综合阶段完成后
-            if self._is_cancelled():
-                yield {"type": "status", "phase": "cancelled", "round": round_num}
-                return
-
-            # 阶段 3：锦标赛评估
-            top_ideas = await self._tournament_evaluate(synthesized, k=top_k)
-
-            for rank, idea in enumerate(top_ideas, 1):
-                score = self.elo_scores.get(idea.id, 1500)
-                yield {
-                    "type": "vote",
-                    "idea_id": idea.id,
-                    "content": idea.content,
-                    "author": idea.sender,
-                    "elo_score": round(score),
-                    "rank": rank,
-                    "round": round_num,
-                }
-
-            # 统计费用
-            for st in self.agent_states.values():
+            # 累计 cost
+            for st in ctx.agent_states.values():
                 total_cost += st.cost_usd
+                st.cost_usd = 0  # 清零避免下一轮重复累加（agent_states 跨 round 复用）
 
             # 收敛检查
-            if self._convergence_check(top_ideas):
-                yield {"type": "status", "phase": "converged", "round": round_num}
-                break
+            current_ids = [m.id for m in ctx.top_ideas]
+            if prev_top_ids:
+                overlap = len(set(current_ids) & set(prev_top_ids))
+                stability = overlap / max(len(current_ids), 1)
+                if stability >= 0.8:
+                    yield {"type": "status", "phase": "converged", "round": round_num}
+                    break
+            prev_top_ids = current_ids
 
-            # 准备下一轮
-            user_input = self._refine_prompt(user_input, top_ideas)
+            # 用 Top-K 改写下一轮输入
+            ctx.current_input = self._refine_prompt(ctx.current_input, ctx.top_ideas)
 
         # 最终输出
         final_ideas = []
-        for idea in top_ideas:
-            final_ideas.append({
-                "id": idea.id,
-                "content": idea.content,
-                "author": idea.sender,
-                "elo_score": round(self.elo_scores.get(idea.id, 1500)),
-            })
+        for idea in ctx.top_ideas:
+            final_ideas.append(
+                {
+                    "id": idea.id,
+                    "content": idea.content,
+                    "author": idea.sender,
+                    "elo_score": round(ctx.elo_scores.get(idea.id, 1500)),
+                }
+            )
         yield {"type": "done", "top_ideas": final_ideas, "cost_usd": round(total_cost, 4)}
 
-    async def _separate_phase(self, topic: str) -> AsyncGenerator[Any, None]:
-        """发散者和专家智能体并行独立生成创意。"""
-        # 选择分离阶段的角色：divergent + expert
-        sep_personas = [get_persona("divergent"), get_persona("expert")]
+    # ───────────────────────── helpers ───────────────────────────────────────
 
-        runners = []
-        for config in sep_personas:
-            runner = AgentRunner(config, self.llm, self.tools)
-            runners.append((config.name, runner))
-
-        # 通知每个 agent 开始
-        for name, _ in runners:
-            yield {"type": "agent", "agent": name, "action": "thinking"}
-
-        # 构建多轮任务提示（如果是延续对话）
-        continuation_prompt = ""
-        if self._is_continuation and self._history_seed_ideas:
-            continuation_prompt = (
-                "重要：这是用户的后续请求，你必须基于之前的研究成果来回答。\n"
-                "不要从零开始，而是在上一轮的最佳创意基础上，按照用户的新指令进行深入、细化或调整。\n"
-                "上一轮已有的创意已在上下文中提供。"
-            )
-
-        # 并行执行 + 实时流式输出事件（通过 asyncio.Queue 让每个 agent 完成时立即吐出，
-        # 而不是等所有 agent 完成后一次性批量 yield）
-        queue: asyncio.Queue = asyncio.Queue()
-        _SENTINEL = object()
-
-        async def _run_agent(name, runner):
-            try:
-                messages: List[Message] = []
-                async for ev in runner.run_stream(
-                    topic,
-                    context_messages=self._history_seed_ideas if self._is_continuation else None,
-                    task_prompt=continuation_prompt if continuation_prompt else "",
-                    doc_context=self.doc_context,
-                    is_continuation=self._is_continuation,
-                ):
-                    if ev["type"] == "agent_done_with_messages":
-                        messages = ev["messages"]
-                    else:
-                        # tool / agent_reasoning_delta / agent_content_delta 实时透传
-                        await queue.put(ev)
-                self.agent_states[name] = runner.state
-                await queue.put({"type": "agent", "agent": name, "action": "done", "message_count": len(messages)})
-                for msg in messages:
-                    self.blackboard.append(msg)
-                    await queue.put({"type": "idea", "id": msg.id, "content": msg.content, "author": name})
-                    await queue.put(msg)  # Message 对象供上层聚类使用
-            except Exception as e:
-                await queue.put({"type": "agent", "agent": name, "action": "error", "error": str(e)})
-            finally:
-                await queue.put(_SENTINEL)
-
-        tasks = [asyncio.create_task(_run_agent(name, runner)) for name, runner in runners]
-        remaining = len(tasks)
-        try:
-            while remaining > 0:
-                item = await queue.get()
-                if item is _SENTINEL:
-                    remaining -= 1
-                    continue
-                yield item
-        finally:
-            for t in tasks:
-                if not t.done():
-                    t.cancel()
-
-    async def _cluster_ideas(self, ideas: List[Message], num_groups: int = 4) -> List[List[Message]]:
-        """使用 K-Means + 嵌入按语义相似度聚类创意。"""
-        if len(ideas) <= num_groups:
-            return [[idea] for idea in ideas]
-
-        # 获取嵌入向量
-        texts = [m.content for m in ideas]
-        try:
-            vectors = await self.llm.embed(texts)
-            arr = np.array(vectors)
-
-            kmeans = KMeans(n_clusters=num_groups, random_state=42, n_init=10)
-            labels = kmeans.fit_predict(arr)
-
-            groups: Dict[int, List[Message]] = {}
-            for i, label in enumerate(labels):
-                groups.setdefault(int(label), []).append(ideas[i])
-            return list(groups.values())
-        except Exception:
-            # 降级：均匀分组
-            chunk_size = max(1, len(ideas) // num_groups)
-            return [ideas[i:i + chunk_size] for i in range(0, len(ideas), chunk_size)]
-
-    async def _together_phase_grouped(
-        self, group: List[Message], group_idx: int, iterations: int = 2
-    ) -> AsyncGenerator[Any, None]:
-        """分组讨论：连接者和批评者在组内辩论。"""
-        connector_config = get_persona("connector")
-        critic_config = get_persona("critic")
-
-        for i in range(iterations):
-            # Critic 提出批评（流式）
-            yield {"type": "agent", "agent": "critic", "action": f"reviewing group {group_idx + 1}, round {i + 1}"}
-            critic_runner = AgentRunner(critic_config, self.llm, self.tools)
-            task_prompt = (
-                f"审辩第 {group_idx + 1} 组的以下创意。"
-                f"找出弱点并提出改进建议。\n\n"
-                + "\n".join(f"- {m.content}" for m in group)
-            )
-            critiques: List[Message] = []
-            async for ev in critic_runner.run_stream(
-                self.user_topic, context_messages=group, task_prompt=task_prompt, doc_context=self.doc_context
-            ):
-                if ev["type"] == "agent_done_with_messages":
-                    critiques = ev["messages"]
-                else:
-                    yield ev
-            self.agent_states["critic"] = critic_runner.state
-
-            for msg in critiques:
-                self.blackboard.append(msg)
-                yield {"type": "agent", "agent": "critic", "action": "critique", "content": msg.content}
-                yield msg
-
-            # Connector 综合（流式）
-            yield {"type": "agent", "agent": "connector", "action": f"synthesizing group {group_idx + 1}, round {i + 1}"}
-            conn_runner = AgentRunner(connector_config, self.llm, self.tools)
-            task_prompt = (
-                f"基于第 {group_idx + 1} 组的创意和审辩意见，"
-                f"通过结合优势和解决弱点来整合出改进后的创意。"
-            )
-            all_context = group + critiques
-            syntheses: List[Message] = []
-            async for ev in conn_runner.run_stream(
-                self.user_topic, context_messages=all_context, task_prompt=task_prompt, doc_context=self.doc_context
-            ):
-                if ev["type"] == "agent_done_with_messages":
-                    syntheses = ev["messages"]
-                else:
-                    yield ev
-            self.agent_states["connector"] = conn_runner.state
-
-            for msg in syntheses:
-                self.blackboard.append(msg)
-                yield {"type": "agent", "agent": "connector", "action": "synthesis", "content": msg.content}
-                yield msg
-                group.append(msg)
-
-    async def _global_synthesis(self, ideas: List[Message]) -> List[Message]:
-        """连接者智能体进行跨组综合。"""
-        if len(ideas) <= 3:
-            return ideas
-
-        connector_config = get_persona("connector")
-        runner = AgentRunner(connector_config, self.llm, self.tools)
-        task_prompt = (
-            "你正在进行跨组全局整合。"
-            "审阅之前讨论中的所有创意，识别最具独特性的优质创意。"
-            "合并相似创意，去除重复，输出一个精简的最具前景研究方向列表。"
-        )
-        # 通过 context_messages 传递所有创意，走统一的 _build_messages 分类逻辑
-        result = await runner.run(self.user_topic, context_messages=ideas, task_prompt=task_prompt, doc_context=self.doc_context)
-        self.agent_states["connector"] = runner.state
-
-        # 保留所有原始 idea + 综合结果
-        return ideas + result
-
-    async def _tournament_evaluate(self, ideas: List[Message], k: int = 5) -> List[Message]:
-        """锦标赛选择：基于 Elo 的成对评估。"""
-        if len(ideas) <= k:
-            for idea in ideas:
-                self.elo_scores[idea.id] = 1500
-            return ideas
-
-        # 初始化 Elo
-        for idea in ideas:
-            if idea.id not in self.elo_scores:
-                self.elo_scores[idea.id] = 1500.0
-
-        evaluator_config = get_persona("evaluator")
-        num_matches = min(len(ideas), 10)
-        pairs = []
-        for _ in range(num_matches):
-            a, b = random.sample(ideas, 2)
-            pairs.append((a, b))
-
-        async def _evaluate_pair(idea_a, idea_b):
-            runner = AgentRunner(evaluator_config, self.llm, self.tools)
-            task_prompt = (
-                "比较以下两个研究创意，投票选出更优秀的一个。\n\n"
-                f"创意 A（来自 {idea_a.sender}）：\n{idea_a.content}\n\n"
-                f"创意 B（来自 {idea_b.sender}）：\n{idea_b.content}\n\n"
-                "哪个更好？输出：\n[msg_type: vote]\nWinner: A 或 B\nReason: <评审理由>"
-            )
-            result = await runner.run(self.user_topic, task_prompt=task_prompt)
-            self.agent_states["evaluator"] = runner.state
-            winner = self._parse_vote(result[0].content if result else "")
-            return idea_a.id, idea_b.id, winner
-
-        # 并行执行所有评估
-        eval_tasks = [_evaluate_pair(a, b) for a, b in pairs]
-        eval_results = await asyncio.gather(*eval_tasks, return_exceptions=True)
-
-        for result in eval_results:
-            if isinstance(result, Exception):
-                continue
-            id_a, id_b, winner = result
-            self._update_elo(id_a, id_b, winner)
-
-        # 按 Elo 排序
-        sorted_ideas = sorted(ideas, key=lambda m: self.elo_scores.get(m.id, 1500), reverse=True)
-        return sorted_ideas[:k]
-
-    def _parse_vote(self, content: str) -> str:
-        """从评估者输出解析投票结果（A 或 B）。"""
-        content_upper = content.upper()
-        if "WINNER: A" in content_upper or "WINNER:A" in content_upper:
-            return "A"
-        if "WINNER: B" in content_upper or "WINNER:B" in content_upper:
-            return "B"
-        # 降级：随机
-        return random.choice(["A", "B"])
-
-    def _update_elo(self, id_a: str, id_b: str, winner: str, k: int = 32) -> None:
-        """更新 Elo 评分。"""
-        ra = self.elo_scores.get(id_a, 1500)
-        rb = self.elo_scores.get(id_b, 1500)
-        ea = 1 / (1 + 10 ** ((rb - ra) / 400))
-        eb = 1 - ea
-
-        if winner == "A":
-            sa, sb = 1.0, 0.0
-        elif winner == "B":
-            sa, sb = 0.0, 1.0
-        else:
-            sa, sb = 0.5, 0.5
-
-        self.elo_scores[id_a] = ra + k * (sa - ea)
-        self.elo_scores[id_b] = rb + k * (sb - eb)
-
-    def _convergence_check(self, top_ideas: List[Message]) -> bool:
-        """检查 Elo 分数是否已稳定（Top-K ID 变化 < 20%）。"""
-        current_ids = [m.id for m in top_ideas]
-        if not self._prev_top_ids:
-            self._prev_top_ids = current_ids
-            return False
-
-        overlap = len(set(current_ids) & set(self._prev_top_ids))
-        stability = overlap / max(len(current_ids), 1)
-        self._prev_top_ids = current_ids
-        return stability >= 0.8  # 80% 相同则收敛
-
-    def _refine_prompt(self, original_topic: str, top_ideas: List[Message]) -> str:
-        """从 Top-K 创意生成优化提示词，用于下一轮。"""
-        idea_summaries = "\n".join(
-            f"- {m.content[:150]}" for m in top_ideas[:3]
-        )
+    @staticmethod
+    def _refine_prompt(original_topic: str, top_ideas: List[Message]) -> str:
+        """从 Top-K 创意生成下一轮的优化提示。"""
+        idea_summaries = "\n".join(f"- {m.content[:150]}" for m in top_ideas[:3])
         return (
             f"原始主题：{original_topic}\n\n"
             f"目前最佳创意：\n{idea_summaries}\n\n"
             f"请深化、延展和改进这些创意，探索新的角度和组合。"
         )
 
-    def _extract_seed_ideas_from_history(self, history: list) -> List[Message]:
-        """从会话历史中提取上一轮的创意，转为 Message 对象。
+    @staticmethod
+    def _extract_seed_ideas_from_history(history: list) -> List[Message]:
+        """从会话历史中提取上一轮的最佳创意。
 
-        这些 Message 会作为 context_messages 传给 agent，
-        走 AgentRunner._build_messages 的结构化分类逻辑，
-        让 agent 以"已有创意"的方式看到历史内容。
+        匹配 ChatPanel 持久化的 metadata events 中含 '排名' + 'Elo=' 的 assistant 消息。
         """
         seed_ideas = []
         for msg in reversed(history):
@@ -466,20 +178,14 @@ class Orchestrator:
             content = msg.get("content", "")
             if not content or content == "[生成结果已保存]":
                 continue
-
-            # 内容中包含 "排名" 格式，说明是 get_context_messages 提取的 top ideas
             if "排名" in content and "Elo=" in content:
-                # 按 "### 排名" 分割
-                import re
                 sections = re.split(r"###\s*排名\s*\d+", content)
                 for section in sections:
                     section = section.strip()
                     if not section or section.startswith("上一轮"):
                         continue
-                    # 提取作者信息
                     author_match = re.search(r"\(来自(\w+),", section)
                     author = author_match.group(1) if author_match else "previous_round"
-                    # 清理元信息行
                     clean = re.sub(r"\(来自\w+,\s*Elo=\d+\)\s*\n?", "", section).strip()
                     if clean:
                         seed_ideas.append(
@@ -490,6 +196,5 @@ class Orchestrator:
                                 msg_type=MessageType.IDEA,
                             )
                         )
-                break  # 只取最近一次 assistant 回复
-
+                break
         return seed_ideas

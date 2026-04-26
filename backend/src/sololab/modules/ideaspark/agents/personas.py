@@ -1,48 +1,23 @@
-"""IdeaSpark 角色智能体配置。"""
+"""IdeaSpark 角色配置访问层（向后兼容 shim）。
+
+历史上本文件硬编码了 PERSONAS list。重构后所有 persona 数据移到
+`modules/ideaspark/personas/*.yaml`，由 PersonaRegistry 自动加载。
+本模块保留 PERSONAS / get_persona 接口，调用方零改动。
+
+新增 persona：在 personas/ 目录新建 yaml 文件即可，无需改代码。
+"""
+
+from typing import List, Optional
 
 from sololab.models.agent import AgentConfig
-
-# 5 个差异化角色智能体
-# model=None 表示使用 settings.py 中的 default_model
-PERSONAS: list[AgentConfig] = [
-    AgentConfig(
-        name="divergent",
-        persona="发散者",
-        temperature=1.0,
-        tools=["web_search", "arxiv_search"],
-        model=None,
-    ),
-    AgentConfig(
-        name="expert",
-        persona="领域专家",
-        temperature=0.5,
-        tools=["arxiv_search", "scholar_search", "doc_parse"],
-        model=None,
-    ),
-    AgentConfig(
-        name="critic",
-        persona="审辩者",
-        temperature=0.3,
-        tools=["arxiv_search"],  # scholar_search 免费 API 限流严重，暂用 arxiv 替代
-        model=None,
-    ),
-    AgentConfig(
-        name="connector",
-        persona="整合者",
-        temperature=0.7,
-        tools=[],
-        model=None,
-    ),
-    AgentConfig(
-        name="evaluator",
-        persona="评审者",
-        temperature=0.3,
-        tools=[],
-        model=None,
-    ),
-]
+from sololab.modules.ideaspark.personas import get_default_registry
 
 
-def get_persona(name: str) -> AgentConfig | None:
-    """根据名称获取角色配置。"""
-    return next((p for p in PERSONAS if p.name == name), None)
+def get_persona(name: str) -> Optional[AgentConfig]:
+    """根据名称获取 persona 配置。"""
+    return get_default_registry().get(name)
+
+
+# 兼容旧调用：直接 import PERSONAS（少量测试用）
+# 注意这是模块加载时快照，运行时调 reload() 后需重新引用 list_all()
+PERSONAS: List[AgentConfig] = get_default_registry().list_all()

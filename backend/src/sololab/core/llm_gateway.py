@@ -1,119 +1,109 @@
-"""LLM 网关 - 基于 OpenAI SDK 的轻量封装，通过 OpenAI 兼容 API 访问所有模型。"""
+"""LLM 网关 —— Provider Strategy + Factory + Registry 的薄路由层。
+
+职责：
+- 根据 LLMConfig 决定 chat / embed provider（自动检测 + 显式指定双轨）
+- 委派 chat / chat_stream / embed 调用到对应 provider
+- 透明叠加 CostTrackingProvider，自动计费
+- 保持 18 处调用点 API 兼容（generate / generate_stream / stream / embed 旧签名）
+
+实际能力（reasoning_content 透传、DSML 剥离、temperature cap、流式聚合）
+全部下沉到 sololab.core.llm.providers.* 各 provider 实现，本文件只负责调度。
+
+新增 provider 的步骤：
+1. 在 sololab/core/llm/providers/ 写一个继承 OpenAICompatibleProvider 的类
+2. 加 @register_provider 装饰，声明 name + ProviderQuirks
+3. 在 providers/__init__.py 导入它（触发自动注册）
+"""
+
+from __future__ import annotations
 
 import logging
 from typing import AsyncGenerator, Dict, List, Optional
 
-from openai import AsyncOpenAI
 from pydantic import BaseModel
+
+from sololab.core.llm import (
+    CostTrackingProvider,
+    LLMProviderBase,
+    PricingTable,
+    ProviderRegistry,
+)
 
 logger = logging.getLogger(__name__)
 
-# 模型定价表：每百万 token 的美元价格 (prompt, completion)
-# 不在表中的模型按 0 计费（避免报错），日志会提示缺失
-MODEL_PRICING: Dict[str, tuple[float, float]] = {
-    # OpenAI
-    "gpt-4o": (2.5, 10.0),
-    "gpt-4o-2024-11-20": (2.5, 10.0),
-    "gpt-4o-2024-08-06": (2.5, 10.0),
-    "gpt-4o-mini": (0.15, 0.60),
-    "gpt-4o-mini-2024-07-18": (0.15, 0.60),
-    "gpt-4-turbo": (10.0, 30.0),
-    "gpt-4": (30.0, 60.0),
-    "gpt-3.5-turbo": (0.5, 1.5),
-    "o1": (15.0, 60.0),
-    "o1-mini": (3.0, 12.0),
-    "o3-mini": (1.1, 4.4),
-    # Anthropic (通过兼容 API)
-    "claude-opus-4-7": (5.0, 25.0),
-    "claude-opus-4-6": (5.0, 25.0),
-    "claude-sonnet-4-6": (3.0, 15.0),
-    "claude-sonnet-4-20250514": (3.0, 15.0),
-    "claude-3-5-sonnet-20241022": (3.0, 15.0),
-    "claude-3-5-haiku-20241022": (0.8, 4.0),
-    "claude-3-haiku-20240307": (0.25, 1.25),
-    # DeepSeek
-    "deepseek-chat": (0.27, 1.10),
-    "deepseek-reasoner": (0.55, 2.19),
-    "deepseek-v4-flash": (0.27, 1.10),
-    "deepseek-v4-pro": (0.55, 2.19),
-    # 阿里通义
-    "qwen-plus": (0.80, 2.0),
-    "qwen-turbo": (0.30, 0.60),
-    "qwen-max": (2.40, 9.60),
-    # 阿里通义 Qwen3.5/3.6（0.8/4.8 CNY per M tokens ≈ 0.11/0.67 USD）
-    "qwen3.5-plus": (0.11, 0.67),
-    "qwen3.6-plus": (0.11, 0.67),
-    # Google Gemini (通过兼容 API)
-    "gemini-2.0-flash": (0.10, 0.40),
-    "gemini-2.5-flash-preview-05-20": (0.15, 0.60),
-    "gemini-2.5-pro-preview-05-06": (1.25, 10.0),
-    "gemini-3-flash-preview": (0.332, 3.0),
-    # OpenRouter 模型（带 provider 前缀）
-    "google/gemini-3-flash-preview": (0.332, 3.0),
-    "google/gemini-2.5-flash-preview": (0.15, 0.60),
-    "google/gemini-2.5-pro-preview": (1.25, 10.0),
-    # 嵌入模型（text-embedding-v4: 0.072 CNY/M ≈ 0.01 USD/M）
-    "text-embedding-v4": (0.01, 0.0),
-}
-
-
-def _estimate_cost(model: str, prompt_tokens: int, completion_tokens: int) -> float:
-    """根据模型定价表估算费用。"""
-    # 精确匹配
-    if model in MODEL_PRICING:
-        prompt_price, completion_price = MODEL_PRICING[model]
-    else:
-        # 模糊匹配：model 名称可能包含版本后缀
-        matched = None
-        for key in MODEL_PRICING:
-            if model.startswith(key) or key.startswith(model):
-                matched = key
-                break
-        if matched:
-            prompt_price, completion_price = MODEL_PRICING[matched]
-        else:
-            logger.warning("模型 %s 不在定价表中，费用按 0 计算", model)
-            return 0.0
-
-    return (prompt_tokens * prompt_price + completion_tokens * completion_price) / 1_000_000
-
 
 class LLMConfig(BaseModel):
-    """LLM 配置（OpenAI 兼容格式）。"""
+    """LLM 网关配置（OpenAI 兼容格式 + Provider 选择）。"""
 
     base_url: str = "https://api.openai.com/v1"
     api_key: str = "sk-xxx"
     default_model: str = "gpt-4o"
+    # 显式 provider 名（覆盖 base_url 自动检测）；留空则按 URL 推断
+    provider: Optional[str] = None
+
+    # Embedding 独立配置
+    embedding_base_url: str = "https://api.openai.com/v1"
+    embedding_api_key: str = "sk-xxx"
+    embedding_model: str = "text-embedding-3-small"
+    embedding_provider: Optional[str] = None
+
+    # 兼容字段（不再使用，保留避免 pydantic 报错）
     fallback_chain: List[str] = []
     budget_limit_usd: Optional[float] = 50.0
     cache_enabled: bool = False
 
-    # Embedding 独立配置（可使用不同提供商）
-    embedding_base_url: str = "https://api.openai.com/v1"
-    embedding_api_key: str = "sk-xxx"
-    embedding_model: str = "text-embedding-3-small"
-
 
 class LLMGateway:
-    """OpenAI 兼容 API 轻量封装层。
+    """LLM 路由网关。
 
-    直接使用 openai SDK 的 AsyncOpenAI 客户端，
-    通过 base_url 适配任何 OpenAI 兼容的 API 提供商
-    （阿里云通义、DeepSeek、Gemini、Ollama 等）。
+    构造时根据 base_url 自动推断 provider，也可通过 config.provider 显式指定。
+    所有公开方法保持与重构前一致，确保 18 处调用点零改动。
     """
 
     def __init__(self, config: LLMConfig) -> None:
         self.config = config
-        # LLM 客户端
-        self._client = AsyncOpenAI(
-            api_key=config.api_key,
+        self._pricing = PricingTable.load_default()
+
+        # 选择并实例化 chat provider，外覆 CostTrackingProvider
+        chat_name = config.provider or ProviderRegistry.detect_from_url(config.base_url)
+        chat_inner = ProviderRegistry.create(
+            chat_name,
             base_url=config.base_url,
+            api_key=config.api_key,
+            default_model=config.default_model,
         )
-        # Embedding 客户端（可能使用不同的提供商）
-        self._embed_client = AsyncOpenAI(
-            api_key=config.embedding_api_key,
+        self._chat: LLMProviderBase = CostTrackingProvider(chat_inner, pricing=self._pricing)
+
+        # Embedding provider（可与 chat 不同提供商）
+        embed_name = config.embedding_provider or ProviderRegistry.detect_from_url(
+            config.embedding_base_url
+        )
+        embed_inner = ProviderRegistry.create(
+            embed_name,
             base_url=config.embedding_base_url,
+            api_key=config.embedding_api_key,
+            default_model=config.embedding_model,
         )
+        self._embed: LLMProviderBase = CostTrackingProvider(embed_inner, pricing=self._pricing)
+
+        if config.fallback_chain:
+            logger.warning(
+                "fallback_chain 已被弃用 (provider 抽象后不再支持中途切模型)，传入的 %d "
+                "个备选模型已忽略",
+                len(config.fallback_chain),
+            )
+
+        logger.info(
+            "LLMGateway initialized: chat=%s (%s, model=%s), embed=%s (%s, model=%s)",
+            chat_name,
+            config.base_url,
+            config.default_model,
+            embed_name,
+            config.embedding_base_url,
+            config.embedding_model,
+        )
+
+    # ──────────────────── 旧 API 兼容（dict 形态） ───────────────────────────
 
     async def generate(
         self,
@@ -125,107 +115,23 @@ class LLMGateway:
         tools: Optional[List[Dict]] = None,
         **kwargs,
     ) -> dict:
-        """生成接口，支持手动降级和原生 function calling。
-
-        Args:
-            tools: OpenAI function calling 格式的工具定义列表。
-                   当 LLM 决定调用工具时，返回值中 tool_calls 非空。
-        """
-        use_model = model or self.config.default_model
-
-        # 尝试主模型 + fallback chain
-        models_to_try = [use_model] + [
-            m for m in self.config.fallback_chain if m != use_model
-        ]
-
-        last_error = None
-        for m in models_to_try:
-            try:
-                params: dict = {
-                    "model": m,
-                    "messages": messages,
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                }
-                if response_format:
-                    params["response_format"] = response_format
-                if tools:
-                    params["tools"] = tools
-
-                response = await self._client.chat.completions.create(**params)
-
-                prompt_tok = response.usage.prompt_tokens if response.usage else 0
-                completion_tok = response.usage.completion_tokens if response.usage else 0
-                cost = _estimate_cost(response.model or m, prompt_tok, completion_tok)
-
-                message = response.choices[0].message
-
-                # 提取 tool_calls（如果有）
-                tool_calls = None
-                if message.tool_calls:
-                    tool_calls = [
-                        {
-                            "id": tc.id,
-                            "function": {
-                                "name": tc.function.name,
-                                "arguments": tc.function.arguments,
-                            },
-                        }
-                        for tc in message.tool_calls
-                    ]
-
-                # 保留原始 assistant message 字典，供多轮工具调用时原样传回
-                # 部分模型（如 Gemini 3 Flash / DeepSeek v4 thinking mode）需要完整消息结构，
-                # DeepSeek 强制要求上一轮 reasoning_content 原样回传，否则报 400
-                raw_assistant_msg = {"role": "assistant", "content": message.content or None}
-                if message.tool_calls:
-                    raw_assistant_msg["tool_calls"] = [
-                        tc.model_dump(exclude_none=True) for tc in message.tool_calls
-                    ]
-                # 透传供应商扩展字段（reasoning_content / thinking / signature 等）
-                extra = getattr(message, "model_extra", None) or {}
-                for k, v in extra.items():
-                    if v is not None and k not in raw_assistant_msg:
-                        raw_assistant_msg[k] = v
-
-                return {
-                    "content": message.content or "",
-                    "model": response.model,
-                    "tool_calls": tool_calls,
-                    "raw_assistant_message": raw_assistant_msg,
-                    "usage": {
-                        "prompt_tokens": prompt_tok,
-                        "completion_tokens": completion_tok,
-                        "cost_usd": cost,
-                    },
-                }
-            except Exception as e:
-                last_error = e
-                logger.warning("模型 %s 调用失败: %s, 尝试降级", m, str(e)[:200])
-                continue
-
-        raise RuntimeError(f"All models failed: {last_error}") from last_error
-
-    async def stream(
-        self,
-        messages: List[Dict],
-        model: Optional[str] = None,
-        temperature: float = 0.7,
-        **kwargs,
-    ) -> AsyncGenerator[str, None]:
-        """简易流式（仅 content delta，向后兼容 WriterAI 用）。"""
-        use_model = model or self.config.default_model
-
-        stream = await self._client.chat.completions.create(
-            model=use_model,
-            messages=messages,
+        """同步生成 —— 委派至 chat provider，返回旧风格 dict。"""
+        resp = await self._chat.chat(
+            messages,
+            model=model,
             temperature=temperature,
-            stream=True,
+            max_tokens=max_tokens,
+            tools=tools,
+            response_format=response_format,
+            **kwargs,
         )
-        async for chunk in stream:
-            delta = chunk.choices[0].delta.content
-            if delta:
-                yield delta
+        return {
+            "content": resp.content,
+            "model": resp.model,
+            "tool_calls": resp.tool_calls,
+            "raw_assistant_message": resp.raw_assistant_message,
+            "usage": resp.usage,
+        }
 
     async def generate_stream(
         self,
@@ -236,147 +142,82 @@ class LLMGateway:
         tools: Optional[List[Dict]] = None,
         **kwargs,
     ) -> AsyncGenerator[dict, None]:
-        """完整流式生成 — 同时处理 reasoning_content / content / tool_calls 三类增量。
+        """流式生成 —— 委派至 chat provider，转换 ChatChunk 为旧风格 dict。
 
-        Yields:
-            {"type": "reasoning", "delta": str}        — 思考阶段增量
-            {"type": "content",   "delta": str}        — 最终回答增量
-            {"type": "tool_call_init", "index": int, "id": str, "name": str}
-            {"type": "tool_call_arg_delta", "index": int, "delta": str}
-            {"type": "done", "content": str, "reasoning_content": str,
-             "tool_calls": list|None, "raw_assistant_message": dict,
-             "finish_reason": str|None, "model": str, "usage": dict}
-
-        无 fallback：流式过程中切换模型会破坏已 yield 的 token 序列，
-        失败直接 propagate 给上层。
+        Yields 与旧 API 相同的 dict：
+          {"type": "reasoning",          "delta": str}
+          {"type": "content",            "delta": str}
+          {"type": "tool_call_init",     "index": int, "id": str, "name": str}
+          {"type": "tool_call_arg_delta","index": int, "delta": str}
+          {"type": "done", "content"/"reasoning_content"/"tool_calls"/
+                           "raw_assistant_message"/"finish_reason"/"model"/"usage": ...}
         """
-        use_model = model or self.config.default_model
-        params: dict = {
-            "model": use_model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "stream": True,
-        }
-        if tools:
-            params["tools"] = tools
-
-        stream = await self._client.chat.completions.create(**params)
-
-        full_content = ""
-        full_reasoning = ""
-        # tool_calls 增量聚合：index → {id, name, arguments}
-        tool_calls_state: Dict[int, Dict[str, Any]] = {}
-        finish_reason: Optional[str] = None
-        usage_obj = None
-        final_model = use_model
-
-        async for chunk in stream:
-            if getattr(chunk, "usage", None):
-                usage_obj = chunk.usage
-            if getattr(chunk, "model", None):
-                final_model = chunk.model
-            if not chunk.choices:
-                continue
-            choice = chunk.choices[0]
-            delta = choice.delta
-            if choice.finish_reason:
-                finish_reason = choice.finish_reason
-
-            # reasoning_content 增量（DeepSeek thinking / 部分 Gemini 等）
-            reasoning = getattr(delta, "reasoning_content", None)
-            if reasoning:
-                full_reasoning += reasoning
-                yield {"type": "reasoning", "delta": reasoning}
-
-            # content 增量
-            if delta.content:
-                full_content += delta.content
-                yield {"type": "content", "delta": delta.content}
-
-            # tool_calls 增量
-            if delta.tool_calls:
-                for tc in delta.tool_calls:
-                    idx = tc.index if tc.index is not None else 0
-                    state = tool_calls_state.setdefault(
-                        idx, {"id": None, "name": None, "arguments": ""}
-                    )
-                    if tc.id:
-                        state["id"] = tc.id
-                    fn = getattr(tc, "function", None)
-                    if fn:
-                        if fn.name:
-                            state["name"] = fn.name
-                            yield {
-                                "type": "tool_call_init",
-                                "index": idx,
-                                "id": state["id"],
-                                "name": state["name"],
-                            }
-                        if fn.arguments:
-                            state["arguments"] += fn.arguments
-                            yield {
-                                "type": "tool_call_arg_delta",
-                                "index": idx,
-                                "delta": fn.arguments,
-                            }
-
-        # 聚合最终 tool_calls
-        final_tool_calls = None
-        if tool_calls_state:
-            final_tool_calls = [
-                {
-                    "id": s["id"],
-                    "function": {"name": s["name"], "arguments": s["arguments"]},
+        async for chunk in self._chat.chat_stream(
+            messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            tools=tools,
+            **kwargs,
+        ):
+            if chunk.type == "reasoning":
+                yield {"type": "reasoning", "delta": chunk.delta}
+            elif chunk.type == "content":
+                yield {"type": "content", "delta": chunk.delta}
+            elif chunk.type == "tool_call_init":
+                yield {
+                    "type": "tool_call_init",
+                    "index": chunk.index,
+                    "id": chunk.tool_call_id,
+                    "name": chunk.tool_call_name,
                 }
-                for _, s in sorted(tool_calls_state.items())
-            ]
-
-        # 构造 raw_assistant_message — DeepSeek thinking 多轮要求带 reasoning_content 回传
-        raw_assistant_msg: Dict[str, Any] = {
-            "role": "assistant",
-            "content": full_content or None,
-        }
-        if final_tool_calls:
-            raw_assistant_msg["tool_calls"] = [
-                {
-                    "id": tc["id"],
-                    "type": "function",
-                    "function": tc["function"],
+            elif chunk.type == "tool_call_arg_delta":
+                yield {
+                    "type": "tool_call_arg_delta",
+                    "index": chunk.index,
+                    "delta": chunk.delta,
                 }
-                for tc in final_tool_calls
-            ]
-        if full_reasoning:
-            raw_assistant_msg["reasoning_content"] = full_reasoning
+            elif chunk.type == "done":
+                final = chunk.final
+                if final is None:
+                    yield {"type": "done", "content": "", "tool_calls": None, "usage": {}}
+                    continue
+                yield {
+                    "type": "done",
+                    "content": final.content,
+                    "reasoning_content": final.reasoning_content,
+                    "tool_calls": final.tool_calls,
+                    "raw_assistant_message": final.raw_assistant_message,
+                    "finish_reason": final.finish_reason,
+                    "model": final.model,
+                    "usage": final.usage,
+                }
 
-        prompt_tok = usage_obj.prompt_tokens if usage_obj else 0
-        completion_tok = usage_obj.completion_tokens if usage_obj else 0
-        cost = _estimate_cost(final_model, prompt_tok, completion_tok)
-
-        yield {
-            "type": "done",
-            "content": full_content,
-            "reasoning_content": full_reasoning,
-            "tool_calls": final_tool_calls,
-            "raw_assistant_message": raw_assistant_msg,
-            "finish_reason": finish_reason,
-            "model": final_model,
-            "usage": {
-                "prompt_tokens": prompt_tok,
-                "completion_tokens": completion_tok,
-                "cost_usd": cost,
-            },
-        }
+    async def stream(
+        self,
+        messages: List[Dict],
+        model: Optional[str] = None,
+        temperature: float = 0.7,
+        **kwargs,
+    ) -> AsyncGenerator[str, None]:
+        """简易流式（仅 content delta，向后兼容 WriterAI 用）。"""
+        async for chunk in self._chat.chat_stream(
+            messages, model=model, temperature=temperature, **kwargs
+        ):
+            if chunk.type == "content" and chunk.delta:
+                yield chunk.delta
 
     async def embed(
         self, texts: List[str], model: Optional[str] = None
     ) -> List[List[float]]:
-        """向量嵌入接口（使用独立的 Embedding 提供商配置）。"""
-        embed_model = model or self.config.embedding_model
+        return await self._embed.embed(texts, model=model)
 
-        response = await self._embed_client.embeddings.create(
-            model=embed_model,
-            input=texts,
-            encoding_format="float",
-        )
-        return [item.embedding for item in response.data]
+    # ──────────────────── 调试/反射接口 ─────────────────────────────────────
+
+    @property
+    def chat_provider_name(self) -> str:
+        return self._chat.name
+
+    @property
+    def embed_provider_name(self) -> str:
+        return self._embed.name
