@@ -161,6 +161,15 @@ class AgentRunner:
             self.state.cost_usd += result["usage"]["cost_usd"]
 
             tool_calls = result.get("tool_calls")
+            _content_preview = (result.get("content") or "")[:200].replace("\n", " ")
+            logger.info(
+                "[DBG-RUNNER] persona=%s round=%s content_len=%d tool_calls=%d preview=%r",
+                self.config.name,
+                round_num,
+                len(result.get("content") or ""),
+                len(tool_calls or []),
+                _content_preview,
+            )
             if not tool_calls:
                 content = result["content"]
                 break
@@ -213,9 +222,22 @@ class AgentRunner:
                 for ev in self._dispatcher.events[existing:]:
                     yield ev
 
-            # 进入最后一轮前禁用 tools，强制 LLM 给最终回复
+            # 进入最后一轮前：禁用 tools + 注入强制输出指令
+            # 关键：DeepSeek V4 在无工具时仍会 hallucinate DSML 标签（<｜DSML｜tool_calls>），
+            # 通过显式 user 指令明确禁止这种残留，并强制给文字结论
             if round_num >= MAX_TOOL_ROUNDS - 1:
                 openai_tools = None
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "工具搜索阶段已结束。现在请基于上面所有工具返回的结果，"
+                            "立刻输出最终内容（创意 / 审辩 / 整合），不少于 300 字。\n"
+                            "严格禁止：再输出任何 <｜DSML｜tool_calls> 或 <|DSML|...> 类的工具调用标记。\n"
+                            "只输出纯中文 markdown 正文。"
+                        ),
+                    }
+                )
         else:
             # 超过最大轮次，用最后一次的 content
             content = (result or {}).get("content", "")
@@ -226,6 +248,13 @@ class AgentRunner:
 
         # ── 解析输出 → Message 列表 ──
         parsed = self._parser.parse(content, self._dispatcher.events)
+        logger.info(
+            "[DBG-RUNNER-FINAL] persona=%s raw_content_len=%d parsed_count=%d parsed_lens=%s",
+            self.config.name,
+            len(content),
+            len(parsed),
+            [len(m.content) for m in parsed],
+        )
         self.state.status = "done"
         self.state.messages_sent += len(parsed)
         self.state.last_action = f"generated {len(parsed)} message(s)"

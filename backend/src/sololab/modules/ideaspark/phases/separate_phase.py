@@ -59,15 +59,36 @@ class SeparatePhase(Phase):
                     else:
                         await queue.put(ev)
                 ctx.agent_states[name] = runner.state
-                await queue.put(
-                    {"type": "agent", "agent": name, "action": "done", "message_count": len(messages)}
+                # 过滤空 / 过短 message（OutputParser 已经过滤，这里二道防线）
+                valid_messages = [m for m in messages if m.content and len(m.content.strip()) >= 30]
+                import logging as _log
+                _log.getLogger("sololab.ideaspark.separate").info(
+                    "[DBG-SEPARATE] agent=%s total=%d valid=%d content_lens=%s",
+                    name,
+                    len(messages),
+                    len(valid_messages),
+                    [len(m.content) for m in valid_messages],
                 )
-                for msg in messages:
-                    ctx.blackboard.append(msg)
+                if not valid_messages:
+                    # agent 没产生有效 idea —— 通知前端但不污染下游
                     await queue.put(
-                        {"type": "idea", "id": msg.id, "content": msg.content, "author": name}
+                        {
+                            "type": "agent",
+                            "agent": name,
+                            "action": "empty",
+                            "error": "未生成有效内容（多轮工具调用后未给最终输出）",
+                        }
                     )
-                    await queue.put(msg)  # Message 对象供下一阶段使用
+                else:
+                    await queue.put(
+                        {"type": "agent", "agent": name, "action": "done", "message_count": len(valid_messages)}
+                    )
+                    for msg in valid_messages:
+                        ctx.blackboard.append(msg)
+                        await queue.put(
+                            {"type": "idea", "id": msg.id, "content": msg.content, "author": name}
+                        )
+                        await queue.put(msg)  # Message 对象供下一阶段使用
             except Exception as e:
                 await queue.put(
                     {"type": "agent", "agent": name, "action": "error", "error": str(e)}

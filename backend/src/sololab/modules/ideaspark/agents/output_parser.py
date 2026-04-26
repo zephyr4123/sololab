@@ -32,13 +32,29 @@ class OutputParser:
         self.persona_name = persona_name
 
     def parse(self, content: str, tool_events: List[Dict[str, Any]]) -> List[Message]:
-        """主入口：原始内容 + 工具事件 → Message 列表。"""
+        """主入口：原始内容 + 工具事件 → Message 列表。
+
+        空 content 防御：DSML 剥离后若不到 30 字，视为 LLM 失败输出
+        （典型场景：DeepSeek V4 在最后无工具轮仍 hallucinate <｜DSML｜tool_calls> 标签，
+        全部被剥离后 content 为空），返回空列表 —— 让 separate_phase 等下游能跳过空 idea，
+        避免污染 cluster / critic 的 group。
+        """
         # 第二道 DSML 防线（provider 层是第一道）
         content = _DSML_BLOCK_RE.sub("", content)
         content = _DSML_TAG_RE.sub("", content)
 
         msg_type = self._detect_msg_type(content)
         clean_content = self._strip_planning_lines(content) or content.strip()
+
+        # 空 / 过短内容 = LLM 失败输出，下游不应当作有效 message
+        if len(clean_content.strip()) < 30:
+            import logging
+            logging.getLogger(__name__).warning(
+                "%s 输出内容过短（%d 字），视为失败输出，返回空列表",
+                self.persona_name, len(clean_content.strip()),
+            )
+            return []
+
         clean_content = self._append_citations(clean_content, tool_events)
 
         return [

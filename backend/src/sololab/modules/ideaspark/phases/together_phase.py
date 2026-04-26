@@ -81,6 +81,15 @@ class TogetherPhase(Phase):
         所有 yield 出去的 dict 事件都带 group_idx + iteration 字段，
         让前端可以靠字段精确分组（多组并行下事件交错时不会归错组）。
         """
+        import logging as _log
+        _logger = _log.getLogger("sololab.ideaspark.together")
+        _logger.info(
+            "[DBG-TOGETHER] group_idx=%d group_size=%d content_lens=%s",
+            group_idx,
+            len(group),
+            [len(m.content) for m in group],
+        )
+
         critic_config = get_persona("critic")
         connector_config = get_persona("connector")
 
