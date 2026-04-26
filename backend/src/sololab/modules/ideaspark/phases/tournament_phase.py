@@ -61,17 +61,29 @@ class TournamentPhase(Phase):
                 result = await runner.run(ctx.original_topic, task_prompt=task_prompt)
                 ctx.agent_states["evaluator"] = runner.state
                 winner = self._parse_vote(result[0].content if result else "")
-                return idea_a.id, idea_b.id, winner
+                return idea_a, idea_b, winner
 
-            eval_results = await asyncio.gather(
-                *[_evaluate_pair(a, b) for a, b in pairs],
-                return_exceptions=True,
-            )
-            for r in eval_results:
-                if isinstance(r, Exception):
+            # 用 as_completed 流式 yield 每对完成 —— 让前端边比较边更新 Elo
+            tasks = [asyncio.create_task(_evaluate_pair(a, b)) for a, b in pairs]
+            for fut in asyncio.as_completed(tasks):
+                try:
+                    idea_a, idea_b, winner = await fut
+                except Exception:
                     continue
-                id_a, id_b, winner = r
-                self._update_elo(ctx.elo_scores, id_a, id_b, winner)
+                self._update_elo(ctx.elo_scores, idea_a.id, idea_b.id, winner)
+                yield {
+                    "type": "evaluate_match",
+                    "round": ctx.round,
+                    "a_id": idea_a.id,
+                    "a_author": idea_a.sender,
+                    "a_preview": (idea_a.content or "")[:80].replace("\n", " ").strip(),
+                    "a_elo": round(ctx.elo_scores.get(idea_a.id, 1500)),
+                    "b_id": idea_b.id,
+                    "b_author": idea_b.sender,
+                    "b_preview": (idea_b.content or "")[:80].replace("\n", " ").strip(),
+                    "b_elo": round(ctx.elo_scores.get(idea_b.id, 1500)),
+                    "winner": winner,
+                }
 
             sorted_ideas = sorted(
                 ideas, key=lambda m: ctx.elo_scores.get(m.id, 1500), reverse=True

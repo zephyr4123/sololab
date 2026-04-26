@@ -152,6 +152,14 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
         // 工具调用启动事件：让前端实时显示"正在调用 X 工具"
         sessionStore.appendEventToLastEntry({ type: 'tool_call_started', agent, tool, query, tool_id: toolId });
       },
+      onClusterGroups: (event) => {
+        // 创意分组数据：cluster phase 完成时让前端可视化分组
+        sessionStore.appendEventToLastEntry(event);
+      },
+      onEvaluateMatch: (event) => {
+        // Elo 排序中每完成一对评审 yield 一次：让前端边比较边更新
+        sessionStore.appendEventToLastEntry(event);
+      },
       // onAgentReasoningDelta: 暂不渲染（thinking token 噪声大），后续若需可加
       onVote: (ideaId, content, author, eloScore, rank) => {
         ideaStore.setTopIdeas([

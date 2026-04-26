@@ -104,6 +104,8 @@ export class ResilientSSEClient {
       case 'agent_reasoning_delta': handlers.onAgentReasoningDelta?.((event as any).agent, (event as any).delta); break;
       case 'agent_content_delta': handlers.onAgentContentDelta?.((event as any).agent, (event as any).delta); break;
       case 'tool_call_started': handlers.onToolCallStarted?.((event as any).agent, (event as any).tool, (event as any).query, (event as any).tool_id); break;
+      case 'cluster_groups': handlers.onClusterGroups?.(event as any); break;
+      case 'evaluate_match': handlers.onEvaluateMatch?.(event as any); break;
       case 'vote': handlers.onVote?.(event.idea_id, event.content, event.author, event.elo_score, event.rank); break;
       case 'done': handlers.onDone?.(event.top_ideas, event.cost_usd); break;
       case 'error': handlers.onError?.(event.message || event.error || 'Unknown error'); break;

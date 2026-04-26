@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from 'react';
 import { Sparkles, Search, MessageSquare, Brain, Scale, Trophy, CheckCircle, AlertTriangle, Bot, Globe, BookOpen } from 'lucide-react';
 import { MarkdownViewer } from './MarkdownViewer';
-import { PipelineView } from './PipelineView';
+import { StageView } from '@/components/modules/ideaspark/StageView';
 
 interface StreamEvent {
   type: string;
@@ -58,8 +58,10 @@ export function StreamRenderer({ events }: StreamRendererProps) {
 
   const hasPipelineEvents = events.some(e => e.type === 'status');
 
+  // IdeaSpark 流式：用聚焦舞台代替全量数据流。
+  // 完整过程在 StageView 内部按需折叠展开。
   if (hasPipelineEvents) {
-    return <PipelineView events={events} />;
+    return <StageView events={events} />;
   }
 
   return (
