@@ -120,6 +120,11 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
         ideaStore.addIdea({ id, content, author, eloScore: 1500 });
         sessionStore.appendEventToLastEntry({ type: 'idea', id, content, author });
       },
+      onAgentContentDelta: (agent, delta) => {
+        // 实时把 token 增量追加到当前 stream entry，PipelineView 会聚合为 streaming 预览
+        sessionStore.appendEventToLastEntry({ type: 'agent_content_delta', agent, delta });
+      },
+      // onAgentReasoningDelta: 暂不渲染（thinking token 噪声大），后续若需可加
       onVote: (ideaId, content, author, eloScore, rank) => {
         ideaStore.setTopIdeas([
           ...ideaStore.topIdeas,

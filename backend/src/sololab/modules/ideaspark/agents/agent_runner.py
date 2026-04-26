@@ -2,13 +2,22 @@
 
 import json
 import logging
+import re
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from sololab.core.llm_gateway import LLMGateway
 from sololab.core.tool_registry import ToolRegistry
 from sololab.models.agent import AgentConfig, AgentState, Message, MessageType
 from sololab.modules.ideaspark.prompts.system_prompts import get_prompt
+
+# DeepSeek V4 偶发把内部 DSML tool-call 标记泄漏到 content（兼容层翻译失败）
+# 同时兼容 ASCII | 与全角 ｜ 两种竖线变体
+_DSML_BLOCK_RE = re.compile(
+    r"<[\|｜]\s*DSML\s*[\|｜][^>]*>.*?<\/[\|｜]\s*DSML\s*[\|｜][^>]*>",
+    re.DOTALL,
+)
+_DSML_TAG_RE = re.compile(r"<\/?[\|｜]\s*DSML\s*[\|｜][^>]*>")
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +135,119 @@ class AgentRunner:
         self.state.last_action = f"generated {len(parsed)} message(s)"
         return parsed
 
+    async def run_stream(
+        self,
+        topic: str,
+        context_messages: List[Message] = None,
+        task_prompt: str = "",
+        doc_context: str = "",
+        is_continuation: bool = False,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """流式执行智能体 —— 逐 token yield 增量事件，等价于 run() 但实时输出。
+
+        Yields:
+            {"type": "agent_reasoning_delta", "agent": str, "delta": str}  思考增量
+            {"type": "agent_content_delta",   "agent": str, "delta": str}  正文增量
+            {"type": "tool", ...}                                          工具结果（同 run()）
+            {"type": "agent_done_with_messages", "messages": [Message]}    最终消息列表
+
+        无 fallback：流式 LLM 出错直接 propagate（首字节后切模型会破坏 token 序列）。
+        """
+        self.state.status = "thinking"
+
+        from datetime import datetime
+        system_prompt = get_prompt(
+            self.config.name,
+            topic=topic or "(见上下文)",
+            timestamp=datetime.now().strftime("%Y-%m-%d %H:%M"),
+            is_continuation=is_continuation,
+        )
+        messages: List[Dict[str, Any]] = [{"role": "system", "content": system_prompt}]
+        messages.extend(self._build_messages(topic, context_messages or [], task_prompt, doc_context))
+
+        openai_tools = None
+        if self.tools and self.config.tools:
+            openai_tools = self.tools.get_openai_tools(self.config.tools)
+            if not openai_tools:
+                openai_tools = None
+
+        content = ""
+        result: Optional[Dict[str, Any]] = None
+        for round_num in range(MAX_TOOL_ROUNDS + 1):
+            result = None
+            async for chunk in self.llm.generate_stream(
+                messages=messages,
+                temperature=self.config.temperature,
+                max_tokens=self.config.max_tokens,
+                tools=openai_tools,
+            ):
+                ctype = chunk["type"]
+                if ctype == "reasoning":
+                    yield {
+                        "type": "agent_reasoning_delta",
+                        "agent": self.config.name,
+                        "delta": chunk["delta"],
+                    }
+                elif ctype == "content":
+                    yield {
+                        "type": "agent_content_delta",
+                        "agent": self.config.name,
+                        "delta": chunk["delta"],
+                    }
+                elif ctype == "done":
+                    result = chunk
+                # tool_call_init / tool_call_arg_delta 不向上传递（前端无需 partial JSON）
+
+            if not result:
+                raise RuntimeError("LLM stream ended without 'done' event")
+
+            self.state.tokens_used += result["usage"]["prompt_tokens"] + result["usage"]["completion_tokens"]
+            self.state.cost_usd += result["usage"]["cost_usd"]
+
+            tool_calls = result.get("tool_calls")
+            if not tool_calls:
+                content = result["content"]
+                break
+
+            # 工具调用：保留完整 raw assistant message（含 reasoning_content，DeepSeek 强制要求）
+            raw_msg = result.get("raw_assistant_message")
+            if raw_msg:
+                messages.append(raw_msg)
+            else:
+                messages.append({
+                    "role": "assistant",
+                    "content": result["content"] or None,
+                    "tool_calls": [
+                        {"id": tc["id"], "type": "function", "function": tc["function"]}
+                        for tc in tool_calls
+                    ],
+                })
+
+            # 执行工具，每个工具完成立即 yield 对应事件
+            for tc in tool_calls:
+                existing = len(self.tool_events)
+                tool_result = await self._execute_tool_call(tc)
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc["id"],
+                    "content": json.dumps(tool_result, ensure_ascii=False),
+                })
+                for ev in self.tool_events[existing:]:
+                    yield ev
+
+            if round_num >= MAX_TOOL_ROUNDS - 1:
+                openai_tools = None
+        else:
+            # 超过最大轮次，用最后一次的 content
+            content = (result or {}).get("content", "")
+
+        parsed = self._parse_output(content)
+        self.state.status = "done"
+        self.state.messages_sent += len(parsed)
+        self.state.last_action = f"generated {len(parsed)} message(s)"
+
+        yield {"type": "agent_done_with_messages", "messages": parsed}
+
     async def _execute_tool_call(self, tool_call: Dict[str, Any]) -> Dict[str, Any]:
         """执行单个工具调用并返回结果。"""
         func = tool_call["function"]
@@ -238,7 +360,6 @@ class AgentRunner:
     @staticmethod
     def _extract_english(text: str) -> str:
         """从混合文本中提取英文单词。"""
-        import re
         words = re.findall(r'[a-zA-Z][\w-]*', text)
         return ' '.join(words) if words else ""
 
@@ -298,7 +419,9 @@ class AgentRunner:
 
     def _parse_output(self, content: str) -> List[Message]:
         """解析 LLM 输出为 Message 对象列表。"""
-        import re
+        # 剥离 DeepSeek V4 偶发泄漏的 DSML tool-call 标记
+        content = _DSML_BLOCK_RE.sub("", content)
+        content = _DSML_TAG_RE.sub("", content)
 
         msg_type = self._detect_msg_type(content)
 

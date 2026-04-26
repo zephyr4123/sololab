@@ -278,6 +278,17 @@ function AgentColumn({ agent, events }: { agent: string; events: StreamEvent[] }
   const ideas = events.filter(e => e.type === 'idea');
   const doneEvent = events.find(e => e.type === 'agent' && e.action === 'done');
 
+  // 流式正文增量：在 idea 事件到达前实时拼接显示，作为 "live preview"
+  const streamingContent = useMemo(
+    () =>
+      events
+        .filter(e => e.type === 'agent_content_delta')
+        .map(e => e.delta || '')
+        .join(''),
+    [events]
+  );
+  const showStreaming = streamingContent.length > 0 && ideas.length === 0;
+
   return (
     <div className={`rounded-lg border p-3 space-y-2 ${color}`}>
       <div className={`flex items-center gap-2 text-xs font-semibold ${accent}`}>
@@ -295,7 +306,15 @@ function AgentColumn({ agent, events }: { agent: string; events: StreamEvent[] }
         </div>
       )}
 
-      {/* Ideas */}
+      {/* Streaming live preview（在最终 idea 到达前显示）*/}
+      {showStreaming && (
+        <div className="rounded-md border-l-2 border-primary/40 bg-white/60 dark:bg-white/5 p-2">
+          <MarkdownViewer content={streamingContent} compact />
+          <span className="ml-1 inline-block h-3 w-2 align-middle bg-primary/60 animate-pulse" />
+        </div>
+      )}
+
+      {/* Ideas（最终结果）*/}
       {ideas.map((idea, i) => (
         <div key={i} className="rounded-md bg-white/60 dark:bg-white/5 p-2">
           <MarkdownViewer content={idea.content} compact />
@@ -347,6 +366,17 @@ function TogetherPhaseView({ events }: { events: StreamEvent[] }) {
         const syntheses = groupEvents.filter(e => e.type === 'agent' && e.action === 'synthesis');
         const tools = groupEvents.filter(e => e.type === 'tool');
 
+        // 拼接当前组内 critic / connector 的流式增量
+        const criticStreaming = groupEvents
+          .filter(e => e.type === 'agent_content_delta' && e.agent === 'critic')
+          .map(e => e.delta || '').join('');
+        const connectorStreaming = groupEvents
+          .filter(e => e.type === 'agent_content_delta' && e.agent === 'connector')
+          .map(e => e.delta || '').join('');
+        // 组内每多一条最终 critique/synthesis 就吞掉一段 streaming（粗粒度）
+        const showCriticStreaming = criticStreaming.length > 0 && critiques.length === 0;
+        const showConnectorStreaming = connectorStreaming.length > 0 && syntheses.length === 0;
+
         return (
           <div key={key} className="rounded-lg border border-dashed border-border/80 p-3 space-y-2">
             <div className="text-xs font-semibold text-muted-foreground">
@@ -359,6 +389,18 @@ function TogetherPhaseView({ events }: { events: StreamEvent[] }) {
               </div>
             )}
 
+            {showCriticStreaming && (
+              <div className="rounded-md border border-red-200/60 bg-red-50/30 dark:border-red-700/40 dark:bg-red-950/20 p-2.5">
+                <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-red-700 dark:text-red-400">
+                  <MessageSquare className="h-3 w-3" />
+                  审辩者
+                  <span className="ml-auto h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" />
+                </div>
+                <MarkdownViewer content={criticStreaming} compact />
+                <span className="ml-1 inline-block h-3 w-2 align-middle bg-red-400/60 animate-pulse" />
+              </div>
+            )}
+
             {critiques.map((c, i) => (
               <div key={`c-${i}`} className="rounded-md border border-red-200/60 bg-red-50/30 dark:border-red-700/40 dark:bg-red-950/20 p-2.5">
                 <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-red-700 dark:text-red-400">
@@ -368,6 +410,18 @@ function TogetherPhaseView({ events }: { events: StreamEvent[] }) {
                 <MarkdownViewer content={c.content} compact />
               </div>
             ))}
+
+            {showConnectorStreaming && (
+              <div className="rounded-md border border-green-200/60 bg-green-50/30 dark:border-green-700/40 dark:bg-green-950/20 p-2.5">
+                <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-green-700 dark:text-green-400">
+                  <Brain className="h-3 w-3" />
+                  整合者
+                  <span className="ml-auto h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
+                </div>
+                <MarkdownViewer content={connectorStreaming} compact />
+                <span className="ml-1 inline-block h-3 w-2 align-middle bg-green-400/60 animate-pulse" />
+              </div>
+            )}
 
             {syntheses.map((s, i) => (
               <div key={`s-${i}`} className="rounded-md border border-green-200/60 bg-green-50/30 dark:border-green-700/40 dark:bg-green-950/20 p-2.5">

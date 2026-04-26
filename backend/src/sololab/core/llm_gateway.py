@@ -34,6 +34,8 @@ MODEL_PRICING: Dict[str, tuple[float, float]] = {
     # DeepSeek
     "deepseek-chat": (0.27, 1.10),
     "deepseek-reasoner": (0.55, 2.19),
+    "deepseek-v4-flash": (0.27, 1.10),
+    "deepseek-v4-pro": (0.55, 2.19),
     # 阿里通义
     "qwen-plus": (0.80, 2.0),
     "qwen-turbo": (0.30, 0.60),
@@ -173,12 +175,18 @@ class LLMGateway:
                     ]
 
                 # 保留原始 assistant message 字典，供多轮工具调用时原样传回
-                # 部分模型（如 Gemini 3 Flash thinking mode）需要完整消息结构
+                # 部分模型（如 Gemini 3 Flash / DeepSeek v4 thinking mode）需要完整消息结构，
+                # DeepSeek 强制要求上一轮 reasoning_content 原样回传，否则报 400
                 raw_assistant_msg = {"role": "assistant", "content": message.content or None}
                 if message.tool_calls:
                     raw_assistant_msg["tool_calls"] = [
                         tc.model_dump(exclude_none=True) for tc in message.tool_calls
                     ]
+                # 透传供应商扩展字段（reasoning_content / thinking / signature 等）
+                extra = getattr(message, "model_extra", None) or {}
+                for k, v in extra.items():
+                    if v is not None and k not in raw_assistant_msg:
+                        raw_assistant_msg[k] = v
 
                 return {
                     "content": message.content or "",
@@ -205,7 +213,7 @@ class LLMGateway:
         temperature: float = 0.7,
         **kwargs,
     ) -> AsyncGenerator[str, None]:
-        """流式生成。"""
+        """简易流式（仅 content delta，向后兼容 WriterAI 用）。"""
         use_model = model or self.config.default_model
 
         stream = await self._client.chat.completions.create(
@@ -218,6 +226,147 @@ class LLMGateway:
             delta = chunk.choices[0].delta.content
             if delta:
                 yield delta
+
+    async def generate_stream(
+        self,
+        messages: List[Dict],
+        model: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+        tools: Optional[List[Dict]] = None,
+        **kwargs,
+    ) -> AsyncGenerator[dict, None]:
+        """完整流式生成 — 同时处理 reasoning_content / content / tool_calls 三类增量。
+
+        Yields:
+            {"type": "reasoning", "delta": str}        — 思考阶段增量
+            {"type": "content",   "delta": str}        — 最终回答增量
+            {"type": "tool_call_init", "index": int, "id": str, "name": str}
+            {"type": "tool_call_arg_delta", "index": int, "delta": str}
+            {"type": "done", "content": str, "reasoning_content": str,
+             "tool_calls": list|None, "raw_assistant_message": dict,
+             "finish_reason": str|None, "model": str, "usage": dict}
+
+        无 fallback：流式过程中切换模型会破坏已 yield 的 token 序列，
+        失败直接 propagate 给上层。
+        """
+        use_model = model or self.config.default_model
+        params: dict = {
+            "model": use_model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": True,
+        }
+        if tools:
+            params["tools"] = tools
+
+        stream = await self._client.chat.completions.create(**params)
+
+        full_content = ""
+        full_reasoning = ""
+        # tool_calls 增量聚合：index → {id, name, arguments}
+        tool_calls_state: Dict[int, Dict[str, Any]] = {}
+        finish_reason: Optional[str] = None
+        usage_obj = None
+        final_model = use_model
+
+        async for chunk in stream:
+            if getattr(chunk, "usage", None):
+                usage_obj = chunk.usage
+            if getattr(chunk, "model", None):
+                final_model = chunk.model
+            if not chunk.choices:
+                continue
+            choice = chunk.choices[0]
+            delta = choice.delta
+            if choice.finish_reason:
+                finish_reason = choice.finish_reason
+
+            # reasoning_content 增量（DeepSeek thinking / 部分 Gemini 等）
+            reasoning = getattr(delta, "reasoning_content", None)
+            if reasoning:
+                full_reasoning += reasoning
+                yield {"type": "reasoning", "delta": reasoning}
+
+            # content 增量
+            if delta.content:
+                full_content += delta.content
+                yield {"type": "content", "delta": delta.content}
+
+            # tool_calls 增量
+            if delta.tool_calls:
+                for tc in delta.tool_calls:
+                    idx = tc.index if tc.index is not None else 0
+                    state = tool_calls_state.setdefault(
+                        idx, {"id": None, "name": None, "arguments": ""}
+                    )
+                    if tc.id:
+                        state["id"] = tc.id
+                    fn = getattr(tc, "function", None)
+                    if fn:
+                        if fn.name:
+                            state["name"] = fn.name
+                            yield {
+                                "type": "tool_call_init",
+                                "index": idx,
+                                "id": state["id"],
+                                "name": state["name"],
+                            }
+                        if fn.arguments:
+                            state["arguments"] += fn.arguments
+                            yield {
+                                "type": "tool_call_arg_delta",
+                                "index": idx,
+                                "delta": fn.arguments,
+                            }
+
+        # 聚合最终 tool_calls
+        final_tool_calls = None
+        if tool_calls_state:
+            final_tool_calls = [
+                {
+                    "id": s["id"],
+                    "function": {"name": s["name"], "arguments": s["arguments"]},
+                }
+                for _, s in sorted(tool_calls_state.items())
+            ]
+
+        # 构造 raw_assistant_message — DeepSeek thinking 多轮要求带 reasoning_content 回传
+        raw_assistant_msg: Dict[str, Any] = {
+            "role": "assistant",
+            "content": full_content or None,
+        }
+        if final_tool_calls:
+            raw_assistant_msg["tool_calls"] = [
+                {
+                    "id": tc["id"],
+                    "type": "function",
+                    "function": tc["function"],
+                }
+                for tc in final_tool_calls
+            ]
+        if full_reasoning:
+            raw_assistant_msg["reasoning_content"] = full_reasoning
+
+        prompt_tok = usage_obj.prompt_tokens if usage_obj else 0
+        completion_tok = usage_obj.completion_tokens if usage_obj else 0
+        cost = _estimate_cost(final_model, prompt_tok, completion_tok)
+
+        yield {
+            "type": "done",
+            "content": full_content,
+            "reasoning_content": full_reasoning,
+            "tool_calls": final_tool_calls,
+            "raw_assistant_message": raw_assistant_msg,
+            "finish_reason": finish_reason,
+            "model": final_model,
+            "usage": {
+                "prompt_tokens": prompt_tok,
+                "completion_tokens": completion_tok,
+                "cost_usd": cost,
+            },
+        }
 
     async def embed(
         self, texts: List[str], model: Optional[str] = None

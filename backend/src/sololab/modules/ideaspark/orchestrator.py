@@ -221,16 +221,20 @@ class Orchestrator:
 
         async def _run_agent(name, runner):
             try:
-                messages = await runner.run(
+                messages: List[Message] = []
+                async for ev in runner.run_stream(
                     topic,
                     context_messages=self._history_seed_ideas if self._is_continuation else None,
                     task_prompt=continuation_prompt if continuation_prompt else "",
                     doc_context=self.doc_context,
                     is_continuation=self._is_continuation,
-                )
+                ):
+                    if ev["type"] == "agent_done_with_messages":
+                        messages = ev["messages"]
+                    else:
+                        # tool / agent_reasoning_delta / agent_content_delta 实时透传
+                        await queue.put(ev)
                 self.agent_states[name] = runner.state
-                for tool_event in runner.tool_events:
-                    await queue.put(tool_event)
                 await queue.put({"type": "agent", "agent": name, "action": "done", "message_count": len(messages)})
                 for msg in messages:
                     self.blackboard.append(msg)
@@ -286,7 +290,7 @@ class Orchestrator:
         critic_config = get_persona("critic")
 
         for i in range(iterations):
-            # Critic 提出批评
+            # Critic 提出批评（流式）
             yield {"type": "agent", "agent": "critic", "action": f"reviewing group {group_idx + 1}, round {i + 1}"}
             critic_runner = AgentRunner(critic_config, self.llm, self.tools)
             task_prompt = (
@@ -294,17 +298,22 @@ class Orchestrator:
                 f"找出弱点并提出改进建议。\n\n"
                 + "\n".join(f"- {m.content}" for m in group)
             )
-            critiques = await critic_runner.run(self.user_topic, context_messages=group, task_prompt=task_prompt, doc_context=self.doc_context)
+            critiques: List[Message] = []
+            async for ev in critic_runner.run_stream(
+                self.user_topic, context_messages=group, task_prompt=task_prompt, doc_context=self.doc_context
+            ):
+                if ev["type"] == "agent_done_with_messages":
+                    critiques = ev["messages"]
+                else:
+                    yield ev
             self.agent_states["critic"] = critic_runner.state
-            for tool_event in critic_runner.tool_events:
-                yield tool_event
 
             for msg in critiques:
                 self.blackboard.append(msg)
                 yield {"type": "agent", "agent": "critic", "action": "critique", "content": msg.content}
                 yield msg
 
-            # Connector 综合
+            # Connector 综合（流式）
             yield {"type": "agent", "agent": "connector", "action": f"synthesizing group {group_idx + 1}, round {i + 1}"}
             conn_runner = AgentRunner(connector_config, self.llm, self.tools)
             task_prompt = (
@@ -312,7 +321,14 @@ class Orchestrator:
                 f"通过结合优势和解决弱点来整合出改进后的创意。"
             )
             all_context = group + critiques
-            syntheses = await conn_runner.run(self.user_topic, context_messages=all_context, task_prompt=task_prompt, doc_context=self.doc_context)
+            syntheses: List[Message] = []
+            async for ev in conn_runner.run_stream(
+                self.user_topic, context_messages=all_context, task_prompt=task_prompt, doc_context=self.doc_context
+            ):
+                if ev["type"] == "agent_done_with_messages":
+                    syntheses = ev["messages"]
+                else:
+                    yield ev
             self.agent_states["connector"] = conn_runner.state
 
             for msg in syntheses:
