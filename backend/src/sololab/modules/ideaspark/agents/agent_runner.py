@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
 from typing import Any, AsyncGenerator, Dict, List, Optional
@@ -182,18 +183,33 @@ class AgentRunner:
 
             # ── 通过 dispatcher 执行每个 tool_call，事件实时上吐 ──
             for tc in tool_calls:
+                tool_name = tc["function"]["name"]
+                # 工具开始事件：让前端立刻显示"正在调用 X"
+                try:
+                    raw_args = tc["function"].get("arguments", "")
+                    parsed_args = json.loads(raw_args) if raw_args else {}
+                    preview_query = parsed_args.get("query", "")
+                except Exception:
+                    preview_query = ""
+                yield {
+                    "type": "tool_call_started",
+                    "agent": self.config.name,
+                    "tool": tool_name,
+                    "tool_id": tc.get("id", ""),
+                    "query": preview_query,
+                }
+
                 existing = len(self._dispatcher.events)
                 tool_result = await self._dispatcher.execute(tc)
-                import json as _json
 
                 messages.append(
                     {
                         "role": "tool",
                         "tool_call_id": tc["id"],
-                        "content": _json.dumps(tool_result, ensure_ascii=False),
+                        "content": json.dumps(tool_result, ensure_ascii=False),
                     }
                 )
-                # yield dispatcher 新追加的事件（通常每次 1 条）
+                # yield dispatcher 新追加的事件（通常每次 1 条 "tool" 完成事件）
                 for ev in self._dispatcher.events[existing:]:
                     yield ev
 

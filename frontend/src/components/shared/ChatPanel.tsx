@@ -124,6 +124,10 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
         // 实时把 token 增量追加到当前 stream entry，PipelineView 会聚合为 streaming 预览
         sessionStore.appendEventToLastEntry({ type: 'agent_content_delta', agent, delta });
       },
+      onToolCallStarted: (agent, tool, query, toolId) => {
+        // 工具调用启动事件：让前端实时显示"正在调用 X 工具"
+        sessionStore.appendEventToLastEntry({ type: 'tool_call_started', agent, tool, query, tool_id: toolId });
+      },
       // onAgentReasoningDelta: 暂不渲染（thinking token 噪声大），后续若需可加
       onVote: (ideaId, content, author, eloScore, rank) => {
         ideaStore.setTopIdeas([
@@ -145,6 +149,10 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
         setIsStreaming(false);
         sessionStore.appendEventToLastEntry({ type: 'done', top_ideas: topIdeas, cost_usd: costUsd });
         sessionStore.fetchSessions(moduleId);
+        // 完成后自动切到「创意」标签页让用户直接看 Top 结果
+        if (topIdeas && topIdeas.length > 0) {
+          ideaStore.setActiveTab('board');
+        }
       },
       onError: (message) => {
         taskStore.setStatus('failed');
@@ -182,10 +190,10 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
               IdeaSpark
             </h3>
             <p className="max-w-xs text-[13px] leading-relaxed text-muted-foreground/70">
-              输入研究主题，多智能体将协作生成创新性研究创意
+              输入一个研究主题，5 个智能体会协作给出 Top 创意
             </p>
             <p className="mt-2.5 max-w-xs text-[11px] text-muted-foreground/40">
-              支持上传 PDF 参考文献，让 AI 基于论文内容生成创意
+              支持上传 PDF 参考文献作为生成创意的背景资料
             </p>
           </div>
         )}
@@ -216,7 +224,7 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-warm)] animate-pulse" style={{ animationDelay: '150ms' }} />
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-warm)] animate-pulse" style={{ animationDelay: '300ms' }} />
             </span>
-            <span className="tracking-wide">智能体协作中</span>
+            <span className="tracking-wide">5 个智能体正在工作</span>
           </div>
         )}
 

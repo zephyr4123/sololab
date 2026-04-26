@@ -8,6 +8,7 @@ export type SSEEvent =
   | { type: 'idea'; id: string; content: string; author: string }
   | { type: 'agent_reasoning_delta'; agent: string; delta: string }
   | { type: 'agent_content_delta'; agent: string; delta: string }
+  | { type: 'tool_call_started'; agent: string; tool: string; tool_id?: string; query?: string }
   | { type: 'vote'; idea_id: string; content: string; author: string; elo_score: number; rank: number; round: number }
   | { type: 'task_created'; task_id: string; session_id?: string }
   | { type: 'done'; top_ideas?: Array<{ id: string; content: string; author: string; elo_score: number }>; cost_usd?: number }
@@ -38,6 +39,7 @@ export interface StreamHandlers {
   onIdea?: (id: string, content: string, author: string) => void;
   onAgentReasoningDelta?: (agent: string, delta: string) => void;
   onAgentContentDelta?: (agent: string, delta: string) => void;
+  onToolCallStarted?: (agent: string, tool: string, query?: string, toolId?: string) => void;
   onVote?: (ideaId: string, content: string, author: string, eloScore: number, rank: number) => void;
   onDone?: (topIdeas?: Array<{ id: string; content: string; author: string; elo_score: number }>, costUsd?: number) => void;
   onError?: (message: string) => void;

@@ -35,17 +35,17 @@ export function IdeaReport() {
         md += `---\n\n`;
       }
 
-      md += `## 方法说明\n\n`;
-      md += `本报告由 SoloLab IdeaSpark 模块生成，采用多智能体协作的分离-汇聚流程：\n\n`;
-      md += `1. **分离阶段** — 发散者和领域专家并行独立生成创意\n`;
-      md += `2. **语义聚类** — 使用 K-Means + 嵌入向量按语义相似度分组\n`;
-      md += `3. **汇聚阶段** — 批评者和连接者分组讨论，扩展/组合/优化\n`;
-      md += `4. **全局综合** — 连接者跨组融合最佳创意\n`;
-      md += `5. **锦标赛评估** — 基于 Elo 评分的成对比较排名\n`;
+      md += `## 生成流程\n\n`;
+      md += `本报告由 SoloLab IdeaSpark 生成，5 个智能体按以下流程协作：\n\n`;
+      md += `1. **生成创意** — 发散者和领域专家各自独立提出创意\n`;
+      md += `2. **创意分组** — 按相似度把创意归类到不同小组\n`;
+      md += `3. **小组评议** — 审辩者指出问题，整合者给出改进\n`;
+      md += `4. **整合最佳** — 整合者汇总各组优秀创意，去重补强\n`;
+      md += `5. **Elo 排序** — 评审者成对比较，按 Elo 分排出最终顺序\n`;
 
       setReport(md);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Report generation failed');
+      setError(e instanceof Error ? e.message : '报告生成失败，请重试');
     } finally {
       setLoading(false);
     }
@@ -66,8 +66,8 @@ export function IdeaReport() {
     return (
       <div className="flex flex-1 items-center justify-center text-muted-foreground text-sm">
         {phase === 'idle'
-          ? '提交研究主题并等待生成完成后，可在此导出报告'
-          : '等待创意生成完成...'}
+          ? '生成 Top 创意后，可在这里导出 Markdown 报告'
+          : '正在生成创意，完成后即可导出...'}
       </div>
     );
   }

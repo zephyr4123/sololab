@@ -12,6 +12,7 @@ import type { StreamHandlers } from '@/types/stream';
 import { ChatPanel } from '@/components/shared/ChatPanel';
 import { IdeaBoard } from './IdeaBoard';
 import { IdeaReport } from './IdeaReport';
+import { ProcessSidebar } from './ProcessSidebar';
 
 // Sidebar components
 import { ConversationHistory } from '@/components/shared/ConversationHistory';
@@ -21,7 +22,10 @@ import { DocumentManager } from '@/components/shared/DocumentManager';
 function IdeaSparkSidebar({ moduleId }: { moduleId: string }) {
   return (
     <>
-      <ConversationHistory moduleId={moduleId} />
+      <ProcessSidebar />
+      <div className="border-t border-border/30 pt-5">
+        <ConversationHistory moduleId={moduleId} />
+      </div>
       <div className="border-t border-border/30 pt-5">
         <DocumentManager />
       </div>
@@ -37,6 +41,16 @@ registerPlugin('ideaspark', {
   ],
 
   sidebar: { component: IdeaSparkSidebar },
+
+  // Bind active tab to ideaspark-store so onDone can auto-switch to 'board'
+  useTabController() {
+    const activeTab = useIdeaSparkStore((s) => s.activeTab);
+    const setActiveTab = useIdeaSparkStore((s) => s.setActiveTab);
+    return {
+      activeTab,
+      setActiveTab: (id: string) => setActiveTab(id as 'chat' | 'board' | 'report'),
+    };
+  },
 
   createStreamHandlers(): Partial<StreamHandlers> {
     const spark = useIdeaSparkStore.getState();

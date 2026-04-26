@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useMemo, memo } from 'react';
+import { useState, useMemo, useEffect, memo } from 'react';
 import {
   Sparkles, Search, MessageSquare, Brain, Scale, Bot,
-  Globe, BookOpen, FileText, Trophy, CheckCircle, AlertTriangle,
+  Globe, BookOpen, FileText, CheckCircle, AlertTriangle,
   ChevronDown, ChevronRight, Loader2,
 } from 'lucide-react';
 import { MarkdownViewer } from './MarkdownViewer';
@@ -16,12 +16,12 @@ interface StreamEvent {
 // ─── Constants ───────────────────────────────────────────────
 
 const PHASE_META: Record<string, { label: string; description: string }> = {
-  separate:   { label: '发散生成', description: '发散者和领域专家独立探索创意' },
-  cluster:    { label: '语义聚类', description: '按语义相似度将创意分组' },
-  together:   { label: '分组讨论', description: '审辩者质疑 + 整合者综合' },
-  synthesize: { label: '全局综合', description: '跨组去重与融合' },
-  evaluate:   { label: '锦标赛评估', description: 'Elo 评分排名 Top 创意' },
-  converged:  { label: '已收敛', description: 'Top 创意稳定，流程结束' },
+  separate:   { label: '生成创意',   description: '发散者和领域专家各自独立提出创意' },
+  cluster:    { label: '创意分组',   description: '按相似度把创意归类' },
+  together:   { label: '小组评议',   description: '审辩者指出问题，整合者给出改进' },
+  synthesize: { label: '整合最佳',   description: '汇总各组的优秀创意，去重补强' },
+  evaluate:   { label: 'Elo 排序',   description: '成对比较，选出 Top 创意' },
+  converged:  { label: '已完成',     description: 'Top 创意已确定' },
 };
 
 const PHASE_ORDER = ['separate', 'cluster', 'together', 'synthesize', 'evaluate'];
@@ -36,17 +36,26 @@ const AGENT_ICONS: Record<string, typeof Brain> = {
   connector: Brain, evaluator: Scale,
 };
 
-const AGENT_COLORS: Record<string, string> = {
-  divergent: 'border-purple-200 bg-purple-50/50 dark:border-purple-700/50 dark:bg-purple-950/30',
-  expert: 'border-blue-200 bg-blue-50/50 dark:border-blue-700/50 dark:bg-blue-950/30',
-  critic: 'border-red-200 bg-red-50/50 dark:border-red-700/50 dark:bg-red-950/30',
-  connector: 'border-green-200 bg-green-50/50 dark:border-green-700/50 dark:bg-green-950/30',
-  evaluator: 'border-amber-200 bg-amber-50/50 dark:border-amber-700/50 dark:bg-amber-950/30',
+const AGENT_ACCENT_DOT: Record<string, string> = {
+  divergent: 'bg-purple-400',
+  expert: 'bg-blue-400',
+  critic: 'bg-red-400',
+  connector: 'bg-green-400',
+  evaluator: 'bg-amber-400',
 };
 
-const AGENT_ACCENT: Record<string, string> = {
-  divergent: 'text-purple-700 dark:text-purple-400', expert: 'text-blue-700 dark:text-blue-400', critic: 'text-red-700 dark:text-red-400',
-  connector: 'text-green-700 dark:text-green-400', evaluator: 'text-amber-700 dark:text-amber-400',
+const TOOL_LABELS: Record<string, string> = {
+  web_search: 'Web 搜索',
+  arxiv_search: 'arXiv 论文搜索',
+  scholar_search: 'Scholar 学术搜索',
+  doc_parse: '文档解析',
+};
+
+const TOOL_ICONS: Record<string, typeof Globe> = {
+  web_search: Globe,
+  arxiv_search: BookOpen,
+  scholar_search: BookOpen,
+  doc_parse: FileText,
 };
 
 // ─── Phase grouping logic ────────────────────────────────────
@@ -58,13 +67,23 @@ interface PhaseGroup {
   events: StreamEvent[];
 }
 
-function groupEventsByPhase(events: StreamEvent[]): { rounds: Map<number, PhaseGroup[]>; currentPhase: string; currentRound: number } {
+function groupEventsByPhase(events: StreamEvent[]): {
+  rounds: Map<number, PhaseGroup[]>;
+  currentPhase: string;
+  currentRound: number;
+  isDone: boolean;
+} {
   const rounds = new Map<number, PhaseGroup[]>();
   let currentPhase = '';
   let currentRound = 1;
   let currentGroup: PhaseGroup | null = null;
+  let isDone = false;
 
   for (const event of events) {
+    if (event.type === 'done') {
+      isDone = true;
+      continue;
+    }
     if (event.type === 'status') {
       currentPhase = event.phase || '';
       if (event.round) currentRound = event.round;
@@ -86,8 +105,7 @@ function groupEventsByPhase(events: StreamEvent[]): { rounds: Map<number, PhaseG
       continue;
     }
 
-    if (event.type === 'done' || event.type === 'error' || event.type === 'task_created' || event.type === 'doc_context') {
-      // These are top-level events, not part of a phase
+    if (event.type === 'error' || event.type === 'task_created' || event.type === 'doc_context') {
       continue;
     }
 
@@ -96,7 +114,7 @@ function groupEventsByPhase(events: StreamEvent[]): { rounds: Map<number, PhaseG
     }
   }
 
-  return { rounds, currentPhase, currentRound };
+  return { rounds, currentPhase, currentRound, isDone };
 }
 
 // ─── PipelineView Component ──────────────────────────────────
@@ -106,7 +124,7 @@ interface PipelineViewProps {
 }
 
 export const PipelineView = memo(function PipelineView({ events }: PipelineViewProps) {
-  const { rounds, currentPhase, currentRound } = useMemo(() => groupEventsByPhase(events), [events]);
+  const { rounds, currentPhase, currentRound, isDone } = useMemo(() => groupEventsByPhase(events), [events]);
 
   const doneEvent = events.find(e => e.type === 'done');
   const errorEvent = events.find(e => e.type === 'error');
@@ -115,8 +133,7 @@ export const PipelineView = memo(function PipelineView({ events }: PipelineViewP
   if (events.length === 0) return null;
 
   return (
-    <div className="space-y-4">
-      {/* Document context injection notice */}
+    <div className="space-y-3">
       {docContextEvent && <DocContextSection event={docContextEvent} />}
       {Array.from(rounds.entries()).map(([roundNum, phases]) => (
         <RoundSection
@@ -124,7 +141,8 @@ export const PipelineView = memo(function PipelineView({ events }: PipelineViewP
           roundNum={roundNum}
           phases={phases}
           currentPhase={roundNum === currentRound ? currentPhase : ''}
-          isCurrentRound={roundNum === currentRound}
+          isCurrentRound={roundNum === currentRound && !isDone}
+          isDone={isDone}
         />
       ))}
 
@@ -136,29 +154,35 @@ export const PipelineView = memo(function PipelineView({ events }: PipelineViewP
 
 // ─── Round Section ───────────────────────────────────────────
 
-function RoundSection({ roundNum, phases, currentPhase, isCurrentRound }: {
+function RoundSection({ roundNum, phases, currentPhase, isCurrentRound, isDone }: {
   roundNum: number;
   phases: PhaseGroup[];
   currentPhase: string;
   isCurrentRound: boolean;
+  isDone: boolean;
 }) {
   return (
-    <div className="space-y-3">
-      {/* Round header */}
+    <div className="space-y-2.5">
       <div className="flex items-center gap-3">
-        <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground/60">
-          Round {roundNum}
+        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/50">
+          第 {roundNum} 轮
         </div>
-        <div className="h-px flex-1 bg-border/60" />
+        <div className="h-px flex-1 bg-border/40" />
       </div>
 
-      {/* Progress bar */}
       <ProgressBar phases={phases} currentPhase={currentPhase} isActive={isCurrentRound} />
 
-      {/* Phase sections */}
-      {phases.map((group, idx) => (
-        <PhaseSection key={`${group.phase}-${idx}`} group={group} isActive={isCurrentRound && group.phase === currentPhase} />
-      ))}
+      {phases.map((group, idx) => {
+        const isPhaseActive = isCurrentRound && group.phase === currentPhase;
+        return (
+          <PhaseSection
+            key={`${group.phase}-${idx}`}
+            group={group}
+            isActive={isPhaseActive}
+            isDone={isDone}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -173,7 +197,7 @@ function ProgressBar({ phases, currentPhase, isActive }: {
   const completedPhases = new Set(phases.map(p => p.phase));
 
   return (
-    <div className="flex items-center gap-1 rounded-lg bg-muted/30 px-3 py-2">
+    <div className="flex items-center gap-1 rounded-lg bg-muted/20 px-2.5 py-1.5">
       {PHASE_ORDER.map((phase, idx) => {
         const isCompleted = completedPhases.has(phase) && phase !== currentPhase;
         const isCurrent = isActive && phase === currentPhase;
@@ -181,19 +205,25 @@ function ProgressBar({ phases, currentPhase, isActive }: {
 
         return (
           <div key={phase} className="flex items-center gap-1">
-            {idx > 0 && <div className={`h-px w-4 ${isCompleted || isCurrent ? 'bg-primary/40' : 'bg-border'}`} />}
+            {idx > 0 && (
+              <div
+                className={`h-px w-3 ${
+                  isCompleted || isCurrent ? 'bg-[var(--color-warm)]/40' : 'bg-border/50'
+                }`}
+              />
+            )}
             <div
-              className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${
+              className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-medium transition-all ${
                 isCurrent
-                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  ? 'bg-[var(--color-warm)]/15 text-[var(--color-warm)]'
                   : isCompleted
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground/50'
+                    ? 'text-foreground/55'
+                    : 'text-muted-foreground/30'
               }`}
               title={meta?.description}
             >
-              {isCurrent && <Loader2 className="h-3 w-3 animate-spin" />}
-              {isCompleted && <CheckCircle className="h-3 w-3" />}
+              {isCurrent && <Loader2 className="h-2.5 w-2.5 animate-spin" />}
+              {isCompleted && <CheckCircle className="h-2.5 w-2.5" />}
               {meta?.label || phase}
             </div>
           </div>
@@ -205,34 +235,68 @@ function ProgressBar({ phases, currentPhase, isActive }: {
 
 // ─── Phase Section ───────────────────────────────────────────
 
-function PhaseSection({ group, isActive }: { group: PhaseGroup; isActive: boolean }) {
-  const [expanded, setExpanded] = useState(true);
+function PhaseSection({ group, isActive, isDone }: { group: PhaseGroup; isActive: boolean; isDone: boolean }) {
+  // 默认折叠：done 后全部折叠；只展开当前活跃阶段
+  const [expanded, setExpanded] = useState(isActive);
+
+  // 当 phase 状态变化时自动调整折叠状态
+  useEffect(() => {
+    if (isActive) setExpanded(true);
+    else if (isDone) setExpanded(false);
+  }, [isActive, isDone]);
+
   const meta = PHASE_META[group.phase];
+  const ideaCount = group.events.filter(e => e.type === 'idea').length;
+  const toolCount = group.events.filter(e => e.type === 'tool').length;
 
   return (
-    <div className={`rounded-xl border transition-all ${isActive ? 'border-primary/30 shadow-sm' : 'border-border/60'}`}>
-      {/* Phase header */}
+    <div
+      className={`rounded-lg border transition-all ${
+        isActive ? 'border-[var(--color-warm)]/30 bg-[var(--color-warm)]/[0.02]' : 'border-border/40'
+      }`}
+    >
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-2 px-4 py-2.5 text-left"
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-foreground/[0.02] transition-colors"
       >
-        {expanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
-        <span className="text-sm font-semibold">{meta?.label || group.phase}</span>
-        <span className="text-xs text-muted-foreground">{meta?.description}</span>
-        {group.meta.ideaCount != null && (
-          <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium">{group.meta.ideaCount} 创意</span>
-        )}
-        {group.meta.groupCount != null && (
-          <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium">{group.meta.groupCount} 组</span>
-        )}
-        {group.meta.candidateCount != null && (
-          <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium">{group.meta.candidateCount} 候选</span>
-        )}
-        {isActive && <Loader2 className="ml-auto h-3.5 w-3.5 animate-spin text-primary" />}
+        {expanded
+          ? <ChevronDown className="h-3 w-3 text-muted-foreground/40" />
+          : <ChevronRight className="h-3 w-3 text-muted-foreground/40" />}
+        <span className="text-[12.5px] font-medium text-foreground/80">
+          {meta?.label || group.phase}
+        </span>
+        <span className="text-[11px] text-muted-foreground/50">
+          {meta?.description}
+        </span>
+
+        {/* Inline meta badges */}
+        <div className="ml-auto flex items-center gap-1.5">
+          {group.meta.ideaCount != null && (
+            <span className="text-[10px] text-muted-foreground/45 tabular-nums">
+              {group.meta.ideaCount} 创意
+            </span>
+          )}
+          {group.meta.groupCount != null && (
+            <span className="text-[10px] text-muted-foreground/45 tabular-nums">
+              {group.meta.groupCount} 组
+            </span>
+          )}
+          {group.meta.candidateCount != null && (
+            <span className="text-[10px] text-muted-foreground/45 tabular-nums">
+              {group.meta.candidateCount} 候选
+            </span>
+          )}
+          {toolCount > 0 && !group.meta.ideaCount && (
+            <span className="text-[10px] text-muted-foreground/30 tabular-nums">
+              {toolCount} 次搜索
+            </span>
+          )}
+          {isActive && <Loader2 className="h-3 w-3 animate-spin text-[var(--color-warm)]/70" />}
+        </div>
       </button>
 
       {expanded && group.events.length > 0 && (
-        <div className="border-t px-4 py-3">
+        <div className="border-t border-border/30 px-3 py-2">
           {group.phase === 'separate' && <SeparatePhaseView events={group.events} />}
           {group.phase === 'cluster' && <ClusterPhaseView events={group.events} />}
           {group.phase === 'together' && <TogetherPhaseView events={group.events} />}
@@ -247,10 +311,9 @@ function PhaseSection({ group, isActive }: { group: PhaseGroup; isActive: boolea
   );
 }
 
-// ─── Separate Phase: Side-by-side agents ─────────────────────
+// ─── Separate Phase: side-by-side agents ─────────────────────
 
 function SeparatePhaseView({ events }: { events: StreamEvent[] }) {
-  // Group events by agent
   const agentEvents: Record<string, StreamEvent[]> = {};
   for (const e of events) {
     const agent = e.agent || e.author || 'unknown';
@@ -261,7 +324,7 @@ function SeparatePhaseView({ events }: { events: StreamEvent[] }) {
   const agents = Object.keys(agentEvents);
 
   return (
-    <div className={`grid gap-3 ${agents.length >= 2 ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
+    <div className={`grid gap-2 ${agents.length >= 2 ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
       {agents.map(agent => (
         <AgentColumn key={agent} agent={agent} events={agentEvents[agent]} />
       ))}
@@ -271,14 +334,13 @@ function SeparatePhaseView({ events }: { events: StreamEvent[] }) {
 
 function AgentColumn({ agent, events }: { agent: string; events: StreamEvent[] }) {
   const Icon = AGENT_ICONS[agent] || Bot;
-  const color = AGENT_COLORS[agent] || 'border-gray-200 bg-gray-50/50 dark:border-gray-700/50 dark:bg-gray-800/30';
-  const accent = AGENT_ACCENT[agent] || 'text-gray-700 dark:text-gray-300';
+  const dotClass = AGENT_ACCENT_DOT[agent] || 'bg-gray-400';
 
-  const tools = events.filter(e => e.type === 'tool');
+  const toolEvents = aggregateToolEvents(events);
   const ideas = events.filter(e => e.type === 'idea');
   const doneEvent = events.find(e => e.type === 'agent' && e.action === 'done');
 
-  // 流式正文增量：在 idea 事件到达前实时拼接显示，作为 "live preview"
+  // 流式正文增量：作为 "live preview"（装饰化）
   const streamingContent = useMemo(
     () =>
       events
@@ -290,33 +352,32 @@ function AgentColumn({ agent, events }: { agent: string; events: StreamEvent[] }
   const showStreaming = streamingContent.length > 0 && ideas.length === 0;
 
   return (
-    <div className={`rounded-lg border p-3 space-y-2 ${color}`}>
-      <div className={`flex items-center gap-2 text-xs font-semibold ${accent}`}>
-        <Icon className="h-4 w-4" />
-        <span>{AGENT_NAMES[agent] || agent}</span>
-        {doneEvent && <CheckCircle className="ml-auto h-3.5 w-3.5 text-green-500 dark:text-green-400" />}
+    <div className="rounded-md border border-border/40 bg-background/50 p-2.5 space-y-1.5">
+      <div className="flex items-center gap-1.5 text-[11px] font-medium">
+        <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} />
+        <Icon className="h-3 w-3 text-muted-foreground/55" />
+        <span className="text-foreground/70">{AGENT_NAMES[agent] || agent}</span>
+        {doneEvent && <CheckCircle className="ml-auto h-3 w-3 text-[var(--color-warm)]/50" />}
       </div>
 
-      {/* Tool calls */}
-      {tools.length > 0 && (
-        <div className="space-y-1">
-          {tools.map((t, i) => (
-            <ToolCallCard key={i} event={t} />
-          ))}
+      {/* Tool calls (薄行) */}
+      {toolEvents.length > 0 && (
+        <div className="space-y-0.5">
+          {toolEvents.map((t, i) => <ToolCallRow key={i} event={t} />)}
         </div>
       )}
 
-      {/* Streaming live preview（在最终 idea 到达前显示）*/}
+      {/* 流式预览 — 装饰化（italic + 低对比度，类似思考流） */}
       {showStreaming && (
-        <div className="rounded-md border-l-2 border-primary/40 bg-white/60 dark:bg-white/5 p-2">
-          <MarkdownViewer content={streamingContent} compact />
-          <span className="ml-1 inline-block h-3 w-2 align-middle bg-primary/60 animate-pulse" />
+        <div className="text-[12px] italic text-muted-foreground/55 leading-[1.65] line-clamp-6">
+          {streamingContent}
+          <span className="ml-1 inline-block h-2.5 w-1 align-middle bg-[var(--color-warm)]/40 animate-pulse" />
         </div>
       )}
 
-      {/* Ideas（最终结果）*/}
+      {/* 最终创意 */}
       {ideas.map((idea, i) => (
-        <div key={i} className="rounded-md bg-white/60 dark:bg-white/5 p-2">
+        <div key={i} className="rounded-sm bg-foreground/[0.02] p-2 border-l-2 border-[var(--color-warm)]/30">
           <MarkdownViewer content={idea.content} compact />
         </div>
       ))}
@@ -328,19 +389,16 @@ function AgentColumn({ agent, events }: { agent: string; events: StreamEvent[] }
 
 function ClusterPhaseView({ events }: { events: StreamEvent[] }) {
   return (
-    <div className="text-center text-sm text-muted-foreground">
-      <div className="inline-flex items-center gap-2 rounded-full bg-muted/50 px-4 py-1.5">
-        <div className="h-2 w-2 rounded-full bg-blue-400 dark:bg-blue-500" />
-        创意已按语义相似度完成聚类
-      </div>
+    <div className="text-center text-[11.5px] text-muted-foreground/60 py-1">
+      创意已按相似度完成分组
     </div>
   );
 }
 
-// ─── Together Phase: Grouped discussion ──────────────────────
+// ─── Together Phase: grouped discussion ──────────────────────
 
 function TogetherPhaseView({ events }: { events: StreamEvent[] }) {
-  // Parse group information from agent action strings like "reviewing group 1, round 1"
+  // Group events by parsing "group N" out of agent action strings
   const groups: Record<string, StreamEvent[]> = {};
   let currentGroupKey = 'default';
 
@@ -358,80 +416,80 @@ function TogetherPhaseView({ events }: { events: StreamEvent[] }) {
   const groupKeys = Object.keys(groups);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {groupKeys.map(key => {
         const groupEvents = groups[key];
         const groupNum = key.replace('group-', '');
         const critiques = groupEvents.filter(e => e.type === 'agent' && e.action === 'critique');
         const syntheses = groupEvents.filter(e => e.type === 'agent' && e.action === 'synthesis');
-        const tools = groupEvents.filter(e => e.type === 'tool');
+        const toolEvents = aggregateToolEvents(groupEvents);
 
-        // 拼接当前组内 critic / connector 的流式增量
         const criticStreaming = groupEvents
           .filter(e => e.type === 'agent_content_delta' && e.agent === 'critic')
           .map(e => e.delta || '').join('');
         const connectorStreaming = groupEvents
           .filter(e => e.type === 'agent_content_delta' && e.agent === 'connector')
           .map(e => e.delta || '').join('');
-        // 组内每多一条最终 critique/synthesis 就吞掉一段 streaming（粗粒度）
         const showCriticStreaming = criticStreaming.length > 0 && critiques.length === 0;
         const showConnectorStreaming = connectorStreaming.length > 0 && syntheses.length === 0;
 
         return (
-          <div key={key} className="rounded-lg border border-dashed border-border/80 p-3 space-y-2">
-            <div className="text-xs font-semibold text-muted-foreground">
-              {key === 'default' ? '讨论' : `讨论组 ${groupNum}`}
+          <div key={key} className="rounded-md border border-dashed border-border/50 p-2 space-y-1.5">
+            <div className="text-[11px] font-medium text-muted-foreground/70">
+              {key === 'default' ? '小组讨论' : `第 ${groupNum} 组`}
             </div>
 
-            {tools.length > 0 && (
-              <div className="space-y-1">
-                {tools.map((t, i) => <ToolCallCard key={i} event={t} />)}
+            {toolEvents.length > 0 && (
+              <div className="space-y-0.5">
+                {toolEvents.map((t, i) => <ToolCallRow key={i} event={t} />)}
               </div>
             )}
 
-            {showCriticStreaming && (
-              <div className="rounded-md border border-red-200/60 bg-red-50/30 dark:border-red-700/40 dark:bg-red-950/20 p-2.5">
-                <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-red-700 dark:text-red-400">
-                  <MessageSquare className="h-3 w-3" />
-                  审辩者
-                  <span className="ml-auto h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" />
+            {/* 审辩者：流式装饰 → 最终内容 (二选一) */}
+            {showCriticStreaming ? (
+              <div className="rounded-sm bg-red-50/40 dark:bg-red-950/15 p-1.5 border-l-2 border-red-300/40">
+                <div className="mb-0.5 flex items-center gap-1 text-[10.5px] text-red-700/70 dark:text-red-400/70">
+                  <MessageSquare className="h-2.5 w-2.5" />
+                  审辩者正在指出问题
                 </div>
-                <MarkdownViewer content={criticStreaming} compact />
-                <span className="ml-1 inline-block h-3 w-2 align-middle bg-red-400/60 animate-pulse" />
+                <div className="text-[12px] italic text-red-800/55 dark:text-red-300/55 leading-[1.65] line-clamp-4">
+                  {criticStreaming}
+                </div>
               </div>
-            )}
+            ) : critiques.length > 0 ? (
+              critiques.map((c, i) => (
+                <div key={`c-${i}`} className="rounded-sm bg-red-50/40 dark:bg-red-950/15 p-2 border-l-2 border-red-300/50">
+                  <div className="mb-1 flex items-center gap-1 text-[10.5px] font-medium text-red-700/80 dark:text-red-400/80">
+                    <MessageSquare className="h-2.5 w-2.5" />
+                    审辩者
+                  </div>
+                  <MarkdownViewer content={c.content} compact />
+                </div>
+              ))
+            ) : null}
 
-            {critiques.map((c, i) => (
-              <div key={`c-${i}`} className="rounded-md border border-red-200/60 bg-red-50/30 dark:border-red-700/40 dark:bg-red-950/20 p-2.5">
-                <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-red-700 dark:text-red-400">
-                  <MessageSquare className="h-3 w-3" />
-                  审辩者
+            {/* 整合者：流式装饰 → 最终内容 */}
+            {showConnectorStreaming ? (
+              <div className="rounded-sm bg-green-50/40 dark:bg-green-950/15 p-1.5 border-l-2 border-green-300/40">
+                <div className="mb-0.5 flex items-center gap-1 text-[10.5px] text-green-700/70 dark:text-green-400/70">
+                  <Brain className="h-2.5 w-2.5" />
+                  整合者正在改进
                 </div>
-                <MarkdownViewer content={c.content} compact />
-              </div>
-            ))}
-
-            {showConnectorStreaming && (
-              <div className="rounded-md border border-green-200/60 bg-green-50/30 dark:border-green-700/40 dark:bg-green-950/20 p-2.5">
-                <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-green-700 dark:text-green-400">
-                  <Brain className="h-3 w-3" />
-                  整合者
-                  <span className="ml-auto h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
+                <div className="text-[12px] italic text-green-800/55 dark:text-green-300/55 leading-[1.65] line-clamp-4">
+                  {connectorStreaming}
                 </div>
-                <MarkdownViewer content={connectorStreaming} compact />
-                <span className="ml-1 inline-block h-3 w-2 align-middle bg-green-400/60 animate-pulse" />
               </div>
-            )}
-
-            {syntheses.map((s, i) => (
-              <div key={`s-${i}`} className="rounded-md border border-green-200/60 bg-green-50/30 dark:border-green-700/40 dark:bg-green-950/20 p-2.5">
-                <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-green-700 dark:text-green-400">
-                  <Brain className="h-3 w-3" />
-                  整合者
+            ) : syntheses.length > 0 ? (
+              syntheses.map((s, i) => (
+                <div key={`s-${i}`} className="rounded-sm bg-green-50/40 dark:bg-green-950/15 p-2 border-l-2 border-green-300/50">
+                  <div className="mb-1 flex items-center gap-1 text-[10.5px] font-medium text-green-700/80 dark:text-green-400/80">
+                    <Brain className="h-2.5 w-2.5" />
+                    整合者
+                  </div>
+                  <MarkdownViewer content={s.content} compact />
                 </div>
-                <MarkdownViewer content={s.content} compact />
-              </div>
-            ))}
+              ))
+            ) : null}
           </div>
         );
       })}
@@ -445,74 +503,63 @@ function SynthesizePhaseView({ events }: { events: StreamEvent[] }) {
   const syntheses = events.filter(e => e.type === 'agent' && e.content);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       {syntheses.map((s, i) => (
-        <div key={i} className="rounded-md border border-green-200/60 bg-green-50/30 dark:border-green-700/40 dark:bg-green-950/20 p-2.5">
-          <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-green-700 dark:text-green-400">
-            <Brain className="h-3 w-3" />
-            全局整合
+        <div key={i} className="rounded-sm bg-green-50/30 dark:bg-green-950/15 p-2 border-l-2 border-green-300/50">
+          <div className="mb-1 flex items-center gap-1 text-[10.5px] font-medium text-green-700/80 dark:text-green-400/80">
+            <Brain className="h-2.5 w-2.5" />
+            整合者综合各组创意
           </div>
           <MarkdownViewer content={s.content} compact />
         </div>
       ))}
       {syntheses.length === 0 && (
-        <div className="text-center text-xs text-muted-foreground py-2">
+        <div className="text-center text-[11.5px] text-muted-foreground/60 py-1">
           <Loader2 className="inline h-3 w-3 animate-spin mr-1" />
-          正在进行跨组综合...
+          正在汇总各组的最佳创意...
         </div>
       )}
     </div>
   );
 }
 
-// ─── Evaluate Phase: Tournament ranking ──────────────────────
+// ─── Evaluate Phase: tournament ranking ──────────────────────
 
 function EvaluatePhaseView({ events }: { events: StreamEvent[] }) {
   const votes = events.filter(e => e.type === 'vote').sort((a, b) => (a.rank || 99) - (b.rank || 99));
 
   if (votes.length === 0) {
     return (
-      <div className="text-center text-xs text-muted-foreground py-2">
+      <div className="text-center text-[11.5px] text-muted-foreground/60 py-1">
         <Loader2 className="inline h-3 w-3 animate-spin mr-1" />
-        评审者正在进行锦标赛...
+        正在对创意进行最终排序...
       </div>
     );
   }
 
-  const maxElo = Math.max(...votes.map(v => v.elo_score || 1500));
-  const minElo = Math.min(...votes.map(v => v.elo_score || 1500));
-  const eloRange = maxElo - minElo || 1;
-
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       {votes.map((v, i) => {
-        const barWidth = 30 + ((v.elo_score - minElo) / eloRange) * 70;
         const isTop = i === 0;
-
         return (
           <div
             key={i}
-            className={`rounded-lg border p-3 transition-all ${
-              isTop ? 'border-amber-300 bg-amber-50/50 dark:border-amber-600/50 dark:bg-amber-950/30' : 'border-border/60'
+            className={`rounded-sm p-2 border-l-2 ${
+              isTop
+                ? 'border-[var(--color-warm)]/60 bg-[var(--color-warm)]/[0.04]'
+                : 'border-border/40 bg-foreground/[0.01]'
             }`}
           >
-            <div className="mb-1.5 flex items-center gap-2">
-              <span className={`text-sm font-bold ${isTop ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}>
+            <div className="mb-1 flex items-center gap-1.5 text-[11px]">
+              <span className={`font-bold ${isTop ? 'text-[var(--color-warm)]' : 'text-muted-foreground/55'}`}>
                 #{v.rank}
               </span>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-muted-foreground/55">
                 {AGENT_NAMES[v.author] || v.author}
               </span>
-              <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-[11px] font-mono font-bold">
+              <span className="ml-auto font-mono text-[10px] tabular-nums text-muted-foreground/45">
                 Elo {v.elo_score}
               </span>
-            </div>
-            {/* Elo bar */}
-            <div className="mb-2 h-1.5 rounded-full bg-muted/50 overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${isTop ? 'bg-amber-400 dark:bg-amber-500' : 'bg-primary/30'}`}
-                style={{ width: `${barWidth}%` }}
-              />
             </div>
             <MarkdownViewer content={v.content} compact />
           </div>
@@ -526,9 +573,9 @@ function EvaluatePhaseView({ events }: { events: StreamEvent[] }) {
 
 function GenericPhaseView({ events }: { events: StreamEvent[] }) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       {events.filter(e => e.content).map((e, i) => (
-        <div key={i} className="rounded-md border p-2.5 text-sm">
+        <div key={i} className="rounded-sm border border-border/40 p-2 text-[12.5px]">
           <MarkdownViewer content={e.content} compact />
         </div>
       ))}
@@ -536,73 +583,148 @@ function GenericPhaseView({ events }: { events: StreamEvent[] }) {
   );
 }
 
-// ─── Shared: Tool Call Card (expandable with results) ────────
+// ─── Tool Call Aggregator + Row (CodeLab-style 薄行) ─────────
 
-function ToolCallCard({ event }: { event: StreamEvent }) {
+interface AggregatedTool {
+  agent?: string;
+  tool: string;
+  query?: string;
+  status: 'running' | 'completed' | 'error';
+  success?: boolean;
+  result_count?: number;
+  results?: Array<{ title: string; url: string; snippet: string }>;
+  error?: string | null;
+}
+
+/** 把 tool_call_started + tool 事件聚合成一个工具调用记录。 */
+function aggregateToolEvents(events: StreamEvent[]): AggregatedTool[] {
+  const result: AggregatedTool[] = [];
+  const inflightByAgentTool = new Map<string, number>(); // key -> index in result
+
+  for (const e of events) {
+    if (e.type === 'tool_call_started') {
+      const key = `${e.agent || ''}:${e.tool || ''}`;
+      const idx = result.length;
+      result.push({
+        agent: e.agent,
+        tool: e.tool,
+        query: e.query,
+        status: 'running',
+      });
+      inflightByAgentTool.set(key, idx);
+    } else if (e.type === 'tool') {
+      const key = `${e.agent || ''}:${e.tool || ''}`;
+      const idx = inflightByAgentTool.get(key);
+      if (idx != null) {
+        result[idx] = {
+          agent: e.agent,
+          tool: e.tool,
+          query: e.query || result[idx].query,
+          status: e.success === false ? 'error' : 'completed',
+          success: e.success,
+          result_count: e.result_count,
+          results: e.results,
+          error: e.error,
+        };
+        inflightByAgentTool.delete(key);
+      } else {
+        // 没有配对的 started 事件（旧数据兼容）：直接显示完成态
+        result.push({
+          agent: e.agent,
+          tool: e.tool,
+          query: e.query,
+          status: e.success === false ? 'error' : 'completed',
+          success: e.success,
+          result_count: e.result_count,
+          results: e.results,
+          error: e.error,
+        });
+      }
+    }
+  }
+
+  return result;
+}
+
+function ToolCallRow({ event }: { event: AggregatedTool }) {
   const [expanded, setExpanded] = useState(false);
-  const ToolIcon = event.tool === 'web_search' ? Globe : event.tool === 'doc_parse' ? FileText : BookOpen;
-  const toolLabel = event.tool === 'web_search' ? 'Web Search'
-    : event.tool === 'arxiv_search' ? 'arXiv Search'
-    : event.tool === 'scholar_search' ? 'Scholar Search'
-    : event.tool === 'doc_parse' ? '文档解析'
-    : event.tool;
+  const Icon = TOOL_ICONS[event.tool] || BookOpen;
+  const label = TOOL_LABELS[event.tool] || event.tool;
+  const isRunning = event.status === 'running';
+  const isError = event.status === 'error';
+  const hasResults = (event.results?.length ?? 0) > 0 || !!event.error;
 
-  const results: Array<{ title: string; url: string; snippet: string }> = event.results || [];
+  const borderClass = isRunning
+    ? 'border-l-[var(--color-warm)]/60'
+    : isError
+      ? 'border-l-red-300/50'
+      : 'border-l-border/30';
 
   return (
-    <div className="rounded-lg border border-cyan-200/60 bg-cyan-50/40 dark:border-cyan-700/40 dark:bg-cyan-950/20 overflow-hidden">
-      {/* Header */}
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-[11px] hover:bg-cyan-100/30 dark:hover:bg-cyan-900/20 transition-colors"
+    <div
+      className={`border-l-2 ${borderClass} pl-2 ${isRunning ? 'tool-call-active' : ''}`}
+    >
+      <div
+        className={`flex items-center gap-1.5 py-0.5 text-[11px] ${
+          hasResults ? 'cursor-pointer hover:bg-foreground/[0.02]' : ''
+        }`}
+        onClick={hasResults ? () => setExpanded(!expanded) : undefined}
       >
-        <ToolIcon className="h-3.5 w-3.5 shrink-0 text-cyan-600 dark:text-cyan-400" />
-        <span className="font-semibold text-cyan-800 dark:text-cyan-300">{toolLabel}</span>
-        <span className="flex-1 truncate text-left text-cyan-600/80 dark:text-cyan-400/60">{event.query}</span>
-        {event.success ? (
-          <CheckCircle className="h-3 w-3 shrink-0 text-green-500 dark:text-green-400" />
+        {isRunning ? (
+          <Loader2 className="h-3 w-3 shrink-0 animate-spin text-[var(--color-warm)]/70" />
+        ) : isError ? (
+          <AlertTriangle className="h-3 w-3 shrink-0 text-red-400/70" />
         ) : (
-          <AlertTriangle className="h-3 w-3 shrink-0 text-red-500 dark:text-red-400" />
+          <Icon className="h-3 w-3 shrink-0 text-muted-foreground/35" />
         )}
-        {event.result_count > 0 && (
-          <span className="shrink-0 rounded-full bg-cyan-200/60 dark:bg-cyan-800/40 px-1.5 py-0.5 text-[10px] font-medium text-cyan-700 dark:text-cyan-300">
-            {event.result_count}
+        <span className="text-[10.5px] text-muted-foreground/45 shrink-0 tracking-wide">
+          {label}
+        </span>
+        <span className="truncate text-[11px] text-foreground/55 font-mono tracking-tight">
+          {event.query || (isRunning ? '准备中...' : '')}
+        </span>
+        {!isRunning && event.result_count != null && event.result_count > 0 && (
+          <span className="text-[10px] text-muted-foreground/30 shrink-0 tabular-nums ml-auto">
+            {event.result_count} 条
           </span>
         )}
-        {expanded ? <ChevronDown className="h-3 w-3 shrink-0 text-cyan-400 dark:text-cyan-500" /> : <ChevronRight className="h-3 w-3 shrink-0 text-cyan-400 dark:text-cyan-500" />}
-      </button>
+        {hasResults && (
+          <ChevronRight
+            className={`h-2.5 w-2.5 shrink-0 text-muted-foreground/25 transition-transform duration-200 ${
+              expanded ? 'rotate-90' : ''
+            } ${event.result_count == null ? 'ml-auto' : ''}`}
+          />
+        )}
+      </div>
 
-      {/* Results list */}
-      {expanded && results.length > 0 && (
-        <div className="border-t border-cyan-200/40 dark:border-cyan-700/30 px-2.5 py-1.5 space-y-1">
-          {results.map((r, i) => (
-            <div key={i} className="flex items-start gap-2 text-[11px]">
-              <span className="shrink-0 mt-0.5 text-cyan-400 dark:text-cyan-500 font-mono">{i + 1}.</span>
-              <div className="min-w-0 flex-1">
-                {r.url ? (
-                  <a
-                    href={r.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-cyan-700 dark:text-cyan-300 hover:underline line-clamp-1"
-                  >
-                    {r.title || r.url}
-                  </a>
-                ) : (
-                  <span className="font-medium text-cyan-700 dark:text-cyan-300 line-clamp-1">{r.title}</span>
-                )}
-                {r.snippet && (
-                  <p className="text-cyan-600/60 dark:text-cyan-400/40 line-clamp-2 mt-0.5">{r.snippet}</p>
-                )}
-              </div>
+      {expanded && (event.results?.length ?? 0) > 0 && (
+        <div className="mb-1 ml-1 space-y-0.5 border-l border-border/20 pl-2">
+          {event.results!.slice(0, 5).map((r, i) => (
+            <div key={i} className="text-[10.5px] leading-snug">
+              {r.url ? (
+                <a
+                  href={r.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-foreground/55 hover:text-[var(--color-warm)] hover:underline line-clamp-1"
+                >
+                  {i + 1}. {r.title || r.url}
+                </a>
+              ) : (
+                <span className="text-foreground/55 line-clamp-1">
+                  {i + 1}. {r.title}
+                </span>
+              )}
+              {r.snippet && (
+                <p className="text-muted-foreground/35 line-clamp-1 ml-3">{r.snippet}</p>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      {/* Error */}
       {expanded && event.error && (
-        <div className="border-t border-red-200/40 dark:border-red-700/30 px-2.5 py-1.5 text-[11px] text-red-500 dark:text-red-400">
+        <div className="mb-1 ml-1 pl-2 text-[10.5px] text-red-500/70 border-l border-red-300/30">
           {event.error}
         </div>
       )}
@@ -615,20 +737,21 @@ function ToolCallCard({ event }: { event: StreamEvent }) {
 function DocContextSection({ event }: { event: StreamEvent }) {
   const [expanded, setExpanded] = useState(false);
   return (
-    <div className="rounded-xl border border-indigo-200/60 bg-indigo-50/30 dark:border-indigo-700/40 dark:bg-indigo-950/20 p-3">
+    <div className="rounded-md border border-border/40 bg-background/40 p-2">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-2 text-xs font-medium text-indigo-700 dark:text-indigo-400"
+        className="flex w-full items-center gap-1.5 text-[11px] text-muted-foreground/65"
       >
-        <FileText className="h-3.5 w-3.5" />
-        <span>参考文献已注入</span>
-        <span className="rounded-full bg-indigo-200/60 dark:bg-indigo-800/40 px-1.5 py-0.5 text-[10px]">
-          {event.chunk_count || 0} 个相关分块
-        </span>
-        {expanded ? <ChevronDown className="ml-auto h-3 w-3" /> : <ChevronRight className="ml-auto h-3 w-3" />}
+        <FileText className="h-3 w-3" />
+        <span>已加载参考文献</span>
+        <span className="text-muted-foreground/40">·</span>
+        <span className="text-muted-foreground/45">{event.chunk_count || 0} 段相关内容</span>
+        {expanded
+          ? <ChevronDown className="ml-auto h-2.5 w-2.5" />
+          : <ChevronRight className="ml-auto h-2.5 w-2.5" />}
       </button>
       {expanded && event.preview && (
-        <div className="mt-2 rounded-md bg-white/60 dark:bg-white/5 p-2 text-[11px] text-indigo-600/80 dark:text-indigo-400/60 whitespace-pre-wrap line-clamp-6">
+        <div className="mt-1.5 rounded-sm bg-foreground/[0.02] p-2 text-[11px] text-muted-foreground/65 whitespace-pre-wrap line-clamp-6">
           {event.preview}
         </div>
       )}
@@ -639,29 +762,37 @@ function DocContextSection({ event }: { event: StreamEvent }) {
 // ─── Done / Error Sections ───────────────────────────────────
 
 function DoneSection({ event }: { event: StreamEvent }) {
+  const count = event.top_ideas?.length || 0;
   return (
-    <div className="rounded-xl border border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 dark:border-green-700/40 dark:from-green-950/30 dark:to-emerald-950/30 p-4 text-center">
-      <div className="flex items-center justify-center gap-2">
-        <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
-        <p className="text-sm font-semibold text-green-800 dark:text-green-300">
-          创意生成完成！共产出 {event.top_ideas?.length || 0} 个 Top 创意
+    <div className="rounded-lg border border-[var(--color-warm)]/30 bg-[var(--color-warm)]/[0.04] p-3">
+      <div className="flex items-center gap-2">
+        <CheckCircle className="h-4 w-4 text-[var(--color-warm)]" />
+        <p className="text-[13px] font-medium text-foreground/85">
+          已生成 {count} 个 Top 创意
         </p>
+        {event.cost_usd > 0 && (
+          <span className="ml-auto text-[11px] text-muted-foreground/60 font-mono tabular-nums">
+            ${event.cost_usd}
+          </span>
+        )}
       </div>
-      {event.cost_usd > 0 && (
-        <p className="mt-1 text-xs text-green-600 dark:text-green-400">总费用: ${event.cost_usd}</p>
-      )}
+      <p className="mt-1 text-[11.5px] text-muted-foreground/65">
+        切换到顶部「创意」标签页查看完整内容，或在「报告」标签页导出。
+      </p>
     </div>
   );
 }
 
 function ErrorSection({ event }: { event: StreamEvent }) {
   return (
-    <div className="rounded-xl border border-red-200 bg-red-50 dark:border-red-700/40 dark:bg-red-950/20 p-4">
-      <div className="flex items-center gap-2 text-sm font-semibold text-red-700 dark:text-red-400">
-        <AlertTriangle className="h-4 w-4" />
-        错误
+    <div className="rounded-lg border border-red-300/40 bg-red-50/30 dark:bg-red-950/15 p-3">
+      <div className="flex items-center gap-2 text-[12.5px] font-medium text-red-700/85 dark:text-red-400/85">
+        <AlertTriangle className="h-3.5 w-3.5" />
+        生成失败
       </div>
-      <p className="mt-1 text-sm text-red-600 dark:text-red-400">{event.message || event.error || 'Unknown error'}</p>
+      <p className="mt-1 text-[12px] text-red-600/75 dark:text-red-400/75">
+        {event.message || event.error || 'Unknown error'}
+      </p>
     </div>
   );
 }

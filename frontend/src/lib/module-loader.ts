@@ -54,6 +54,8 @@ export interface ModulePlugin {
   sidebar?: { component: ComponentType<{ moduleId: string }> };
   createStreamHandlers?: () => Partial<StreamHandlers>;
   reset?: () => void;
+  /** Optional: bind active tab to a module-specific store (e.g. ideaspark-store) */
+  useTabController?: () => { activeTab: string; setActiveTab: (id: string) => void };
 }
 
 const plugins = new Map<string, ModulePlugin>();

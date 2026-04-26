@@ -15,13 +15,13 @@ interface StreamRendererProps {
 }
 
 const PHASE_LABELS: Record<string, string> = {
-  separate: '发散生成',
-  cluster: '语义聚类',
-  together: '分组讨论',
-  synthesize: '全局综合',
-  evaluate: '综合评审',
-  converged: '已收敛',
-  done: '完成',
+  separate: '生成创意',
+  cluster: '创意分组',
+  together: '小组评议',
+  synthesize: '整合最佳',
+  evaluate: 'Elo 排序',
+  converged: '已完成',
+  done: '已完成',
 };
 
 const AGENT_COLORS: Record<string, string> = {
@@ -78,9 +78,9 @@ function StreamEventCard({ event }: { event: StreamEvent }) {
         <div className="flex items-center gap-2.5 rounded-full border border-border/50 bg-card/60 px-4 py-1.5 text-[11px] font-medium text-muted-foreground">
           <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-warm)] animate-pulse" />
           {PHASE_LABELS[event.phase] || event.phase}
-          {event.round && <span className="text-muted-foreground/50">{'\u7B2C'} {event.round} {'\u8F6E'}</span>}
-          {event.idea_count != null && <span className="text-muted-foreground/50">{event.idea_count} {'\u4E2A\u521B\u610F'}</span>}
-          {event.group_count != null && <span className="text-muted-foreground/50">{event.group_count} {'\u4E2A\u8BA8\u8BBA\u7EC4'}</span>}
+          {event.round && <span className="text-muted-foreground/50">第 {event.round} 轮</span>}
+          {event.idea_count != null && <span className="text-muted-foreground/50">{event.idea_count} 个创意</span>}
+          {event.group_count != null && <span className="text-muted-foreground/50">{event.group_count} 个小组</span>}
         </div>
       </div>
     );
@@ -136,7 +136,7 @@ function StreamEventCard({ event }: { event: StreamEvent }) {
           {event.action === 'thinking'
             ? '正在思考...'
             : event.action === 'done'
-              ? `完成 (${event.message_count || 0} 条消息)`
+              ? `已完成（${event.message_count || 0} 条输出）`
               : event.action}
         </span>
       </div>
@@ -145,7 +145,11 @@ function StreamEventCard({ event }: { event: StreamEvent }) {
 
   if (event.type === 'tool') {
     const ToolIcon = event.tool === 'web_search' ? Globe : BookOpen;
-    const toolLabel = event.tool === 'web_search' ? 'Web' : event.tool === 'arxiv_search' ? 'arXiv' : event.tool === 'scholar_search' ? 'Scholar' : event.tool;
+    const toolLabel = event.tool === 'web_search' ? 'Web 搜索'
+      : event.tool === 'arxiv_search' ? 'arXiv'
+      : event.tool === 'scholar_search' ? 'Scholar'
+      : event.tool === 'doc_parse' ? '文档解析'
+      : event.tool;
     return (
       <div className="flex items-start gap-2.5 rounded-xl border border-dashed border-border bg-card/40 px-3.5 py-2.5 text-[11px]">
         <ToolIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
@@ -161,7 +165,7 @@ function StreamEventCard({ event }: { event: StreamEvent }) {
           </div>
           <p className="mt-0.5 text-muted-foreground/60 truncate">
             {event.query}
-            {event.result_count > 0 && <span className="ml-1 text-muted-foreground/40">({event.result_count} results)</span>}
+            {event.result_count > 0 && <span className="ml-1 text-muted-foreground/40">（{event.result_count} 条结果）</span>}
           </p>
           {event.result_preview && (
             <p className="mt-0.5 text-muted-foreground/40 line-clamp-2">{event.result_preview}</p>
