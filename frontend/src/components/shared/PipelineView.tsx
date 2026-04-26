@@ -396,103 +396,148 @@ function ClusterPhaseView({ events }: { events: StreamEvent[] }) {
 }
 
 // ─── Together Phase: grouped discussion ──────────────────────
+// 用 e.group_idx + e.iteration 字段精准分组，避免多组并行时事件交错归错组
 
 function TogetherPhaseView({ events }: { events: StreamEvent[] }) {
-  // Group events by parsing "group N" out of agent action strings
-  const groups: Record<string, StreamEvent[]> = {};
-  let currentGroupKey = 'default';
-
+  // Step 1: 按 group_idx 分组（没字段的归 -1 = 兜底）
+  const groupMap = new Map<number, StreamEvent[]>();
   for (const e of events) {
-    if (e.type === 'agent' && e.action && typeof e.action === 'string') {
-      const groupMatch = e.action.match(/group\s*(\d+)/i);
-      if (groupMatch) {
-        currentGroupKey = `group-${groupMatch[1]}`;
-      }
-    }
-    if (!groups[currentGroupKey]) groups[currentGroupKey] = [];
-    groups[currentGroupKey].push(e);
+    const g = typeof e.group_idx === 'number' ? e.group_idx : -1;
+    if (!groupMap.has(g)) groupMap.set(g, []);
+    groupMap.get(g)!.push(e);
   }
 
-  const groupKeys = Object.keys(groups);
+  // Step 2: group_idx 升序，default (-1) 放最后
+  const sortedGroups = Array.from(groupMap.entries()).sort((a, b) => {
+    if (a[0] === -1) return 1;
+    if (b[0] === -1) return -1;
+    return a[0] - b[0];
+  });
 
   return (
     <div className="space-y-2">
-      {groupKeys.map(key => {
-        const groupEvents = groups[key];
-        const groupNum = key.replace('group-', '');
-        const critiques = groupEvents.filter(e => e.type === 'agent' && e.action === 'critique');
-        const syntheses = groupEvents.filter(e => e.type === 'agent' && e.action === 'synthesis');
-        const toolEvents = aggregateToolEvents(groupEvents);
+      {sortedGroups.map(([groupIdx, groupEvents]) => (
+        <GroupBlock key={groupIdx} groupIdx={groupIdx} events={groupEvents} />
+      ))}
+    </div>
+  );
+}
 
-        const criticStreaming = groupEvents
-          .filter(e => e.type === 'agent_content_delta' && e.agent === 'critic')
-          .map(e => e.delta || '').join('');
-        const connectorStreaming = groupEvents
-          .filter(e => e.type === 'agent_content_delta' && e.agent === 'connector')
-          .map(e => e.delta || '').join('');
-        const showCriticStreaming = criticStreaming.length > 0 && critiques.length === 0;
-        const showConnectorStreaming = connectorStreaming.length > 0 && syntheses.length === 0;
+function GroupBlock({ groupIdx, events }: { groupIdx: number; events: StreamEvent[] }) {
+  // 按 iteration 拆分子轮次（每个 iteration 一个完整的 critic + connector 轮次）
+  const iterMap = new Map<number, StreamEvent[]>();
+  for (const e of events) {
+    const it = typeof e.iteration === 'number' ? e.iteration : 0;
+    if (!iterMap.has(it)) iterMap.set(it, []);
+    iterMap.get(it)!.push(e);
+  }
+  const sortedIters = Array.from(iterMap.entries()).sort((a, b) => a[0] - b[0]);
+  const groupLabel = groupIdx === -1 ? '小组讨论' : `第 ${groupIdx + 1} 组`;
 
-        return (
-          <div key={key} className="rounded-md border border-dashed border-border/50 p-2 space-y-1.5">
-            <div className="text-[11px] font-medium text-muted-foreground/70">
-              {key === 'default' ? '小组讨论' : `第 ${groupNum} 组`}
-            </div>
+  return (
+    <div className="rounded-md border border-dashed border-border/50 p-2 space-y-2">
+      <div className="text-[11px] font-medium text-muted-foreground/70">
+        {groupLabel}
+        {sortedIters.length > 1 && (
+          <span className="ml-2 text-[10px] text-muted-foreground/40">
+            · {sortedIters.length} 轮迭代
+          </span>
+        )}
+      </div>
+      {sortedIters.map(([iter, iterEvents]) => (
+        <IterationBlock
+          key={iter}
+          iter={iter}
+          events={iterEvents}
+          showIterLabel={sortedIters.length > 1}
+        />
+      ))}
+    </div>
+  );
+}
 
-            {toolEvents.length > 0 && (
-              <div className="space-y-0.5">
-                {toolEvents.map((t, i) => <ToolCallRow key={i} event={t} />)}
-              </div>
-            )}
+function IterationBlock({
+  iter, events, showIterLabel,
+}: { iter: number; events: StreamEvent[]; showIterLabel: boolean }) {
+  const allTools = aggregateToolEvents(events);
+  const criticTools = allTools.filter(t => t.agent === 'critic');
+  const connectorTools = allTools.filter(t => t.agent === 'connector');
 
-            {/* 审辩者：流式装饰 → 最终内容 (二选一) */}
-            {showCriticStreaming ? (
-              <div className="rounded-sm bg-red-50/40 dark:bg-red-950/15 p-1.5 border-l-2 border-red-300/40">
-                <div className="mb-0.5 flex items-center gap-1 text-[10.5px] text-red-700/70 dark:text-red-400/70">
-                  <MessageSquare className="h-2.5 w-2.5" />
-                  审辩者正在指出问题
-                </div>
-                <div className="text-[12px] italic text-red-800/55 dark:text-red-300/55 leading-[1.65] line-clamp-4">
-                  {criticStreaming}
-                </div>
-              </div>
-            ) : critiques.length > 0 ? (
-              critiques.map((c, i) => (
-                <div key={`c-${i}`} className="rounded-sm bg-red-50/40 dark:bg-red-950/15 p-2 border-l-2 border-red-300/50">
-                  <div className="mb-1 flex items-center gap-1 text-[10.5px] font-medium text-red-700/80 dark:text-red-400/80">
-                    <MessageSquare className="h-2.5 w-2.5" />
-                    审辩者
-                  </div>
-                  <MarkdownViewer content={c.content} compact />
-                </div>
-              ))
-            ) : null}
+  const critiques = events.filter(e => e.type === 'agent' && e.action === 'critique');
+  const syntheses = events.filter(e => e.type === 'agent' && e.action === 'synthesis');
 
-            {/* 整合者：流式装饰 → 最终内容 */}
-            {showConnectorStreaming ? (
-              <div className="rounded-sm bg-green-50/40 dark:bg-green-950/15 p-1.5 border-l-2 border-green-300/40">
-                <div className="mb-0.5 flex items-center gap-1 text-[10.5px] text-green-700/70 dark:text-green-400/70">
-                  <Brain className="h-2.5 w-2.5" />
-                  整合者正在改进
-                </div>
-                <div className="text-[12px] italic text-green-800/55 dark:text-green-300/55 leading-[1.65] line-clamp-4">
-                  {connectorStreaming}
-                </div>
-              </div>
-            ) : syntheses.length > 0 ? (
-              syntheses.map((s, i) => (
-                <div key={`s-${i}`} className="rounded-sm bg-green-50/40 dark:bg-green-950/15 p-2 border-l-2 border-green-300/50">
-                  <div className="mb-1 flex items-center gap-1 text-[10.5px] font-medium text-green-700/80 dark:text-green-400/80">
-                    <Brain className="h-2.5 w-2.5" />
-                    整合者
-                  </div>
-                  <MarkdownViewer content={s.content} compact />
-                </div>
-              ))
-            ) : null}
+  const criticStreaming = events
+    .filter(e => e.type === 'agent_content_delta' && e.agent === 'critic')
+    .map(e => e.delta || '').join('');
+  const connectorStreaming = events
+    .filter(e => e.type === 'agent_content_delta' && e.agent === 'connector')
+    .map(e => e.delta || '').join('');
+  const showCriticStreaming = criticStreaming.length > 0 && critiques.length === 0;
+  const showConnectorStreaming = connectorStreaming.length > 0 && syntheses.length === 0;
+
+  return (
+    <div className="space-y-1.5">
+      {showIterLabel && (
+        <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/45">
+          第 {iter + 1} 轮
+        </div>
+      )}
+
+      {/* 审辩者工具 + 输出 */}
+      {criticTools.length > 0 && (
+        <div className="space-y-0.5">
+          {criticTools.map((t, i) => <ToolCallRow key={`ct-${i}`} event={t} />)}
+        </div>
+      )}
+      {showCriticStreaming ? (
+        <div className="rounded-sm bg-red-50/40 dark:bg-red-950/15 p-1.5 border-l-2 border-red-300/40">
+          <div className="mb-0.5 flex items-center gap-1 text-[10.5px] text-red-700/70 dark:text-red-400/70">
+            <MessageSquare className="h-2.5 w-2.5" />
+            审辩者正在指出问题
           </div>
-        );
-      })}
+          <div className="text-[12px] italic text-red-800/55 dark:text-red-300/55 leading-[1.65] line-clamp-4">
+            {criticStreaming}
+          </div>
+        </div>
+      ) : critiques.length > 0 ? (
+        critiques.map((c, i) => (
+          <div key={`c-${i}`} className="rounded-sm bg-red-50/40 dark:bg-red-950/15 p-2 border-l-2 border-red-300/50">
+            <div className="mb-1 flex items-center gap-1 text-[10.5px] font-medium text-red-700/80 dark:text-red-400/80">
+              <MessageSquare className="h-2.5 w-2.5" />
+              审辩者
+            </div>
+            <MarkdownViewer content={c.content} compact />
+          </div>
+        ))
+      ) : null}
+
+      {/* 整合者工具 + 输出 */}
+      {connectorTools.length > 0 && (
+        <div className="space-y-0.5">
+          {connectorTools.map((t, i) => <ToolCallRow key={`nt-${i}`} event={t} />)}
+        </div>
+      )}
+      {showConnectorStreaming ? (
+        <div className="rounded-sm bg-green-50/40 dark:bg-green-950/15 p-1.5 border-l-2 border-green-300/40">
+          <div className="mb-0.5 flex items-center gap-1 text-[10.5px] text-green-700/70 dark:text-green-400/70">
+            <Brain className="h-2.5 w-2.5" />
+            整合者正在改进
+          </div>
+          <div className="text-[12px] italic text-green-800/55 dark:text-green-300/55 leading-[1.65] line-clamp-4">
+            {connectorStreaming}
+          </div>
+        </div>
+      ) : syntheses.length > 0 ? (
+        syntheses.map((s, i) => (
+          <div key={`s-${i}`} className="rounded-sm bg-green-50/40 dark:bg-green-950/15 p-2 border-l-2 border-green-300/50">
+            <div className="mb-1 flex items-center gap-1 text-[10.5px] font-medium text-green-700/80 dark:text-green-400/80">
+              <Brain className="h-2.5 w-2.5" />
+              整合者
+            </div>
+            <MarkdownViewer content={s.content} compact />
+          </div>
+        ))
+      ) : null}
     </div>
   );
 }

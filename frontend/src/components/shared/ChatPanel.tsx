@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Loader2, Square, Paperclip, X, FileText, CheckCircle, Lightbulb } from 'lucide-react';
+import { Send, Loader2, Square, Paperclip, X, FileText, CheckCircle, Lightbulb, ArrowDown } from 'lucide-react';
 import { StreamRenderer } from '@/components/shared/StreamRenderer';
 import { ResilientSSEClient } from '@/lib/sse-client';
 import { useIdeaSparkStore } from '@/stores/module-stores/ideaspark-store';
@@ -23,7 +23,9 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
+  const [autoScroll, setAutoScroll] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const clientRef = useRef<ResilientSSEClient | null>(null);
   const ideaStore = useIdeaSparkStore();
@@ -31,9 +33,31 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
   const sessionStore = useSessionStore();
   const entries = sessionStore.chatEntries;
 
+  // 监听用户滚动：离底部 < 50px 视为"在底部"，恢复自动跟随；否则停止自动滚动
   useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      const distToBottom = scrollHeight - scrollTop - clientHeight;
+      setAutoScroll(distToBottom < 50);
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // 仅当 autoScroll=true 时才自动滚（用户上滑后停止跟随）。用 'auto' 而不是 'smooth'
+  // 避免高频事件下平滑动画被中断"拽回底部"的诡异感
+  useEffect(() => {
+    if (autoScroll) {
+      bottomRef.current?.scrollIntoView({ behavior: 'auto' });
+    }
+  }, [entries, autoScroll]);
+
+  const jumpToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [entries]);
+    setAutoScroll(true);
+  }, []);
 
   const pollDocStatus = useCallback(async (docId: string) => {
     const poll = async () => {
@@ -178,9 +202,9 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
   };
 
   return (
-    <div className="flex flex-1 flex-col min-h-0">
+    <div className="flex flex-1 flex-col min-h-0 relative">
       {/* Scrollable chat area */}
-      <div className="flex-1 overflow-y-auto px-2 py-3">
+      <div ref={containerRef} className="flex-1 overflow-y-auto px-2 py-3">
         {entries.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center text-center animate-fade-in">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--color-warm)]/10 border border-[var(--color-warm)]/20">
@@ -230,6 +254,18 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
 
         <div ref={bottomRef} />
       </div>
+
+      {/* "回到最新" 浮动按钮 — 用户离开底部时显示 */}
+      {!autoScroll && entries.length > 0 && (
+        <button
+          onClick={jumpToBottom}
+          className="absolute bottom-24 right-6 flex items-center gap-1.5 rounded-full border border-[var(--color-warm)]/30 bg-card/95 px-3 py-1.5 text-[11px] font-medium text-[var(--color-warm)] shadow-md transition-all hover:bg-[var(--color-warm)]/10 hover:border-[var(--color-warm)]/50 z-10 animate-fade-in backdrop-blur-sm"
+          title="跳到最新"
+        >
+          <ArrowDown className="h-3 w-3" />
+          回到最新
+        </button>
+      )}
 
       {/* Input area — unified container */}
       <div className="bg-background/80 backdrop-blur-sm px-3 py-3">

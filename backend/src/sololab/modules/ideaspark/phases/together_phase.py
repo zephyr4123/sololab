@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import AsyncGenerator, List
+from typing import Any, AsyncGenerator, Dict, List
 
 from sololab.modules.ideaspark.agents.agent_runner import AgentRunner
 from sololab.modules.ideaspark.agents.personas import get_persona
@@ -76,9 +76,20 @@ class TogetherPhase(Phase):
     async def _discuss_group(
         self, ctx: PhaseContext, group: List[Message], group_idx: int
     ) -> AsyncGenerator[PhaseEvent, None]:
-        """单组讨论：critic + connector 交替 N 轮。"""
+        """单组讨论：critic + connector 交替 N 轮。
+
+        所有 yield 出去的 dict 事件都带 group_idx + iteration 字段，
+        让前端可以靠字段精确分组（多组并行下事件交错时不会归错组）。
+        """
         critic_config = get_persona("critic")
         connector_config = get_persona("connector")
+
+        def _tag(ev: Dict[str, Any], iteration: int) -> Dict[str, Any]:
+            """给 dict 事件注入 group_idx / iteration（不修改 Message 对象）。"""
+            if isinstance(ev, dict) and "group_idx" not in ev:
+                ev["group_idx"] = group_idx
+                ev["iteration"] = iteration
+            return ev
 
         for i in range(self.iterations):
             # ── Critic 提批评 ──
@@ -86,6 +97,8 @@ class TogetherPhase(Phase):
                 "type": "agent",
                 "agent": "critic",
                 "action": f"reviewing group {group_idx + 1}, round {i + 1}",
+                "group_idx": group_idx,
+                "iteration": i,
             }
             critic_runner = AgentRunner(critic_config, ctx.llm, ctx.tools)
             critic_task = (
@@ -100,10 +113,10 @@ class TogetherPhase(Phase):
                 task_prompt=critic_task,
                 doc_context=ctx.doc_context,
             ):
-                if ev["type"] == "agent_done_with_messages":
+                if isinstance(ev, dict) and ev.get("type") == "agent_done_with_messages":
                     critiques = ev["messages"]
                 else:
-                    yield ev
+                    yield _tag(ev, i)
             ctx.agent_states["critic"] = critic_runner.state
 
             for msg in critiques:
@@ -113,6 +126,8 @@ class TogetherPhase(Phase):
                     "agent": "critic",
                     "action": "critique",
                     "content": msg.content,
+                    "group_idx": group_idx,
+                    "iteration": i,
                 }
                 yield msg
 
@@ -121,6 +136,8 @@ class TogetherPhase(Phase):
                 "type": "agent",
                 "agent": "connector",
                 "action": f"synthesizing group {group_idx + 1}, round {i + 1}",
+                "group_idx": group_idx,
+                "iteration": i,
             }
             conn_runner = AgentRunner(connector_config, ctx.llm, ctx.tools)
             conn_task = (
@@ -135,10 +152,10 @@ class TogetherPhase(Phase):
                 task_prompt=conn_task,
                 doc_context=ctx.doc_context,
             ):
-                if ev["type"] == "agent_done_with_messages":
+                if isinstance(ev, dict) and ev.get("type") == "agent_done_with_messages":
                     syntheses = ev["messages"]
                 else:
-                    yield ev
+                    yield _tag(ev, i)
             ctx.agent_states["connector"] = conn_runner.state
 
             for msg in syntheses:
@@ -148,6 +165,8 @@ class TogetherPhase(Phase):
                     "agent": "connector",
                     "action": "synthesis",
                     "content": msg.content,
+                    "group_idx": group_idx,
+                    "iteration": i,
                 }
                 yield msg
                 group.append(msg)

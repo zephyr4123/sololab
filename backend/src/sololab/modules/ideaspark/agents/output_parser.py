@@ -82,7 +82,19 @@ class OutputParser:
         return "\n".join(clean_lines).strip()
 
     def _append_citations(self, content: str, tool_events: List[Dict[str, Any]]) -> str:
-        """LLM 忘了引用时，从工具结果里抽出参考来源附在末尾。"""
+        """LLM 忘了引用时，从工具结果里抽出参考来源附在末尾。
+
+        防御：当 content 过短（< 50 字符）时不追加，避免出现"只有参考来源没正文"
+        的怪象（典型场景：LLM 调完工具就停了，没给最终结论）。
+        """
+        # 内容太短时不追加引用 —— 让用户看到的是"空内容"而不是"误导性的引用列表"
+        if not content or len(content.strip()) < 50:
+            import logging
+            logging.getLogger(__name__).warning(
+                "%s 输出内容过短（%d 字），跳过参考来源追加",
+                self.persona_name, len(content) if content else 0,
+            )
+            return content
         if not tool_events:
             return content
         if "**参考文献**" in content or "**参考来源**" in content:
