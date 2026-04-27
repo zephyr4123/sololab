@@ -17,7 +17,7 @@ import { useMemo, useState, useEffect } from 'react';
 import {
   Sparkles, Search, MessageSquare, Brain, Scale, Bot, Trophy,
   ChevronDown, ChevronRight, AlertTriangle, DollarSign,
-  CheckCircle2, Loader2, Globe, BookOpen, FileText, Layers,
+  CheckCircle2, Loader2, Globe, BookOpen, FileText,
   ArrowRight, History,
 } from 'lucide-react';
 import { MarkdownViewer } from '@/components/shared/MarkdownViewer';
@@ -33,12 +33,14 @@ type PhaseId =
   | 'separate' | 'cluster' | 'together' | 'synthesize' | 'evaluate'
   | 'converged' | 'done' | 'cancelled';
 
-const PHASE_ORDER: PhaseId[] = ['separate', 'cluster', 'together', 'synthesize', 'evaluate'];
+// 默认管线 4 phase（cluster 已从默认管线移除：固定 2-persona 场景下"分组"无意义）
+// PhaseId 仍保留 'cluster' 以兼容历史会话事件，但不在 PHASE_ORDER 内 → UI 不渲染
+const PHASE_ORDER: PhaseId[] = ['separate', 'together', 'synthesize', 'evaluate'];
 
 const PHASE_LABEL: Record<PhaseId, string> = {
   separate: '生成创意',
   cluster: '创意分组',
-  together: '小组评议',
+  together: '协同评议',
   synthesize: '整合最佳',
   evaluate: 'Elo 排序',
   converged: '已完成',
@@ -359,17 +361,18 @@ function deriveSummary(phase: PhaseId, slice: PhaseSlice): string {
     return [tools && `${tools} 搜索`, papers && `${papers} 文献`, ideas && `${ideas} 创意`]
       .filter(Boolean).join(' · ');
   }
-  if (phase === 'cluster') {
-    const groups = slice.events.find(e => e.type === 'cluster_groups');
-    return groups ? `${groups.groups?.length || 0} 组` : '';
-  }
   if (phase === 'together') {
     const synth = slice.events.filter(e => e.type === 'agent' && e.action === 'synthesis').length;
-    return [tools && `${tools} 搜索`, papers && `${papers} 文献`, synth && `${synth} 整合`]
+    const iters = new Set(
+      slice.events
+        .filter(e => typeof e.iteration === 'number')
+        .map(e => e.iteration)
+    ).size;
+    return [tools && `${tools} 搜索`, papers && `${papers} 文献`, iters && `${iters} 轮`, synth && `${synth} 整合`]
       .filter(Boolean).join(' · ');
   }
   if (phase === 'synthesize') {
-    return tools ? `${tools} 搜索 · 跨组整合` : '跨组整合中';
+    return tools ? `${tools} 搜索 · 全局整合` : '全局整合中';
   }
   if (phase === 'evaluate') {
     const matches = slice.events.filter(e => e.type === 'evaluate_match').length;
@@ -383,7 +386,6 @@ function deriveSummary(phase: PhaseId, slice: PhaseSlice): string {
 
 function PhaseBody({ phase, events, isCurrent }: { phase: PhaseId; events: StreamEvent[]; isCurrent: boolean }) {
   if (phase === 'separate') return <SeparateBody events={events} isLive={isCurrent} />;
-  if (phase === 'cluster') return <ClusterBody events={events} />;
   if (phase === 'together') return <TogetherBody events={events} isLive={isCurrent} />;
   if (phase === 'synthesize') return <SynthesizeBody events={events} isLive={isCurrent} />;
   if (phase === 'evaluate') return <EvaluateBody events={events} />;
@@ -417,121 +419,32 @@ function SeparateBody({ events, isLive }: { events: StreamEvent[]; isLive: boole
   );
 }
 
-// ─── Cluster body：分组可视化 ──────────────────────────────────
-
-function ClusterBody({ events }: { events: StreamEvent[] }) {
-  const groupsEv = events.find(e => e.type === 'cluster_groups');
-  const groups: Array<Array<{ id: string; author: string; preview: string }>> = groupsEv?.groups || [];
-
-  if (groups.length === 0) {
-    return (
-      <div className="flex items-center gap-2 text-[11.5px] text-muted-foreground/55 py-2">
-        <Loader2 className="h-3 w-3 animate-spin" />
-        正在按相似度分组创意...
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
-      {groups.map((group, i) => (
-        <div key={i} className="rounded-md border border-border/40 bg-card/30 p-2.5 space-y-1.5">
-          <div className="flex items-center gap-1.5 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground/60">
-            <Layers className="h-3 w-3" />
-            <span>第 {i + 1} 组</span>
-            <span className="ml-auto tabular-nums text-muted-foreground/40">{group.length} 创意</span>
-          </div>
-          <ul className="space-y-1 text-[11.5px]">
-            {group.map(idea => {
-              const tone = AGENT_TONE[idea.author];
-              return (
-                <li key={idea.id} className="flex items-start gap-1.5">
-                  <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${tone?.dot || 'bg-muted-foreground/40'}`} />
-                  <div className="min-w-0 flex-1">
-                    <span className={`text-[10px] font-medium ${tone?.text || 'text-muted-foreground/65'}`}>
-                      {AGENT_NAMES[idea.author] || idea.author}
-                    </span>
-                    <p className="text-foreground/65 leading-snug line-clamp-2">{idea.preview}</p>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ─── Together body：每个 group 一个块，每个 group 内每个 iteration 一个块 ──
+// ─── Together body：单批多轮辩论（不再有"组"概念）─────────────
+// 直接按 iteration 分块，每个 iteration 内 critic + connector 并列。
 
 function TogetherBody({ events, isLive }: { events: StreamEvent[]; isLive: boolean }) {
-  // 按 group_idx 分组
-  const groupMap = useMemo(() => {
-    const m = new Map<number, StreamEvent[]>();
-    for (const e of events) {
-      const g = typeof e.group_idx === 'number' ? e.group_idx : null;
-      if (g === null) continue; // 没 group_idx 的事件忽略（避免幽灵组）
-      if (!m.has(g)) m.set(g, []);
-      m.get(g)!.push(e);
-    }
-    return Array.from(m.entries()).sort((a, b) => a[0] - b[0]);
-  }, [events]);
-
-  if (groupMap.length === 0) {
-    return (
-      <div className="flex items-center gap-2 text-[11.5px] text-muted-foreground/55 py-2">
-        <Loader2 className="h-3 w-3 animate-spin" />
-        正在启动小组评议...
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2 mt-2">
-      {groupMap.map(([groupIdx, groupEvents]) => (
-        <TogetherGroupBlock
-          key={groupIdx}
-          groupIdx={groupIdx}
-          events={groupEvents}
-          isLive={isLive}
-        />
-      ))}
-    </div>
-  );
-}
-
-function TogetherGroupBlock({
-  groupIdx, events, isLive,
-}: { groupIdx: number; events: StreamEvent[]; isLive: boolean }) {
-  // 按 iteration 分子组
   const iterMap = useMemo(() => {
     const m = new Map<number, StreamEvent[]>();
     for (const e of events) {
-      const it = typeof e.iteration === 'number' ? e.iteration : 0;
+      const it = typeof e.iteration === 'number' ? e.iteration : null;
+      if (it === null) continue; // 没 iteration 的事件不属于讨论流
       if (!m.has(it)) m.set(it, []);
       m.get(it)!.push(e);
     }
     return Array.from(m.entries()).sort((a, b) => a[0] - b[0]);
   }, [events]);
 
-  // 这个组是否完成（最后一轮的 connector synthesis 已出现）
-  const lastIter = iterMap[iterMap.length - 1];
-  const groupDone = lastIter?.[1]?.some(e => e.type === 'agent' && e.action === 'synthesis');
+  if (iterMap.length === 0) {
+    return (
+      <div className="flex items-center gap-2 text-[11.5px] text-muted-foreground/55 py-2">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        正在启动协同评议...
+      </div>
+    );
+  }
 
   return (
-    <div className="rounded-md border border-dashed border-border/45 px-3 py-2 space-y-2">
-      <div className="flex items-center gap-1.5 text-[10.5px] uppercase tracking-wider text-muted-foreground/60">
-        <span>第 {groupIdx + 1} 组</span>
-        <span className="text-muted-foreground/30">·</span>
-        <span className="normal-case tabular-nums">{iterMap.length} 轮</span>
-        {!groupDone && isLive && (
-          <Loader2 className="ml-auto h-3 w-3 animate-spin text-[var(--color-warm)]/70" />
-        )}
-        {groupDone && (
-          <CheckCircle2 className="ml-auto h-3 w-3 text-[var(--color-warm)]/55" />
-        )}
-      </div>
+    <div className="space-y-2 mt-2">
       {iterMap.map(([iter, iterEvents]) => (
         <TogetherIterationBlock
           key={iter}
@@ -556,10 +469,10 @@ function TogetherIterationBlock({
   );
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1.5 rounded-md border border-dashed border-border/45 px-3 py-2">
       {totalIters > 1 && (
-        <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/40 ml-0.5">
-          第 {iter + 1} 轮
+        <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/45 ml-0.5">
+          第 {iter + 1} 轮辩论
         </div>
       )}
       <AgentLane agent="critic" events={criticEvents} isLive={isLive} compact />

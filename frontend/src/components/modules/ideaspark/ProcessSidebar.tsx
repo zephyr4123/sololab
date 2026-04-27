@@ -7,8 +7,7 @@ import { Loader2, CheckCircle, Circle, Globe, BookOpen, FileText } from 'lucide-
 
 const PHASE_STEPS: Array<{ id: string; label: string }> = [
   { id: 'separate', label: '生成创意' },
-  { id: 'cluster', label: '创意分组' },
-  { id: 'together', label: '小组评议' },
+  { id: 'together', label: '协同评议' },
   { id: 'synthesize', label: '整合最佳' },
   { id: 'evaluate', label: 'Elo 排序' },
 ];

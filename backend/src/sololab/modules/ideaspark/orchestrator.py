@@ -1,12 +1,21 @@
 """IdeaSpark 流程编排 —— Pipeline 组合器（Strategy 模式）。
 
-职责仅剩三件：
+职责：
 1. 构造 PhaseContext（注入依赖、初始化输入字段）
 2. 按顺序驱动 phases 列表，分流 Message 与 dict 事件
-3. 多轮收敛检查 + Top-K refine 输出
+3. 多轮之间把 top_ideas 喂给下一轮（history_seed_ideas + is_continuation 复用）
 
 具体阶段算法全部下沉到 sololab.modules.ideaspark.phases.*。
 新增/替换阶段只需改 self.phases 列表，无需触碰本类。
+
+设计变更：
+- 默认管线去掉 ClusterPhase（在 2-persona × 1-message 场景下永远是空架子）。
+  custom pipeline 仍可显式 import ClusterPhase 注入。
+- round 间不再用 _refine_prompt 改写 current_input —— 改成把 top_ideas 注入
+  ctx.history_seed_ideas + 置 ctx.is_continuation=True，让 separate_phase 自己消费。
+  好处：上一轮全文进 prompt（无 150 字截断），continuation_directive 自动启用。
+- 删除 UUID-based 收敛检查（每轮新 UUID 永远不命中）。默认跑满 max_rounds，
+  用户自己设 max_rounds=1 关掉多轮。
 """
 
 from __future__ import annotations
@@ -20,7 +29,6 @@ from sololab.core.llm_gateway import LLMGateway
 from sololab.core.tool_registry import ToolRegistry
 from sololab.models.agent import Message, MessageType
 from sololab.modules.ideaspark.phases import (
-    ClusterPhase,
     Phase,
     PhaseContext,
     SeparatePhase,
@@ -33,7 +41,8 @@ from sololab.modules.ideaspark.phases import (
 class Orchestrator:
     """IdeaSpark Pipeline 组合器。
 
-    默认流水线：Separate → Cluster → Together → Synthesize → Tournament
+    默认流水线：Separate → Together → Synthesize → Tournament
+    （ClusterPhase 在固定 2-persona 场景下无意义，从默认管线移除）
     替换/新增 phase 通过构造参数注入即可。
     """
 
@@ -49,7 +58,6 @@ class Orchestrator:
         self.tools = tool_registry
         self.phases: List[Phase] = phases or [
             SeparatePhase(),
-            ClusterPhase(),
             TogetherPhase(iterations=2),
             SynthesizePhase(),
             TournamentPhase(num_pairs=10),
@@ -65,7 +73,7 @@ class Orchestrator:
         history: Optional[list] = None,
     ) -> AsyncGenerator[Any, None]:
         """执行完整 IdeaSpark 流程，逐 token / phase 实时上吐事件。"""
-        # 从历史中提取上一轮种子创意（多轮对话用）
+        # 从历史中提取上一轮种子创意（多会话延续用）
         history_seed_ideas: List[Message] = []
         is_continuation = False
         if history and len(history) > 1:
@@ -85,7 +93,6 @@ class Orchestrator:
             tools=self.tools,
         )
 
-        prev_top_ids: List[str] = []
         total_cost = 0.0
 
         for round_num in range(1, max_rounds + 1):
@@ -127,18 +134,14 @@ class Orchestrator:
                 total_cost += st.cost_usd
                 st.cost_usd = 0  # 清零避免下一轮重复累加（agent_states 跨 round 复用）
 
-            # 收敛检查
-            current_ids = [m.id for m in ctx.top_ideas]
-            if prev_top_ids:
-                overlap = len(set(current_ids) & set(prev_top_ids))
-                stability = overlap / max(len(current_ids), 1)
-                if stability >= 0.8:
-                    yield {"type": "status", "phase": "converged", "round": round_num}
-                    break
-            prev_top_ids = current_ids
-
-            # 用 Top-K 改写下一轮输入
-            ctx.current_input = self._refine_prompt(ctx.current_input, ctx.top_ideas)
+            # ── 跨轮上下文累积 ──
+            # 把本轮 top_ideas 喂给下一轮的 separate_phase（走 history_seed_ideas
+            # + is_continuation 现成路径，下游 _build_messages 会原文注入，无截断）。
+            # together / synthesize / tournament 仍只看本轮 separate 的输出，
+            # 跨轮信号通过 separate 的"在上一轮基础上深化"自然传递。
+            if ctx.top_ideas:
+                ctx.history_seed_ideas = list(ctx.top_ideas)
+                ctx.is_continuation = True
 
         # 最终输出
         final_ideas = []
@@ -154,16 +157,6 @@ class Orchestrator:
         yield {"type": "done", "top_ideas": final_ideas, "cost_usd": round(total_cost, 4)}
 
     # ───────────────────────── helpers ───────────────────────────────────────
-
-    @staticmethod
-    def _refine_prompt(original_topic: str, top_ideas: List[Message]) -> str:
-        """从 Top-K 创意生成下一轮的优化提示。"""
-        idea_summaries = "\n".join(f"- {m.content[:150]}" for m in top_ideas[:3])
-        return (
-            f"原始主题：{original_topic}\n\n"
-            f"目前最佳创意：\n{idea_summaries}\n\n"
-            f"请深化、延展和改进这些创意，探索新的角度和组合。"
-        )
 
     @staticmethod
     def _extract_seed_ideas_from_history(history: list) -> List[Message]:
