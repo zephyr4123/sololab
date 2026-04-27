@@ -19,7 +19,6 @@ class ClusterPhase(Phase):
 
     async def run(self, ctx: PhaseContext) -> AsyncGenerator[PhaseEvent, None]:
         ideas = ctx.ideas
-        num_groups = min(4, max(2, len(ideas) // 3))
 
         yield {
             "type": "status",
@@ -28,9 +27,13 @@ class ClusterPhase(Phase):
             "idea_count": len(ideas),
         }
 
-        if len(ideas) <= num_groups:
-            ctx.idea_groups = [[idea] for idea in ideas]
+        # ≤3 个创意时不做语义切分 —— 把它们合到 1 组，
+        # 让下游 together_phase 的 critic+connector 真正能围绕全部创意协同辩论。
+        # 否则只有 2 个 idea 时会被拆成 2 组 × 1 idea，"分组"完全没意义。
+        if len(ideas) <= 3:
+            ctx.idea_groups = [list(ideas)] if ideas else []
         else:
+            num_groups = min(4, max(2, len(ideas) // 3))
             try:
                 texts = [m.content for m in ideas]
                 vectors = await ctx.llm.embed(texts)

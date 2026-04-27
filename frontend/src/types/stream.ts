@@ -35,13 +35,15 @@ export type SSEEvent =
 export interface StreamHandlers {
   onTaskCreated?: (sessionId?: string) => void;
   onText?: (text: string) => void;
-  onAgent?: (agent: string, action: string, content?: string, messageCount?: number) => void;
+  // 第 5 个 event 参数 = 完整事件对象，用来透传 group_idx / iteration 等附加字段
+  // 多组并行的 together_phase 必须靠它分组
+  onAgent?: (agent: string, action: string, content?: string, messageCount?: number, event?: SSEEvent & { type: 'agent' }) => void;
   onTool?: (event: SSEEvent & { type: 'tool' }) => void;
   onStatus?: (phase: string, round?: number) => void;
   onIdea?: (id: string, content: string, author: string) => void;
-  onAgentReasoningDelta?: (agent: string, delta: string) => void;
-  onAgentContentDelta?: (agent: string, delta: string) => void;
-  onToolCallStarted?: (agent: string, tool: string, query?: string, toolId?: string) => void;
+  onAgentReasoningDelta?: (agent: string, delta: string, event?: SSEEvent & { type: 'agent_reasoning_delta' }) => void;
+  onAgentContentDelta?: (agent: string, delta: string, event?: SSEEvent & { type: 'agent_content_delta' }) => void;
+  onToolCallStarted?: (agent: string, tool: string, query?: string, toolId?: string, event?: SSEEvent & { type: 'tool_call_started' }) => void;
   onClusterGroups?: (event: SSEEvent & { type: 'cluster_groups' }) => void;
   onEvaluateMatch?: (event: SSEEvent & { type: 'evaluate_match' }) => void;
   onVote?: (ideaId: string, content: string, author: string, eloScore: number, rank: number) => void;

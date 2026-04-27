@@ -97,13 +97,15 @@ export class ResilientSSEClient {
     switch (event.type) {
       case 'task_created': handlers.onTaskCreated?.((event as any).session_id); break;
       case 'text': handlers.onText?.(event.content); break;
-      case 'agent': handlers.onAgent?.(event.agent, event.action, event.content, event.message_count); break;
+      // 把整 event 作为最后一个参数透传，让消费者能拿到 group_idx / iteration 等
+      // 后端 _tag() 注入的字段（一旦丢失，TogetherBody 就过滤掉整个事件）
+      case 'agent': handlers.onAgent?.(event.agent, event.action, event.content, event.message_count, event as any); break;
       case 'tool': handlers.onTool?.(event); break;
       case 'status': handlers.onStatus?.(event.phase || event.status || '', event.round); break;
       case 'idea': handlers.onIdea?.(event.id, event.content, event.author); break;
-      case 'agent_reasoning_delta': handlers.onAgentReasoningDelta?.((event as any).agent, (event as any).delta); break;
-      case 'agent_content_delta': handlers.onAgentContentDelta?.((event as any).agent, (event as any).delta); break;
-      case 'tool_call_started': handlers.onToolCallStarted?.((event as any).agent, (event as any).tool, (event as any).query, (event as any).tool_id); break;
+      case 'agent_reasoning_delta': handlers.onAgentReasoningDelta?.((event as any).agent, (event as any).delta, event as any); break;
+      case 'agent_content_delta': handlers.onAgentContentDelta?.((event as any).agent, (event as any).delta, event as any); break;
+      case 'tool_call_started': handlers.onToolCallStarted?.((event as any).agent, (event as any).tool, (event as any).query, (event as any).tool_id, event as any); break;
       case 'cluster_groups': handlers.onClusterGroups?.(event as any); break;
       case 'evaluate_match': handlers.onEvaluateMatch?.(event as any); break;
       case 'vote': handlers.onVote?.(event.idea_id, event.content, event.author, event.elo_score, event.rank); break;

@@ -133,9 +133,12 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
         if (round) ideaStore.setRound(round);
         sessionStore.appendEventToLastEntry({ type: 'status', phase, round });
       },
-      onAgent: (agent, action, content, messageCount) => {
+      onAgent: (agent, action, content, messageCount, event) => {
         ideaStore.addAgentEvent({ agent, action, content });
-        sessionStore.appendEventToLastEntry({ type: 'agent', agent, action, content, message_count: messageCount });
+        // 用 event 直接 append（保留 group_idx / iteration），fallback 才手拼字段
+        sessionStore.appendEventToLastEntry(
+          event ?? { type: 'agent', agent, action, content, message_count: messageCount }
+        );
       },
       onTool: (event) => {
         sessionStore.appendEventToLastEntry(event);
@@ -144,13 +147,15 @@ export function ChatPanel({ moduleId }: ChatPanelProps) {
         ideaStore.addIdea({ id, content, author, eloScore: 1500 });
         sessionStore.appendEventToLastEntry({ type: 'idea', id, content, author });
       },
-      onAgentContentDelta: (agent, delta) => {
-        // 实时把 token 增量追加到当前 stream entry，PipelineView 会聚合为 streaming 预览
-        sessionStore.appendEventToLastEntry({ type: 'agent_content_delta', agent, delta });
+      onAgentContentDelta: (agent, delta, event) => {
+        // 实时把 token 增量追加到当前 stream entry。必须保留整 event，
+        // 否则 group_idx 丢失 → TogetherBody 过滤掉 → 整合者看起来"待开始"
+        sessionStore.appendEventToLastEntry(event ?? { type: 'agent_content_delta', agent, delta });
       },
-      onToolCallStarted: (agent, tool, query, toolId) => {
-        // 工具调用启动事件：让前端实时显示"正在调用 X 工具"
-        sessionStore.appendEventToLastEntry({ type: 'tool_call_started', agent, tool, query, tool_id: toolId });
+      onToolCallStarted: (agent, tool, query, toolId, event) => {
+        sessionStore.appendEventToLastEntry(
+          event ?? { type: 'tool_call_started', agent, tool, query, tool_id: toolId }
+        );
       },
       onClusterGroups: (event) => {
         // 创意分组数据：cluster phase 完成时让前端可视化分组

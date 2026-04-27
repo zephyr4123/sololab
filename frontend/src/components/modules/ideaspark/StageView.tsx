@@ -18,7 +18,7 @@ import {
   Sparkles, Search, MessageSquare, Brain, Scale, Bot, Trophy,
   ChevronDown, ChevronRight, AlertTriangle, DollarSign,
   CheckCircle2, Loader2, Globe, BookOpen, FileText, Layers,
-  ArrowRight,
+  ArrowRight, History,
 } from 'lucide-react';
 import { MarkdownViewer } from '@/components/shared/MarkdownViewer';
 
@@ -903,9 +903,10 @@ function PhaseDots({ currentPhase, phaseIdx }: { currentPhase: PhaseId; phaseIdx
 
 // ─── Result stage ──────────────────────────────────────────────
 
-function ResultStage({ stage, events: _events }: { stage: DoneSnapshot; events: StreamEvent[] }) {
+function ResultStage({ stage, events }: { stage: DoneSnapshot; events: StreamEvent[] }) {
   const top3 = stage.topIdeas.slice(0, 3);
   const rest = stage.topIdeas.slice(3);
+  const [showProcess, setShowProcess] = useState(false);
 
   return (
     <div className="space-y-7 py-2 animate-fade-in">
@@ -971,6 +972,92 @@ function ResultStage({ stage, events: _events }: { stage: DoneSnapshot; events: 
           ))}
         </div>
       )}
+
+      {/* 处理过程回看入口 —— 不止结果出口，也提供一个回去的入口 */}
+      <div className="pt-3 border-t border-border/30">
+        <button
+          onClick={() => setShowProcess(v => !v)}
+          className="group flex items-center gap-2 text-[11.5px] text-muted-foreground/65 hover:text-[var(--color-warm)] transition-colors"
+          title="展开 5 个 phase 的完整时间线"
+        >
+          <History className="h-3 w-3" />
+          <span>{showProcess ? '收起处理过程' : '查看完整处理过程'}</span>
+          <ChevronRight className={`h-3 w-3 transition-transform ${showProcess ? 'rotate-90' : ''}`} />
+        </button>
+        {showProcess && <ProcessTimelineRecap events={events} />}
+      </div>
+    </div>
+  );
+}
+
+// ─── Process timeline recap：done 后回看 5 phase 完整过程 ────────────
+
+function ProcessTimelineRecap({ events }: { events: StreamEvent[] }) {
+  // 跨 round 切片所有 phase
+  const slices = useMemo(() => {
+    const all: PhaseSlice[] = [];
+    let cur: PhaseSlice | null = null;
+    let idx = 0;
+    for (const ev of events) {
+      idx++;
+      if (ev.type === 'status' && ev.phase && PHASE_ORDER.includes(ev.phase as PhaseId)) {
+        if (cur) all.push(cur);
+        cur = {
+          phase: ev.phase as PhaseId,
+          round: ev.round || 1,
+          startedAt: idx,
+          events: [],
+          isCurrent: false,
+        };
+        continue;
+      }
+      if (cur) cur.events.push(ev);
+    }
+    if (cur) all.push(cur);
+    return all;
+  }, [events]);
+
+  const byRound = useMemo(() => {
+    const m = new Map<number, PhaseSlice[]>();
+    for (const s of slices) {
+      if (!m.has(s.round)) m.set(s.round, []);
+      m.get(s.round)!.push(s);
+    }
+    return Array.from(m.entries()).sort((a, b) => a[0] - b[0]);
+  }, [slices]);
+
+  if (byRound.length === 0) {
+    return (
+      <div className="mt-3 text-[11.5px] text-muted-foreground/55">
+        无处理过程记录
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 space-y-4 animate-fade-in">
+      {byRound.map(([round, roundSlices]) => (
+        <div key={round} className="space-y-1.5">
+          {byRound.length > 1 && (
+            <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/45 ml-0.5">
+              第 {round} 轮
+            </div>
+          )}
+          {PHASE_ORDER.map(p => {
+            const slice = roundSlices.find(s => s.phase === p);
+            if (!slice) return null;
+            return (
+              <PhaseRow
+                key={`${p}-${round}`}
+                phase={p}
+                status="done"
+                slice={slice}
+                isCurrent={false}
+              />
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }

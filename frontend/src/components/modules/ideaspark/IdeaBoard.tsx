@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useIdeaSparkStore } from '@/stores/module-stores/ideaspark-store';
-import { Trophy, DollarSign, LayoutGrid, List, Lightbulb } from 'lucide-react';
+import { Trophy, DollarSign, LayoutGrid, List, Lightbulb, History } from 'lucide-react';
 import { MarkdownViewer } from '@/components/shared/MarkdownViewer';
 
 const AGENT_NAMES: Record<string, string> = {
@@ -31,7 +31,7 @@ const RANK_TROPHY_COLOR: Record<number, string> = {
 };
 
 export function IdeaBoard() {
-  const { ideas, topIdeas, phase, costUsd } = useIdeaSparkStore();
+  const { ideas, topIdeas, phase, costUsd, setActiveTab } = useIdeaSparkStore();
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
 
   const hasResults = topIdeas.length > 0;
@@ -71,24 +71,36 @@ export function IdeaBoard() {
             </span>
           )}
         </div>
-        {hasResults && remaining.length > 0 && (
-          <div className="flex gap-0.5 rounded-md bg-muted/50 p-0.5">
+        <div className="flex items-center gap-2">
+          {hasResults && (
             <button
-              onClick={() => setViewMode('list')}
-              className={`rounded p-1 transition-colors ${viewMode === 'list' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`}
-              title="列表视图"
+              onClick={() => setActiveTab('chat')}
+              className="flex items-center gap-1.5 rounded-md border border-border/40 px-2.5 py-1 text-[11px] text-muted-foreground/70 transition-all hover:border-[var(--color-warm)]/30 hover:text-[var(--color-warm)] hover:bg-[var(--color-warm)]/5"
+              title="回到对话查看 5 个 phase 的完整处理过程"
             >
-              <List className="h-3.5 w-3.5" />
+              <History className="h-3 w-3" />
+              查看处理过程
             </button>
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`rounded p-1 transition-colors ${viewMode === 'grid' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`}
-              title="网格视图"
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        )}
+          )}
+          {hasResults && remaining.length > 0 && (
+            <div className="flex gap-0.5 rounded-md bg-muted/50 p-0.5">
+              <button
+                onClick={() => setViewMode('list')}
+                className={`rounded p-1 transition-colors ${viewMode === 'list' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`}
+                title="列表视图"
+              >
+                <List className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`rounded p-1 transition-colors ${viewMode === 'grid' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`}
+                title="网格视图"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Top 3 主体卡片 — 大卡 + 完整 markdown */}
