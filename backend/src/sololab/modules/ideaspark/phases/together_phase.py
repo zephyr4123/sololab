@@ -79,7 +79,6 @@ class TogetherPhase(Phase):
             ctx.agent_states["critic"] = critic_runner.state
 
             for msg in critiques:
-                ctx.blackboard.append(msg)
                 yield {
                     "type": "agent",
                     "agent": "critic",
@@ -116,7 +115,6 @@ class TogetherPhase(Phase):
             ctx.agent_states["connector"] = conn_runner.state
 
             for msg in syntheses:
-                ctx.blackboard.append(msg)
                 yield {
                     "type": "agent",
                     "agent": "connector",

@@ -111,12 +111,15 @@ class Orchestrator:
                     "preview": doc_context[:300] + "..." if len(doc_context) > 300 else doc_context,
                 }
 
-            # 重置本轮临时流转字段（跨轮持久字段不动）
+            # 重置本轮流转字段（持久字段 history_seed_ideas / is_continuation /
+            # agent_states 不动）。elo_scores 跟着流转字段走 —— 每轮 idea UUID 全新，
+            # 上一轮的分数无法对应到本轮新 Message，留着只会让字典越来越大。
             ctx.ideas = []
             ctx.idea_groups = []
             ctx.refined_ideas = []
             ctx.synthesized = []
             ctx.top_ideas = []
+            ctx.elo_scores = {}
 
             # 按顺序驱动 phases；Message 对象由各 phase 自己写入 ctx，本层只需透传 dict
             for phase in self.phases:

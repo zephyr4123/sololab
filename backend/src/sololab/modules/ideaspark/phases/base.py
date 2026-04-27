@@ -33,17 +33,18 @@ class PhaseContext:
         max_rounds / top_k : 流程参数
         round            : 当前轮数（pipeline 维护）
 
-    流转字段（各 phase 写自己的）：
+    流转字段（各 phase 写自己的，每轮 reset）：
         ideas            : separate 输出
-        idea_groups      : cluster 输出
+        idea_groups      : cluster 输出（默认管线已不用，custom pipeline 用）
         refined_ideas    : together 输出
         synthesized      : synthesize 输出
         top_ideas        : tournament 输出
+        elo_scores       : tournament 内部用，每轮 reset
 
-    持久字段（跨轮保留）：
-        blackboard       : 累积所有 messages
-        agent_states     : per-agent 运行状态（含 cost）
-        elo_scores       : 创意 Elo 评分
+    跨轮持久字段：
+        history_seed_ideas: 上一轮 top_ideas（喂给下一轮 separate）
+        is_continuation   : 是否延续（round 2+ 自动 True）
+        agent_states      : per-agent 运行状态（cost 累加用）
 
     依赖注入：
         llm / tools
@@ -60,16 +61,15 @@ class PhaseContext:
     top_k: int
     # pipeline 维护
     round: int = 1
-    # 流转
+    # 流转（每轮 reset）
     ideas: List[Message] = field(default_factory=list)
     idea_groups: List[List[Message]] = field(default_factory=list)
     refined_ideas: List[Message] = field(default_factory=list)
     synthesized: List[Message] = field(default_factory=list)
     top_ideas: List[Message] = field(default_factory=list)
-    # 持久
-    blackboard: List[Message] = field(default_factory=list)
-    agent_states: Dict[str, AgentState] = field(default_factory=dict)
     elo_scores: Dict[str, float] = field(default_factory=dict)
+    # 跨轮持久
+    agent_states: Dict[str, AgentState] = field(default_factory=dict)
     # 依赖
     llm: Optional[LLMGateway] = None
     tools: Optional[ToolRegistry] = None
@@ -96,4 +96,4 @@ class Phase(ABC):
 
     @abstractmethod
     def run(self, ctx: PhaseContext) -> AsyncGenerator[PhaseEvent, None]:
-        """执行该阶段。yield 的 dict 直接进 SSE，Message 对象进 ctx.blackboard。"""
+        """执行该阶段。yield 的 dict 直接进 SSE，Message 对象由 phase 写入 ctx 对应字段。"""

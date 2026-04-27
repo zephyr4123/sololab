@@ -3,7 +3,7 @@
 实现要点：
 - 两个 agent 并发跑 run_stream，事件通过 asyncio.Queue 实时上吐
 - 处理多轮对话：is_continuation 时附加 continuation_prompt + 注入种子创意
-- 写出 ctx.ideas / ctx.blackboard / ctx.agent_states
+- 写出 ctx.ideas / ctx.agent_states
 """
 
 from __future__ import annotations
@@ -84,7 +84,6 @@ class SeparatePhase(Phase):
                         {"type": "agent", "agent": name, "action": "done", "message_count": len(valid_messages)}
                     )
                     for msg in valid_messages:
-                        ctx.blackboard.append(msg)
                         await queue.put(
                             {"type": "idea", "id": msg.id, "content": msg.content, "author": name}
                         )

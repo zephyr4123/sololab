@@ -1,6 +1,6 @@
 """Tournament 阶段：评审者通过成对 Elo 比较选 Top-K。
 
-写出 ctx.top_ideas、更新 ctx.elo_scores（跨轮保留）。
+写出 ctx.top_ideas、ctx.elo_scores（round-local，每轮 reset）。
 yield 入场 status + 每个 idea 的 vote 事件。
 """
 
