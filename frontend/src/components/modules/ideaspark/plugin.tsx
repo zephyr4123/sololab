@@ -9,7 +9,7 @@ import { useTaskStore } from '@/stores/task-store';
 import type { StreamHandlers } from '@/types/stream';
 
 // Lazy imports for tab components
-import { ChatPanel } from '@/components/shared/ChatPanel';
+import { ChatPanel } from './IdeaSparkChatPanel';
 import { IdeaBoard } from './IdeaBoard';
 import { IdeaReport } from './IdeaReport';
 import { ProcessSidebar } from './ProcessSidebar';

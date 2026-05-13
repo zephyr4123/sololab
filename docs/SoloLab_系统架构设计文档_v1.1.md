@@ -3,12 +3,20 @@
 
 ## 系统架构设计文档 v1.1
 
-> **变更说明 (v1.0 → v1.1)**
-> 1. LLM Client Manager 由自研改为基于 LiteLLM 的网关代理架构，大幅降低维护成本
-> 2. 新增 Task State Manager，解决长耗时任务的断线恢复问题
-> 3. 新增 Document Pipeline 服务层，引入 MinerU 解决学术 PDF 解析难题
-> 4. 更新系统总体架构图，反映新增组件
-> 5. 更新关键设计决策备忘
+> ## ⚠️ FROZEN DESIGN SNAPSHOT
+>
+> **此文档是 v1.1 阶段的设计蓝图，不是当前实现状态。**
+>
+> 实际代码已多轮迭代，与本文档主要分歧点：
+> - **LLM 网关**：不再用 LiteLLM。已重写为 `LLMProviderBase` ABC + `ProviderRegistry`（Strategy + Factory + Registry 三模式）+ `ProviderQuirks`（数据驱动的能力声明）。每个 provider 独立适配自家怪癖（DeepSeek reasoning passback、Anthropic temperature 上限、qwen 兼容层等）。详见 `backend/src/sololab/core/llm/`。
+> - **PDF 解析**：MinerU 改为 PyMuPDF（`backend/src/sololab/core/document_pipeline.py`）。
+> - **可观测**：新增 `RequestContextMiddleware` + `LLMCallTracer` + `BudgetAlert`，单点 hook 在 `CostTrackingProvider`（`core/llm/cost.py`）— 每次 LLM 调用前 enforce budget、调用中 trace、调用后写 cost record。
+> - **数据层**：原 `models/orm.py` 单文件 8 表已拆为 `db/models/{auth,blackboard,cost,document,memory,session,writer}.py`。Pydantic transport models 迁到 `schemas/` 包。
+> - **鉴权**：`verify_api_key` 通过 router-level `dependencies=[AuthDep]` 接入所有 mutation 路由。
+> - **模块**：除文中提到的，还实装了 CodeLab（OpenCode HTTP 代理）和 WriterAI（单 Agent + 8 工具 + Docker 沙箱）。
+>
+> 当前实现的权威文档是 `CLAUDE.md`（项目根，gitignored）和 `README.md`。
+> 这份 v1.1 设计文档保留作为"设计原始意图 + 演化对照"的历史参考。
 
 ---
 

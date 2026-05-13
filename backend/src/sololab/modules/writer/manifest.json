@@ -27,8 +27,8 @@
       },
       "budget_limit_usd": {
         "type": "number",
-        "default": 5.0,
-        "description": "Budget limit per writing session in USD"
+        "default": 50.0,
+        "description": "Budget limit per writing session in USD (matches global BUDGET_LIMIT_USD)"
       }
     }
   }

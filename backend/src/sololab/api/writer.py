@@ -12,8 +12,11 @@ import logging
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Query
+from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
+
+from sololab.api._deps import AuthDep
+from sololab.db.models import DocumentRecord
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +25,8 @@ def _attachment_scope(doc_id: str) -> str:
     """Namespace key for per-document attachment storage."""
     return f"writer:{doc_id}"
 
-router = APIRouter(prefix="/writer", tags=["writer"])
+
+router = APIRouter(prefix="/writer", tags=["writer"], dependencies=[AuthDep])
 
 
 def _get_document_manager(request: Request):
@@ -252,7 +256,6 @@ async def list_knowledge(
     if db_session_factory is None:
         raise HTTPException(status_code=503, detail="Database not available")
 
-    from sololab.models.orm import DocumentRecord
     from sqlalchemy import select
 
     scope = _attachment_scope(doc_id)
@@ -290,7 +293,6 @@ async def delete_knowledge(request: Request, attachment_id: str):
     if db_session_factory is None:
         raise HTTPException(status_code=503, detail="Database not available")
 
-    from sololab.models.orm import DocumentRecord
     from sqlalchemy import delete as sa_delete
 
     async with db_session_factory() as session:

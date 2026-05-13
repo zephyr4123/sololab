@@ -1,8 +1,10 @@
-"""任务状态管理的 API 路由（断线恢复）。"""
+"""Task-state API — supports streaming reconnection and cancellation."""
 
 from fastapi import APIRouter, HTTPException, Request
 
-router = APIRouter()
+from sololab.api._deps import AuthDep
+
+router = APIRouter(dependencies=[AuthDep])
 
 
 @router.get("/tasks/{task_id}/state")

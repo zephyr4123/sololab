@@ -1,18 +1,19 @@
-"""共享的 pytest 测试夹具。"""
+"""Shared pytest fixtures."""
 
+import os
 import sys
 from pathlib import Path
 
-import pytest
 import httpx
+import pytest
 
-# 将后端 src 添加到路径
+# Make the backend source importable.
 sys.path.insert(0, str(Path(__file__).parent.parent / "backend" / "src"))
 
 
 @pytest.fixture
 def mock_llm_gateway():
-    """返回预设响应的模拟 LLM 网关。"""
+    """In-memory LLM gateway double for unit tests that don't need real LLM calls."""
 
     class MockLLMGateway:
         async def generate(self, messages, **kwargs):
@@ -35,7 +36,7 @@ def mock_llm_gateway():
 
 @pytest.fixture
 def mock_redis():
-    """用于测试的模拟 Redis 客户端。"""
+    """fakeredis-backed async Redis client for unit tests."""
     try:
         import fakeredis.aioredis
 
@@ -46,7 +47,16 @@ def mock_redis():
 
 @pytest.fixture
 def real_llm_config():
-    """从 settings 加载真实 LLM 配置（复用 IdeaSpark 的主 LLM 通道）。"""
+    """Load LLMConfig from environment.
+
+    Skips the test when API keys are absent so CI runs without network
+    credentials don't appear as failures.
+    """
+    if not os.getenv("IDEASPARK_API_KEY") and not os.getenv("EMBEDDING_API_KEY"):
+        pytest.skip(
+            "IDEASPARK_API_KEY / EMBEDDING_API_KEY not set — skipping real-LLM test"
+        )
+
     from sololab.config.settings import get_settings
     from sololab.core.llm_gateway import LLMConfig
 
@@ -58,20 +68,17 @@ def real_llm_config():
         embedding_base_url=settings.embedding_base_url,
         embedding_api_key=settings.embedding_api_key,
         embedding_model=settings.embedding_model,
-        cache_enabled=False,
     )
 
 
 @pytest.fixture
 async def async_client():
-    """httpx AsyncClient 用于 API 测试（含 lifespan 初始化）。"""
+    """httpx AsyncClient bound to the full FastAPI app with lifespan."""
     from sololab.main import app
 
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="http://test",
     ) as client:
-        # 手动触发 lifespan startup
-        from contextlib import asynccontextmanager
         async with app.router.lifespan_context(app):
             yield client

@@ -7,7 +7,8 @@ import pytest
 import pytest_asyncio
 
 from sololab.config.settings import get_settings
-from sololab.models.orm import Base, WriterDocumentRecord, create_db_engine, create_session_factory
+from sololab.db import Base, create_db_engine, create_session_factory
+from sololab.db.models import WriterDocumentRecord
 from sololab.modules.writer.document import DocumentManager, _count_words
 
 

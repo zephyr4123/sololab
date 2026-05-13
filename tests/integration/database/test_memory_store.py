@@ -12,7 +12,7 @@ class TestMemoryStore:
         from sololab.config.settings import get_settings
         from sololab.core.llm_gateway import LLMGateway
         from sololab.core.memory_manager import MemoryManager
-        from sololab.models.orm import create_db_engine, create_session_factory
+        from sololab.db import create_db_engine, create_session_factory
 
         settings = get_settings()
         try:

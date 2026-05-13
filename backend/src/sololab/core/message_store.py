@@ -4,8 +4,10 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select, func, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker
+
+from sololab.db.models import BlackboardMessage
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +35,6 @@ class MessageStore:
         metadata: Dict[str, Any] = {},
     ) -> int:
         """保存一条黑板消息。"""
-        from sololab.models.orm import BlackboardMessage
-
         async with self.db() as session:
             record = BlackboardMessage(
                 task_id=task_id,
@@ -57,8 +57,6 @@ class MessageStore:
         limit: int = 100,
     ) -> List[Dict]:
         """获取指定任务的黑板消息。"""
-        from sololab.models.orm import BlackboardMessage
-
         async with self.db() as session:
             stmt = (
                 select(BlackboardMessage)
@@ -89,8 +87,6 @@ class MessageStore:
         self, module_id: Optional[str] = None, limit: int = 20
     ) -> List[Dict]:
         """获取运行历史（按 task_id 分组）。"""
-        from sololab.models.orm import BlackboardMessage
-
         async with self.db() as session:
             stmt = (
                 select(

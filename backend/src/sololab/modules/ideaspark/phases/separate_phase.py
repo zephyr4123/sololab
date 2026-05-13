@@ -14,7 +14,7 @@ from typing import AsyncGenerator
 from sololab.modules.ideaspark.agents.agent_runner import AgentRunner
 from sololab.modules.ideaspark.agents.personas import get_persona
 from sololab.modules.ideaspark.phases.base import Phase, PhaseContext, PhaseEvent
-from sololab.models.agent import Message
+from sololab.schemas.agent import Message
 
 
 class SeparatePhase(Phase):

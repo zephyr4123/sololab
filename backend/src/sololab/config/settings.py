@@ -1,64 +1,90 @@
-"""从环境变量加载的应用配置。"""
+"""Application configuration loaded from environment variables."""
 
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# 项目根目录（backend/src/sololab/config/settings.py → 向上 4 级到项目根）
+# Project root (backend/src/sololab/config/settings.py → 4 levels up)
 _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
 
 class Settings(BaseSettings):
-    """SoloLab 应用配置。"""
+    """SoloLab application configuration."""
+
+    model_config = SettingsConfigDict(
+        env_file=str(_PROJECT_ROOT / ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     debug: bool = False
 
-    # 数据库
+    # ── persistence ────────────────────────────────────────
     database_url: str = "postgresql+asyncpg://sololab:sololab@localhost:5432/sololab"
-
-    # Redis
     redis_url: str = "redis://localhost:6379/0"
 
-    # IdeaSpark LLM 配置（OpenAI 兼容格式）
+    # ── primary LLM (IdeaSpark + Writer + ...) ─────────────
+    # No defaults — keys must be provided so startup fails loudly when missing.
     ideaspark_base_url: str = "https://api.openai.com/v1"
-    ideaspark_api_key: str = "sk-xxx"
+    ideaspark_api_key: Optional[str] = None
     ideaspark_model: str = "gpt-4o"
     budget_limit_usd: float = 50.0
 
-    # Embedding 配置（OpenAI 兼容格式，可独立于 LLM 提供商）
+    # ── embeddings (independent provider supported) ────────
     embedding_base_url: str = "https://api.openai.com/v1"
-    embedding_api_key: str = "sk-xxx"
+    embedding_api_key: Optional[str] = None
     embedding_model: str = "text-embedding-3-small"
 
-    # 工作区（CodeLab 沙箱边界）
+    # ── workspace + storage ────────────────────────────────
     workspace_dir: str = ""
-
-    # 存储
     storage_path: str = "./storage"
 
-    # 外部 API 密钥
+    # ── third-party APIs ───────────────────────────────────
     tavily_api_key: Optional[str] = None
-    s2_api_key: Optional[str] = None  # Semantic Scholar API Key
+    s2_api_key: Optional[str] = None  # Semantic Scholar
 
-    # OpenCode 引擎（CodeLab 模块代理目标）
+    # ── OpenCode engine (CodeLab proxy target) ─────────────
     opencode_url: str = "http://localhost:3100"
 
-    # WriterAI 模块
-    writer_base_url: str = ""  # LLM Provider（留空复用 IDEASPARK_*）
-    writer_api_key: str = ""
-    writer_model: str = ""
-    writer_sandbox_timeout: int = 30  # 沙箱超时（秒）
-    writer_sandbox_memory: str = "512m"  # 沙箱内存限制
+    # ── WriterAI (falls back to ideaspark_* if blank) ──────
+    writer_base_url: Optional[str] = None
+    writer_api_key: Optional[str] = None
+    writer_model: Optional[str] = None
+    writer_sandbox_timeout: int = 30
+    writer_sandbox_memory: str = "512m"
 
-    # API 认证
-    api_keys: Optional[str] = None  # 逗号分隔的 API Keys，为空则禁用认证
+    # ── API authentication ─────────────────────────────────
+    # Comma-separated API keys; auth is disabled when this is empty.
+    api_keys: Optional[str] = None
 
-    model_config = {"env_file": str(_PROJECT_ROOT / ".env"), "env_file_encoding": "utf-8", "extra": "ignore"}
+    # ── observability ──────────────────────────────────────
+    log_level: str = "INFO"
+    log_json: bool = False
+
+    # ── CORS (defaults match the Docker-Caddy deployment) ──
+    # Comma-separated list. Use "*" only when allow_credentials is False.
+    cors_allow_origins: str = "http://localhost:3000"
+
+    def llm_chat_credentials(self) -> tuple[str, Optional[str], str]:
+        """Return (base_url, api_key, model) for the primary chat channel."""
+        return self.ideaspark_base_url, self.ideaspark_api_key, self.ideaspark_model
+
+    def llm_embed_credentials(self) -> tuple[str, Optional[str], str]:
+        """Return (base_url, api_key, model) for the embedding channel."""
+        return self.embedding_base_url, self.embedding_api_key, self.embedding_model
+
+    def writer_llm_credentials(self) -> tuple[str, Optional[str], str]:
+        """Return (base_url, api_key, model) for WriterAI, falling back to the primary."""
+        return (
+            self.writer_base_url or self.ideaspark_base_url,
+            self.writer_api_key or self.ideaspark_api_key,
+            self.writer_model or self.ideaspark_model,
+        )
 
 
 @lru_cache
 def get_settings() -> Settings:
-    """缓存的配置单例。"""
+    """Cached settings singleton."""
     return Settings()

@@ -11,7 +11,7 @@ import numpy as np
 from sklearn.cluster import KMeans
 
 from sololab.modules.ideaspark.phases.base import Phase, PhaseContext, PhaseEvent
-from sololab.models.agent import Message
+from sololab.schemas.agent import Message
 
 
 class ClusterPhase(Phase):

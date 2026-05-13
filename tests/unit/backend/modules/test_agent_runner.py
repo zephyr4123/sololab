@@ -4,7 +4,7 @@ import pytest
 
 from sololab.core.llm_gateway import LLMGateway
 from sololab.core.tool_registry import ToolRegistry
-from sololab.models.agent import MessageType
+from sololab.schemas.agent import MessageType
 from sololab.modules.ideaspark.agents.agent_runner import AgentRunner
 from sololab.modules.ideaspark.agents.personas import get_persona
 from sololab.tools.tavily_search import TavilySearchTool

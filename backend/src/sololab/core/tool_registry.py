@@ -1,13 +1,20 @@
-"""工具注册表 - 统一的外部 API 工具管理。"""
+"""Tool registry for external-API tools (search, document parsing, ...).
+
+Each tool declares its own OpenAI function-calling schema via
+`parameters_schema` so the registry can build the LLM-facing tool list
+without guessing parameter names.
+"""
+
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List, Optional
 
 
 @dataclass
 class ToolResult:
-    """标准化的工具执行结果。"""
+    """Uniform tool result envelope."""
 
     success: bool
     data: Dict[str, Any]
@@ -16,75 +23,80 @@ class ToolResult:
 
 
 class ToolBase(ABC):
-    """所有外部工具的基类。"""
+    """Base for external-API tools.
+
+    Subclasses must declare:
+      - `name` (str property): unique tool identifier
+      - `description` (str property): LLM-facing description
+      - `parameters_schema` (ClassVar[dict]): JSON-Schema for parameters,
+        in the shape OpenAI function-calling expects.
+
+    Example::
+
+        class TavilySearchTool(ToolBase):
+            parameters_schema = {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search query"},
+                    "max_results": {"type": "integer", "default": 5},
+                },
+                "required": ["query"],
+            }
+    """
+
+    parameters_schema: ClassVar[Dict[str, Any]]
 
     @property
     @abstractmethod
     def name(self) -> str:
-        """工具唯一标识符。"""
-        ...
+        """Unique tool identifier."""
 
     @property
     @abstractmethod
     def description(self) -> str:
-        """供 LLM 理解的工具描述。"""
-        ...
+        """Description shown to the LLM during function calling."""
 
     @abstractmethod
     async def execute(self, params: dict) -> ToolResult:
-        """使用给定参数执行工具。"""
-        ...
+        """Execute the tool with the given params dict."""
 
     def to_openai_function(self) -> Dict[str, Any]:
-        """转换为 OpenAI function calling 格式。"""
+        """Build the OpenAI function-calling descriptor for this tool."""
+        schema = getattr(type(self), "parameters_schema", None)
+        if schema is None:
+            raise NotImplementedError(
+                f"{type(self).__name__} must declare a `parameters_schema` "
+                "ClassVar (see ToolBase docstring)."
+            )
         return {
             "type": "function",
             "function": {
                 "name": self.name,
                 "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "搜索查询关键词",
-                        },
-                        "max_results": {
-                            "type": "integer",
-                            "description": "最大返回结果数",
-                            "default": 3,
-                        },
-                    },
-                    "required": ["query"],
-                },
+                "parameters": schema,
             },
         }
 
 
 class ToolRegistry:
-    """管理外部 API 工具的工具注册表。"""
+    """In-memory registry of external-API tools."""
 
     def __init__(self) -> None:
         self._tools: Dict[str, ToolBase] = {}
 
     def register(self, tool: ToolBase) -> None:
-        """注册工具。"""
         self._tools[tool.name] = tool
 
     def unregister(self, tool_name: str) -> None:
-        """注销工具。"""
         self._tools.pop(tool_name, None)
 
     def get_tool(self, name: str) -> Optional[ToolBase]:
-        """根据名称获取工具。"""
         return self._tools.get(name)
 
     def get_tools_for_module(self, tool_names: List[str]) -> List[ToolBase]:
-        """根据名称列表获取多个工具。"""
         return [self._tools[n] for n in tool_names if n in self._tools]
 
     def get_openai_tools(self, tool_names: List[str]) -> List[Dict[str, Any]]:
-        """根据名称列表获取 OpenAI function calling 格式的工具定义。"""
         return [
             self._tools[n].to_openai_function()
             for n in tool_names
@@ -92,5 +104,7 @@ class ToolRegistry:
         ]
 
     def list_tools(self) -> List[Dict[str, str]]:
-        """列出所有已注册的工具。"""
-        return [{"name": t.name, "description": t.description} for t in self._tools.values()]
+        return [
+            {"name": t.name, "description": t.description}
+            for t in self._tools.values()
+        ]

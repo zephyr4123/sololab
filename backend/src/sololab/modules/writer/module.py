@@ -50,33 +50,38 @@ class WriterModule(ModuleBase):
     async def on_load(self, ctx: ModuleContext) -> None:
         settings = get_settings()
 
-        # Template registry
         templates_dir = Path(__file__).parent / "templates"
         self.template_registry = TemplateRegistry(templates_dir)
 
-        # Document manager — 复用 app.state 的 DB 连接池（通过 ModuleContext 注入）
+        # Reuse the app-level DB pool injected through ModuleContext.
         self.document_manager = DocumentManager(ctx.db_session_factory)
         if ctx.db_session_factory is None:
             logger.warning("WriterAI loaded without DB — document persistence disabled")
 
-        # Sandbox executor
         self.sandbox_executor = SandboxExecutor(
             storage_path=settings.storage_path,
             timeout=settings.writer_sandbox_timeout,
             memory=settings.writer_sandbox_memory,
         )
 
-        # Writer agent
+        # Writer agent — inherits cost/trace instrumentation from ctx so its
+        # LLM calls stay budgeted and traced even if writer uses its own model.
         self.agent = WriterAgent(
             settings=settings,
             document_manager=self.document_manager,
             template_registry=self.template_registry,
             sandbox_executor=self.sandbox_executor,
-            tool_registry=ctx.tool_registry if hasattr(ctx, "tool_registry") else None,
-            document_pipeline=ctx.document_pipeline if hasattr(ctx, "document_pipeline") else None,
+            main_llm_gateway=ctx.llm_gateway,
+            tool_registry=ctx.tool_registry,
+            document_pipeline=ctx.document_pipeline,
+            cost_tracker=ctx.cost_tracker,
+            llm_tracer=ctx.llm_tracer,
+            budget_alert=ctx.budget_alert,
         )
 
-        logger.info("WriterAI module loaded (templates: %s)", self.template_registry.list_ids())
+        logger.info(
+            "writer_module_loaded templates=%s", self.template_registry.list_ids()
+        )
 
     async def execute(
         self, request: ModuleRequest, ctx: ModuleContext

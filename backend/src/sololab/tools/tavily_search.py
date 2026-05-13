@@ -7,7 +7,20 @@ from sololab.core.tool_registry import ToolBase, ToolResult
 
 
 class TavilySearchTool(ToolBase):
-    """搜索网络获取最新信息和行业趋势。"""
+    """Search the web for current information via Tavily."""
+
+    parameters_schema = {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "Web search query"},
+            "max_results": {
+                "type": "integer",
+                "description": "Maximum number of results to return",
+                "default": 5,
+            },
+        },
+        "required": ["query"],
+    }
 
     @property
     def name(self) -> str:

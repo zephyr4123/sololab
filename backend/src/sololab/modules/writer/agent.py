@@ -56,25 +56,67 @@ class WriterAgent:
         document_manager: DocumentManager,
         template_registry: TemplateRegistry,
         sandbox_executor: SandboxExecutor | None,
+        main_llm_gateway: LLMGateway,
         tool_registry=None,
         document_pipeline=None,
+        cost_tracker=None,
+        llm_tracer=None,
+        budget_alert=None,
     ) -> None:
-        # Create writer-specific LLM gateway (falls back to IdeaSpark config)
-        base_url = settings.writer_base_url or settings.ideaspark_base_url
-        api_key = settings.writer_api_key or settings.ideaspark_api_key
-        model = settings.writer_model or settings.ideaspark_model
-
-        self.llm = LLMGateway(LLMConfig(
-            base_url=base_url,
-            api_key=api_key,
-            default_model=model,
-        ))
+        self.llm = self._resolve_gateway(
+            settings,
+            main_gateway=main_llm_gateway,
+            cost_tracker=cost_tracker,
+            tracer=llm_tracer,
+            budget_alert=budget_alert,
+        )
         self.document_manager = document_manager
         self.template_registry = template_registry
         self.sandbox_executor = sandbox_executor
         self.tool_registry = tool_registry
         self.document_pipeline = document_pipeline
         self.settings = settings
+
+    @staticmethod
+    def _resolve_gateway(
+        settings: Settings,
+        *,
+        main_gateway: LLMGateway,
+        cost_tracker,
+        tracer,
+        budget_alert,
+    ) -> LLMGateway:
+        """Return the gateway WriterAgent should use for chat calls.
+
+        If the writer-specific channel is configured, build a fresh gateway so
+        the writer can run on a different model — but inherit the main
+        gateway's cost_tracker / tracer so calls stay instrumented. Otherwise
+        reuse the main gateway as-is.
+        """
+        writer_url = settings.writer_base_url
+        writer_key = settings.writer_api_key
+        writer_model = settings.writer_model
+
+        # No override → reuse the main gateway (cheapest + already instrumented).
+        if not writer_url and not writer_key and not writer_model:
+            return main_gateway
+
+        chat_url, chat_key, chat_model = settings.writer_llm_credentials()
+        embed_url, embed_key, embed_model = settings.llm_embed_credentials()
+        return LLMGateway(
+            LLMConfig(
+                base_url=chat_url,
+                api_key=chat_key,
+                default_model=chat_model,
+                embedding_base_url=embed_url,
+                embedding_api_key=embed_key,
+                embedding_model=embed_model,
+            ),
+            cost_tracker=cost_tracker,
+            tracer=tracer,
+            budget_alert=budget_alert,
+            module_id="writer",
+        )
 
     async def run(
         self,

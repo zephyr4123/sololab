@@ -996,32 +996,48 @@ docker compose up -d   # 🚀 一行拉起全部 6 个服务
 ### `.env` 配置
 
 ```bash
-# ── IdeaSpark 模块 ──
+# ── IdeaSpark 模块（必填）──
 IDEASPARK_BASE_URL=https://api.openai.com/v1  # OpenAI 兼容端点
-IDEASPARK_API_KEY=sk-xxx
+IDEASPARK_API_KEY=<your-real-key>             # 占位符 sk-xxx 会被启动时拒绝
 IDEASPARK_MODEL=gpt-4o
+BUDGET_LIMIT_USD=50.0                         # 任务级预算，LLM 调用前会真正 enforce
 
 # ── CodeLab 模块（3 变量直连 AI SDK）──
 CODELAB_MODEL=anthropic/claude-sonnet-4-5     # 格式: providerID/modelID
-CODELAB_API_KEY=sk-xxx
+CODELAB_API_KEY=<your-real-key>
 # CODELAB_BASE_URL=                           # anthropic/openai/google 无需设置
 
-# ── WriterAI 模块 ──
-WRITER_BASE_URL=https://api.openai.com/v1     # OpenAI 兼容端点
-WRITER_API_KEY=sk-xxx
-WRITER_MODEL=gpt-4o
-WRITER_SANDBOX_TIMEOUT=30                     # 代码沙箱超时（秒）
-WRITER_SANDBOX_MEMORY=512m                    # 代码沙箱内存限制
+# ── WriterAI 模块（留空则复用 IDEASPARK_*）──
+# WRITER_BASE_URL=
+# WRITER_API_KEY=
+# WRITER_MODEL=
+WRITER_SANDBOX_TIMEOUT=30
+WRITER_SANDBOX_MEMORY=512m
+
+# ── 向量嵌入（必填）──
+EMBEDDING_BASE_URL=https://api.openai.com/v1
+EMBEDDING_API_KEY=<your-real-key>
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_DIM=1024                            # 嵌入维度（换模型时同步调，需重建相关表）
 
 # ── 外部 API ──
-TAVILY_API_KEY=tvly-xxx                       # Tavily 搜索
-EMBEDDING_API_KEY=sk-xxx                      # 向量嵌入
+TAVILY_API_KEY=tvly-xxx
+S2_API_KEY=                                   # Semantic Scholar 可选
+
+# ── 鉴权（留空禁用，所有路由放行；填入则全部 mutation 路由要求 X-API-Key）──
+# API_KEYS=sk-sololab-xxx,sk-sololab-yyy
+
+# ── 可观测 ──
+LOG_LEVEL=INFO
+LOG_JSON=false                                # 生产建议 true，方便日志聚合
+CORS_ALLOW_ORIGINS=http://localhost:3000      # 逗号分隔；用 "*" 时 credentials 自动关闭
 
 # ── 工作区 ──
 WORKSPACE_DIR=/path/to/your/code              # CodeLab Agent 的沙箱边界
+STORAGE_PATH=./storage                        # 沙箱图表等运行时文件
 ```
 
-> 详见 [.env.example](.env.example)，含 30+ Provider 配置示例。
+> 详见 [.env.example](.env.example)。**API key 占位符（`sk-xxx`、空字符串等）会被 `LLMConfig` 在启动时直接拒绝**，请填入真实 key。
 
 ### 日常开发
 
@@ -1045,14 +1061,18 @@ docker compose ps                             # 查看服务状态
 ### 运行测试
 
 ```bash
-# 后端测试（在容器外用 conda 环境）
-conda activate sololab
-pytest tests/unit/ -v          # 单元测试
-pytest tests/integration/ -v   # 集成测试
+# 后端测试默认在容器内（pytest/httpx/fakeredis 已在镜像里）
+docker compose exec backend pytest tests/unit/backend/ -m unit -q
+docker compose exec backend pytest tests/integration -m integration
 
-# OpenCode 引擎测试
+# E2E 用 host 跑（需要浏览器）
+cd tests/e2e && npx playwright test
+
+# OpenCode 引擎测试（独立 Bun 运行时）
 cd opencode && bun run test
 ```
+
+> 后端代码改完自动热重载（bind-mount + uvicorn `--reload`），无需重建容器；只有改了 `pyproject.toml` 依赖或 `Dockerfile` 才需 `docker compose build backend`。
 
 > 📂 Benchmark 复现指南见 [消融实验报告](docs/benchmark/ideaspark-ablation.md#-复现指南)。
 
@@ -1071,16 +1091,32 @@ cd opencode && bun run test
 soloLab/
 ├── backend/                       # FastAPI 后端
 │   └── src/sololab/
-│       ├── main.py                # 应用入口
-│       ├── config/                # 配置 & LLM 配置
-│       ├── core/                  # 核心服务层 (7 个服务)
-│       ├── api/                   # REST API 路由 (含 codelab.py 代理)
-│       ├── models/                # Pydantic 数据模型
+│       ├── main.py                # 应用入口；lifespan 拆为 7 个 _init_* helper
+│       ├── config/                # Pydantic Settings (API key fail-fast)
+│       ├── core/                  # 核心服务层
+│       │   ├── auth.py            # APIKeyAuth + verify_api_key
+│       │   ├── cost_tracker.py    # 预算 + 持久化
+│       │   ├── llm/               # Provider Strategy + Registry + Quirks
+│       │   │   ├── cost.py        # CostTrackingProvider — 单点接住 budget+tracer+cost record
+│       │   │   └── providers/     # openai/deepseek/anthropic/qwen/openai_compat
+│       │   ├── llm_gateway.py
+│       │   ├── memory_manager.py
+│       │   ├── message_store.py
+│       │   ├── module_registry.py
+│       │   ├── observability.py   # structlog + RequestContextMiddleware + LLMCallTracer
+│       │   ├── rate_limiter.py
+│       │   ├── session_manager.py
+│       │   ├── task_state_manager.py
+│       │   └── tool_registry.py
+│       ├── api/                   # REST 路由（_deps.py 暴露 AuthDep + build_module_context）
+│       ├── db/                    # 持久层
+│       │   ├── base.py            # Base + engine + sessionmaker
+│       │   └── models/            # 一聚合根一文件（auth/blackboard/cost/document/memory/session/writer）
+│       ├── schemas/               # Pydantic transport models (agent/module)
 │       ├── modules/               # 可插拔功能模块
 │       │   ├── ideaspark/         # 💡 IdeaSpark 多智能体
 │       │   └── writer/            # ✍️ WriterAI (agent / 8 tools / templates / sandbox / export)
-│       ├── tools/                 # 外部工具 (arXiv/Scholar/Tavily/PDF)
-│       └── benchmark/             # Benchmark 评测框架
+│       └── tools/                 # 外部工具 (arXiv/Scholar/Tavily/PDF)
 │
 ├── opencode/                      # CodeLab 引擎 (OpenCode 核心)
 │   ├── packages/opencode/src/     # 核心源码 (45 子模块)

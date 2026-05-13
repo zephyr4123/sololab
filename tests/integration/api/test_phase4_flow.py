@@ -63,10 +63,9 @@ class TestPhase4API:
 
     @pytest.mark.integration
     async def test_observability_initialized(self, app_client):
-        """可观测性组件应已初始化。"""
+        """Observability components should be wired in app.state."""
         _, app = app_client
         assert app.state.llm_tracer is not None
-        assert app.state.message_tracer is not None
         assert app.state.budget_alert is not None
 
     @pytest.mark.integration

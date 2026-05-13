@@ -66,38 +66,6 @@ class TestLLMCallTracer:
         assert "divergent" in summary["by_agent"]
 
 
-class TestMessageTracer:
-    """MessageTracer 测试。"""
-
-    @pytest.mark.unit
-    def test_track_message(self):
-        """追踪消息引用。"""
-        from sololab.core.observability import MessageTracer
-
-        tracer = MessageTracer()
-        tracer.track_message("m1", references=[])
-        tracer.track_message("m2", references=["m1"])
-        tracer.track_message("m3", references=["m1", "m2"])
-
-        chain = tracer.get_reference_chain("m1")
-        assert "m2" in chain
-        assert "m3" in chain
-
-    @pytest.mark.unit
-    def test_get_orphan_messages(self):
-        """找出孤立消息。"""
-        from sololab.core.observability import MessageTracer
-
-        tracer = MessageTracer()
-        tracer.track_message("m1", references=[])
-        tracer.track_message("m2", references=["m1"])
-        # m3 没有被追踪也没有引用任何消息
-
-        orphans = tracer.get_orphan_messages(["m1", "m2", "m3"])
-        assert "m3" in orphans
-        assert "m1" not in orphans
-
-
 class TestBudgetAlert:
     """BudgetAlert 测试。"""
 

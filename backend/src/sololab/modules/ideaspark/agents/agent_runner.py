@@ -18,7 +18,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from sololab.core.llm_gateway import LLMGateway
 from sololab.core.tool_registry import ToolRegistry
-from sololab.models.agent import AgentConfig, AgentState, Message
+from sololab.schemas.agent import AgentConfig, AgentState, Message
 from sololab.modules.ideaspark.agents.output_parser import OutputParser
 from sololab.modules.ideaspark.agents.tool_dispatcher import ToolDispatcher
 from sololab.modules.ideaspark.prompts.system_prompts import get_prompt

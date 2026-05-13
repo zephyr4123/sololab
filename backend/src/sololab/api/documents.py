@@ -1,4 +1,4 @@
-"""文档上传与搜索的 API 路由。"""
+"""Document upload + search API."""
 
 import asyncio
 import logging
@@ -6,10 +6,14 @@ import shutil
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile
-from sqlalchemy import select, delete as sql_delete
+from sqlalchemy import delete as sql_delete
+from sqlalchemy import select
+
+from sololab.api._deps import AuthDep
+from sololab.db.models import DocumentChunkRecord, DocumentRecord
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(dependencies=[AuthDep])
 
 
 @router.post("/documents/upload")
@@ -101,8 +105,6 @@ async def list_documents(request: Request, limit: int = 50) -> list:
     if not pipeline:
         raise HTTPException(503, "Document pipeline not initialized")
 
-    from sololab.models.orm import DocumentRecord
-
     async with pipeline.db() as session:
         result = await session.execute(
             select(DocumentRecord)
@@ -132,7 +134,6 @@ async def delete_document(request: Request, doc_id: str) -> dict:
     if not pipeline:
         raise HTTPException(503, "Document pipeline not initialized")
 
-    from sololab.models.orm import DocumentRecord, DocumentChunkRecord
     import os
 
     async with pipeline.db() as session:

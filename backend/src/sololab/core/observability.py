@@ -1,19 +1,59 @@
-"""可观测性 - 结构化日志、消息追踪、费用监控。"""
+"""Structured logging, request context, LLM tracing, and budget alerts.
+
+The request context exports two ContextVars — `request_id` and `task_id` —
+that flow through structlog and downstream services (LLM provider wrappers,
+cost tracker) without needing to thread them through every call site.
+"""
+
+from __future__ import annotations
 
 import logging
 import time
+import uuid
+from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 import structlog
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.requests import Request
+from starlette.responses import Response
 
-# 请求级上下文
+# ── Request-scoped context ────────────────────────────────────────────────────
+# These ContextVars are read by the LLM provider wrapper and the cost tracker
+# to associate observability data with the originating request/task.
+
 _request_id: ContextVar[str] = ContextVar("request_id", default="")
 _task_id: ContextVar[str] = ContextVar("task_id", default="")
 
-# 配置 structlog
+
+def get_request_id() -> str:
+    return _request_id.get("")
+
+
+def get_task_id() -> str:
+    return _task_id.get("")
+
+
+@contextmanager
+def task_context(task_id: str) -> Iterator[None]:
+    """Bind `task_id` for the duration of the `with` block.
+
+    Used by streaming module routes to scope LLM calls (and their cost
+    records / traces) to a specific task id.
+    """
+    token = _task_id.set(task_id)
+    try:
+        yield
+    finally:
+        _task_id.reset(token)
+
+
+# ── Logging setup ─────────────────────────────────────────────────────────────
+
+
 def setup_logging(log_level: str = "INFO", json_output: bool = True) -> None:
-    """配置结构化日志系统。"""
+    """Configure structlog with request_id/task_id propagation."""
     processors = [
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
@@ -39,24 +79,46 @@ def setup_logging(log_level: str = "INFO", json_output: bool = True) -> None:
 
 
 def get_logger(name: str = "") -> structlog.BoundLogger:
-    """获取结构化日志记录器。"""
+    """Return a structlog logger; request_id/task_id auto-merged from contextvars."""
     return structlog.get_logger(name)
 
 
-class LLMCallTracer:
-    """LLM 调用追踪器 - 记录每次调用的详细信息。
+# ── Request context middleware ────────────────────────────────────────────────
 
-    追踪信息包括：
-    - agent_name: 调用的智能体名称
-    - model: 使用的模型
-    - tokens: 输入/输出 token 数
-    - latency: 响应延迟（秒）
-    - cost_usd: 费用
+
+class RequestContextMiddleware(BaseHTTPMiddleware):
+    """Stamp every request with an id and propagate it via ContextVar + structlog.
+
+    Accepts an inbound ``X-Request-ID`` header for cross-service tracing;
+    generates a UUID otherwise. The id is echoed in the response header so
+    clients can correlate logs.
     """
 
-    def __init__(self) -> None:
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        rid = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+        token = _request_id.set(rid)
+        structlog.contextvars.bind_contextvars(request_id=rid)
+        try:
+            response = await call_next(request)
+        finally:
+            _request_id.reset(token)
+            structlog.contextvars.unbind_contextvars("request_id")
+        response.headers["X-Request-ID"] = rid
+        return response
+
+
+# ── LLM call tracer ───────────────────────────────────────────────────────────
+
+
+class LLMCallTracer:
+    """In-memory ring buffer of recent LLM calls — surface for /providers/traces."""
+
+    def __init__(self, max_traces: int = 1000) -> None:
         self._log = get_logger("llm_tracer")
         self._traces: List[Dict[str, Any]] = []
+        self._max_traces = max_traces
 
     def start_trace(
         self,
@@ -64,11 +126,11 @@ class LLMCallTracer:
         model: str = "",
         task_id: str = "",
     ) -> Dict[str, Any]:
-        """开始追踪一次 LLM 调用。"""
-        trace = {
+        return {
             "agent_name": agent_name,
             "model": model,
             "task_id": task_id or _task_id.get(""),
+            "request_id": _request_id.get(""),
             "start_time": time.time(),
             "end_time": 0.0,
             "latency_ms": 0.0,
@@ -78,7 +140,6 @@ class LLMCallTracer:
             "status": "running",
             "error": None,
         }
-        return trace
 
     def end_trace(
         self,
@@ -86,7 +147,6 @@ class LLMCallTracer:
         usage: Optional[Dict] = None,
         error: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """结束追踪，记录结果。"""
         trace["end_time"] = time.time()
         trace["latency_ms"] = round((trace["end_time"] - trace["start_time"]) * 1000, 1)
 
@@ -102,13 +162,15 @@ class LLMCallTracer:
             trace["status"] = "completed"
 
         self._traces.append(trace)
+        if len(self._traces) > self._max_traces:
+            del self._traces[0 : len(self._traces) - self._max_traces]
 
-        # 结构化日志记录
         self._log.info(
             "llm_call",
             agent=trace["agent_name"],
             model=trace["model"],
             task_id=trace["task_id"],
+            request_id=trace["request_id"],
             latency_ms=trace["latency_ms"],
             prompt_tokens=trace["prompt_tokens"],
             completion_tokens=trace["completion_tokens"],
@@ -119,13 +181,11 @@ class LLMCallTracer:
         return trace
 
     def get_traces(self, task_id: Optional[str] = None, limit: int = 100) -> List[Dict]:
-        """获取追踪记录。"""
         if task_id:
             return [t for t in self._traces if t["task_id"] == task_id][-limit:]
         return self._traces[-limit:]
 
     def get_summary(self, task_id: Optional[str] = None) -> Dict:
-        """获取追踪统计摘要。"""
         traces = self.get_traces(task_id)
         if not traces:
             return {"total_calls": 0, "total_tokens": 0, "total_cost_usd": 0, "avg_latency_ms": 0}
@@ -145,7 +205,7 @@ class LLMCallTracer:
 
     @staticmethod
     def _group_by(traces: List[Dict], key: str) -> Dict:
-        groups = {}
+        groups: Dict[str, Dict[str, Any]] = {}
         for t in traces:
             k = t.get(key, "unknown")
             if k not in groups:
@@ -156,86 +216,51 @@ class LLMCallTracer:
         return groups
 
 
-class MessageTracer:
-    """消息追踪器 - 追踪黑板消息的引用链。"""
-
-    def __init__(self) -> None:
-        self._references: Dict[str, List[str]] = {}  # message_id -> referenced_by
-        self._log = get_logger("msg_tracer")
-
-    def track_message(self, message_id: str, references: List[str] = []) -> None:
-        """追踪消息及其引用关系。"""
-        for ref_id in references:
-            if ref_id not in self._references:
-                self._references[ref_id] = []
-            self._references[ref_id].append(message_id)
-
-        self._log.debug(
-            "message_tracked",
-            message_id=message_id,
-            references=references,
-        )
-
-    def get_reference_chain(self, message_id: str, depth: int = 10) -> List[str]:
-        """获取消息的引用链（被谁引用）。"""
-        chain = []
-        visited = set()
-
-        def _walk(mid: str, d: int) -> None:
-            if d <= 0 or mid in visited:
-                return
-            visited.add(mid)
-            referencing = self._references.get(mid, [])
-            chain.extend(referencing)
-            for ref in referencing:
-                _walk(ref, d - 1)
-
-        _walk(message_id, depth)
-        return chain
-
-    def get_orphan_messages(self, all_message_ids: List[str]) -> List[str]:
-        """找出没有被任何消息引用的孤立消息。"""
-        referenced = set()
-        for refs in self._references.values():
-            referenced.update(refs)
-        # 也包括引用了其他消息的
-        for mid in self._references:
-            referenced.add(mid)
-        return [mid for mid in all_message_ids if mid not in referenced]
+# ── Budget alert ──────────────────────────────────────────────────────────────
 
 
 class BudgetAlert:
-    """预算告警 - 费用超过阈值时触发告警。"""
+    """Emit structured alerts when a task crosses 50%/80%/100% of its budget."""
 
     def __init__(self, budget_usd: float = 5.0) -> None:
         self.budget_usd = budget_usd
         self._log = get_logger("budget_alert")
-        self._alerted: Dict[str, bool] = {}  # task_id -> already_alerted
+        self._alerted: Dict[str, bool] = {}
 
     def check(self, task_id: str, current_cost: float) -> Optional[Dict]:
-        """检查费用是否超过预算阈值。"""
-        ratio = current_cost / self.budget_usd if self.budget_usd > 0 else 0
+        if not task_id or self.budget_usd <= 0:
+            return None
+
+        ratio = current_cost / self.budget_usd
 
         if ratio >= 1.0 and not self._alerted.get(f"{task_id}_100"):
             self._alerted[f"{task_id}_100"] = True
-            alert = {"level": "critical", "task_id": task_id, "cost_usd": current_cost, "budget_usd": self.budget_usd, "ratio": ratio}
+            alert = {
+                "level": "critical", "task_id": task_id,
+                "cost_usd": current_cost, "budget_usd": self.budget_usd, "ratio": ratio,
+            }
             self._log.error("budget_exceeded", **alert)
             return alert
-        elif ratio >= 0.8 and not self._alerted.get(f"{task_id}_80"):
+        if ratio >= 0.8 and not self._alerted.get(f"{task_id}_80"):
             self._alerted[f"{task_id}_80"] = True
-            alert = {"level": "warning", "task_id": task_id, "cost_usd": current_cost, "budget_usd": self.budget_usd, "ratio": ratio}
+            alert = {
+                "level": "warning", "task_id": task_id,
+                "cost_usd": current_cost, "budget_usd": self.budget_usd, "ratio": ratio,
+            }
             self._log.warning("budget_warning", **alert)
             return alert
-        elif ratio >= 0.5 and not self._alerted.get(f"{task_id}_50"):
+        if ratio >= 0.5 and not self._alerted.get(f"{task_id}_50"):
             self._alerted[f"{task_id}_50"] = True
-            alert = {"level": "info", "task_id": task_id, "cost_usd": current_cost, "budget_usd": self.budget_usd, "ratio": ratio}
+            alert = {
+                "level": "info", "task_id": task_id,
+                "cost_usd": current_cost, "budget_usd": self.budget_usd, "ratio": ratio,
+            }
             self._log.info("budget_info", **alert)
             return alert
 
         return None
 
     def reset(self, task_id: str) -> None:
-        """重置任务的告警状态。"""
-        keys = [k for k in self._alerted if k.startswith(task_id)]
-        for k in keys:
-            del self._alerted[k]
+        for k in list(self._alerted):
+            if k.startswith(task_id):
+                del self._alerted[k]

@@ -15,7 +15,7 @@ import re
 import uuid
 from typing import Any, Dict, List
 
-from sololab.models.agent import Message, MessageType
+from sololab.schemas.agent import Message, MessageType
 
 _DSML_BLOCK_RE = re.compile(
     r"<[\|｜]\s*DSML\s*[\|｜][^>]*>.*?<\/[\|｜]\s*DSML\s*[\|｜][^>]*>",

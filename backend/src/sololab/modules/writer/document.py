@@ -12,9 +12,12 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select, delete as sa_delete
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm.attributes import flag_modified
+
+from sololab.db.models import WriterDocumentRecord
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +52,6 @@ class DocumentManager:
     ) -> dict:
         """Create a new document linked to a session."""
         self._ensure_db()
-        from sololab.models.orm import WriterDocumentRecord
-
         doc_id = _new_id()
         now = _now()
 
@@ -82,8 +83,6 @@ class DocumentManager:
     async def get(self, doc_id: str) -> dict | None:
         """Get a document by doc_id."""
         self._ensure_db()
-        from sololab.models.orm import WriterDocumentRecord
-
         async with self.session_factory() as session:
             result = await session.execute(
                 select(WriterDocumentRecord).where(WriterDocumentRecord.doc_id == doc_id)
@@ -94,8 +93,6 @@ class DocumentManager:
     async def get_by_session(self, session_id: str) -> dict | None:
         """Get the document associated with a session."""
         self._ensure_db()
-        from sololab.models.orm import WriterDocumentRecord
-
         async with self.session_factory() as session:
             result = await session.execute(
                 select(WriterDocumentRecord)
@@ -108,8 +105,6 @@ class DocumentManager:
     async def list_documents(self, session_id: str | None = None) -> list[dict]:
         """List all documents, optionally filtered by session_id."""
         self._ensure_db()
-        from sololab.models.orm import WriterDocumentRecord
-
         async with self.session_factory() as session:
             stmt = select(WriterDocumentRecord).order_by(
                 WriterDocumentRecord.updated_at.desc()
@@ -132,8 +127,6 @@ class DocumentManager:
     ) -> dict | None:
         """Update a specific section in the document."""
         self._ensure_db()
-        from sololab.models.orm import WriterDocumentRecord
-
         async with self.session_factory() as session:
             result = await session.execute(
                 select(WriterDocumentRecord).where(WriterDocumentRecord.doc_id == doc_id)
@@ -171,8 +164,6 @@ class DocumentManager:
     async def init_sections(self, doc_id: str, sections: list[dict]) -> dict | None:
         """Initialize document sections (from outline creation)."""
         self._ensure_db()
-        from sololab.models.orm import WriterDocumentRecord
-
         async with self.session_factory() as session:
             result = await session.execute(
                 select(WriterDocumentRecord).where(WriterDocumentRecord.doc_id == doc_id)
@@ -194,8 +185,6 @@ class DocumentManager:
     async def add_reference(self, doc_id: str, reference: dict) -> dict | None:
         """Add a reference to the document. Auto-assigns ref number."""
         self._ensure_db()
-        from sololab.models.orm import WriterDocumentRecord
-
         async with self.session_factory() as session:
             result = await session.execute(
                 select(WriterDocumentRecord).where(WriterDocumentRecord.doc_id == doc_id)
@@ -226,8 +215,6 @@ class DocumentManager:
     async def remove_reference(self, doc_id: str, ref_number: int) -> dict | None:
         """Remove a reference and renumber the remaining ones."""
         self._ensure_db()
-        from sololab.models.orm import WriterDocumentRecord
-
         async with self.session_factory() as session:
             result = await session.execute(
                 select(WriterDocumentRecord).where(WriterDocumentRecord.doc_id == doc_id)
@@ -255,8 +242,6 @@ class DocumentManager:
     async def add_figure(self, doc_id: str, figure: dict) -> dict | None:
         """Add a figure to the document."""
         self._ensure_db()
-        from sololab.models.orm import WriterDocumentRecord
-
         async with self.session_factory() as session:
             result = await session.execute(
                 select(WriterDocumentRecord).where(WriterDocumentRecord.doc_id == doc_id)
@@ -285,8 +270,6 @@ class DocumentManager:
     async def update(self, doc_id: str, **kwargs: Any) -> dict | None:
         """Update top-level document fields (title, status, language, template_id, etc.)."""
         self._ensure_db()
-        from sololab.models.orm import WriterDocumentRecord
-
         allowed_fields = {"title", "status", "language", "template_id", "metadata_json"}
 
         async with self.session_factory() as session:
@@ -317,8 +300,6 @@ class DocumentManager:
         self._ensure_db()
         if not patch:
             return None
-        from sololab.models.orm import WriterDocumentRecord
-
         async with self.session_factory() as session:
             result = await session.execute(
                 select(WriterDocumentRecord).where(WriterDocumentRecord.doc_id == doc_id)
@@ -346,8 +327,6 @@ class DocumentManager:
         that turn (user → assistant → tool ... → assistant).
         """
         self._ensure_db()
-        from sololab.models.orm import WriterDocumentRecord
-
         async with self.session_factory() as session:
             result = await session.execute(
                 select(WriterDocumentRecord).where(WriterDocumentRecord.doc_id == doc_id)
@@ -373,8 +352,6 @@ class DocumentManager:
         self._ensure_db()
         if not messages:
             return None
-        from sololab.models.orm import WriterDocumentRecord
-
         async with self.session_factory() as session:
             result = await session.execute(
                 select(WriterDocumentRecord).where(WriterDocumentRecord.doc_id == doc_id)
@@ -403,8 +380,6 @@ class DocumentManager:
     async def delete(self, doc_id: str) -> bool:
         """Delete a document by doc_id."""
         self._ensure_db()
-        from sololab.models.orm import WriterDocumentRecord
-
         async with self.session_factory() as session:
             result = await session.execute(
                 sa_delete(WriterDocumentRecord).where(WriterDocumentRecord.doc_id == doc_id)

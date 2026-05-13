@@ -20,7 +20,7 @@ from typing import Dict, List, Optional
 
 import yaml
 
-from sololab.models.agent import AgentConfig
+from sololab.schemas.agent import AgentConfig
 
 logger = logging.getLogger(__name__)
 

@@ -9,6 +9,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from sololab.db.models import MemoryRecord
+
 logger = logging.getLogger(__name__)
 
 
@@ -58,8 +60,6 @@ class MemoryManager:
         metadata: Dict[str, Any] = {},
     ) -> int:
         """将内容及其向量嵌入存储到 pgvector。"""
-        from sololab.models.orm import MemoryRecord
-
         # 生成嵌入向量
         embeddings = await self.llm_gateway.embed([content])
         embedding = embeddings[0]
@@ -138,8 +138,6 @@ class MemoryManager:
 
     async def delete(self, memory_id: int) -> bool:
         """删除指定的记忆条目。"""
-        from sololab.models.orm import MemoryRecord
-
         async with self.db() as session:
             result = await session.execute(
                 delete(MemoryRecord).where(MemoryRecord.id == memory_id)
@@ -152,8 +150,6 @@ class MemoryManager:
 
     async def delete_by_scope(self, scope: MemoryScope, scope_id: Optional[str] = None) -> int:
         """按作用域批量删除记忆。"""
-        from sololab.models.orm import MemoryRecord
-
         async with self.db() as session:
             stmt = delete(MemoryRecord).where(MemoryRecord.scope == scope.value)
             if scope_id:
@@ -165,8 +161,6 @@ class MemoryManager:
 
     async def count(self, scope: Optional[MemoryScope] = None) -> int:
         """统计记忆数量。"""
-        from sololab.models.orm import MemoryRecord
-
         async with self.db() as session:
             stmt = select(MemoryRecord.id)
             if scope:

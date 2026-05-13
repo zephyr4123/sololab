@@ -35,7 +35,20 @@ _MAX_AND_TERMS = 5
 
 
 class ArxivTool(ToolBase):
-    """在 arXiv 搜索预印本论文。"""
+    """Search arXiv for preprint papers."""
+
+    parameters_schema = {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "arXiv search query"},
+            "max_results": {
+                "type": "integer",
+                "description": "Maximum number of results to return",
+                "default": 5,
+            },
+        },
+        "required": ["query"],
+    }
 
     @property
     def name(self) -> str:

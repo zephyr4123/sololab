@@ -16,7 +16,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional, Union
 
 from sololab.core.llm_gateway import LLMGateway
 from sololab.core.tool_registry import ToolRegistry
-from sololab.models.agent import AgentState, Message
+from sololab.schemas.agent import AgentState, Message
 
 
 @dataclass

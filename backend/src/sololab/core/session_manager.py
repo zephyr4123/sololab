@@ -5,8 +5,10 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import delete, select, update, func
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker
+
+from sololab.db.models import SessionMessageRecord, SessionRecord
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +32,6 @@ class SessionManager:
         metadata: Dict[str, Any] = {},
     ) -> str:
         """创建新会话，返回 session_id。"""
-        from sololab.models.orm import SessionRecord
-
         session_id = str(uuid.uuid4())
         async with self.db() as session:
             record = SessionRecord(
@@ -48,8 +48,6 @@ class SessionManager:
 
     async def get_session(self, session_id: str) -> Optional[dict]:
         """获取会话状态。"""
-        from sololab.models.orm import SessionRecord
-
         async with self.db() as session:
             result = await session.execute(
                 select(SessionRecord).where(SessionRecord.session_id == session_id)
@@ -71,8 +69,6 @@ class SessionManager:
         self, limit: int = 20, module_id: Optional[str] = None, status: str = "active"
     ) -> List[dict]:
         """列出最近的会话。"""
-        from sololab.models.orm import SessionRecord
-
         async with self.db() as session:
             stmt = (
                 select(SessionRecord)
@@ -108,8 +104,6 @@ class SessionManager:
         cost_usd: float = 0.0,
     ) -> int:
         """添加消息到会话历史。"""
-        from sololab.models.orm import SessionMessageRecord, SessionRecord
-
         async with self.db() as session:
             msg = SessionMessageRecord(
                 session_id=session_id,
@@ -135,8 +129,6 @@ class SessionManager:
         self, session_id: str, limit: int = 100, offset: int = 0
     ) -> List[dict]:
         """获取会话消息历史。"""
-        from sololab.models.orm import SessionMessageRecord
-
         async with self.db() as session:
             result = await session.execute(
                 select(SessionMessageRecord)
@@ -213,8 +205,6 @@ class SessionManager:
 
     async def delete_session(self, session_id: str) -> bool:
         """硬删除会话（CASCADE 自动清理关联消息）。"""
-        from sololab.models.orm import SessionRecord
-
         async with self.db() as session:
             result = await session.execute(
                 delete(SessionRecord)
@@ -228,8 +218,6 @@ class SessionManager:
 
     async def delete_by_opencode_id(self, opencode_session_id: str) -> bool:
         """按 OpenCode session ID 硬删除 CodeLab 会话。"""
-        from sololab.models.orm import SessionRecord
-
         async with self.db() as session:
             # metadata_json 是 JSONB，使用 PostgreSQL 的 ->> 操作符查询
             result = await session.execute(
@@ -252,8 +240,6 @@ class SessionManager:
         created_at: Optional[str] = None,
     ) -> str:
         """为 CodeLab session 创建或更新 PG 记录，返回 session_id。"""
-        from sololab.models.orm import SessionRecord
-
         async with self.db() as session:
             # 查找是否已有记录
             result = await session.execute(
@@ -285,8 +271,6 @@ class SessionManager:
 
     async def archive_session(self, session_id: str) -> bool:
         """归档会话。"""
-        from sololab.models.orm import SessionRecord
-
         async with self.db() as session:
             result = await session.execute(
                 update(SessionRecord)

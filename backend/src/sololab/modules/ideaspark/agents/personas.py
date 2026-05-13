@@ -9,7 +9,7 @@
 
 from typing import List, Optional
 
-from sololab.models.agent import AgentConfig
+from sololab.schemas.agent import AgentConfig
 from sololab.modules.ideaspark.personas import get_default_registry
 
 

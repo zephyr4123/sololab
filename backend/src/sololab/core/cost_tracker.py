@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from sololab.db.models import CostRecord
+
 logger = logging.getLogger(__name__)
 
 
@@ -49,8 +51,6 @@ class CostTracker:
         session_id: Optional[str] = None,
     ) -> None:
         """记录一次 LLM 调用的费用。"""
-        from sololab.models.orm import CostRecord
-
         async with self.db() as session:
             record = CostRecord(
                 task_id=task_id,
@@ -90,8 +90,6 @@ class CostTracker:
 
     async def get_task_cost(self, task_id: str) -> Dict:
         """从数据库获取任务的完整费用统计。"""
-        from sololab.models.orm import CostRecord
-
         async with self.db() as session:
             result = await session.execute(
                 select(
@@ -112,8 +110,6 @@ class CostTracker:
 
     async def get_module_cost(self, module_id: str, days: int = 30) -> Dict:
         """获取模块在指定天数内的费用统计。"""
-        from sololab.models.orm import CostRecord
-
         since = datetime.utcnow() - timedelta(days=days)
         async with self.db() as session:
             result = await session.execute(
@@ -139,8 +135,6 @@ class CostTracker:
 
     async def get_total_cost(self, days: int = 30) -> Dict:
         """获取平台总费用统计。"""
-        from sololab.models.orm import CostRecord
-
         since = datetime.utcnow() - timedelta(days=days)
         async with self.db() as session:
             # 总计

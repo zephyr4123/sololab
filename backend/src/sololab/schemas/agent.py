@@ -1,4 +1,4 @@
-"""智能体相关数据模型。"""
+"""Agent-related transport schemas — wire format for blackboard, runtime state."""
 
 from datetime import datetime
 from enum import Enum
@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 
 class MessageType(str, Enum):
-    """黑板消息类型。"""
+    """Blackboard message type."""
 
     IDEA = "idea"
     CRITIQUE = "critique"
@@ -17,7 +17,7 @@ class MessageType(str, Enum):
 
 
 class Message(BaseModel):
-    """黑板消息 - 智能体之间的共享通信单元。"""
+    """A single blackboard message — the shared communication unit between agents."""
 
     id: str
     sender: str
@@ -28,7 +28,7 @@ class Message(BaseModel):
 
 
 class AgentConfig(BaseModel):
-    """角色智能体的配置。"""
+    """Persona-agent configuration."""
 
     name: str
     persona: str
@@ -39,10 +39,10 @@ class AgentConfig(BaseModel):
 
 
 class AgentState(BaseModel):
-    """智能体的运行时状态。"""
+    """Agent runtime state snapshot."""
 
     name: str
-    status: str = "idle"  # 空闲 | 思考中 | 执行中 | 完成
+    status: str = "idle"  # idle | thinking | running | done
     messages_sent: int = 0
     tokens_used: int = 0
     cost_usd: float = 0.0

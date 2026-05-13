@@ -1,5 +1,9 @@
 /**
- * 弹性 SSE 客户端，支持自动断线恢复。
+ * Resilient SSE client with automatic reconnection + event replay.
+ *
+ * On disconnect, fetches /api/tasks/{id}/state to learn the task's status,
+ * replays missed events via /api/tasks/{id}/events, then resumes the live
+ * stream via /api/tasks/{id}/resume. Backs off exponentially up to maxRetries.
  */
 
 import type { SSEEvent, StreamHandlers } from '@/types/stream';
@@ -97,8 +101,9 @@ export class ResilientSSEClient {
     switch (event.type) {
       case 'task_created': handlers.onTaskCreated?.((event as any).session_id); break;
       case 'text': handlers.onText?.(event.content); break;
-      // 把整 event 作为最后一个参数透传，让消费者能拿到 group_idx / iteration 等
-      // 后端 _tag() 注入的字段（一旦丢失，TogetherBody 就过滤掉整个事件）
+      // Pass the full event as the last argument so consumers can see backend-
+      // injected fields like group_idx / iteration. TogetherBody filters on
+      // those — dropping the event ref would silently hide the agent's output.
       case 'agent': handlers.onAgent?.(event.agent, event.action, event.content, event.message_count, event as any); break;
       case 'tool': handlers.onTool?.(event); break;
       case 'status': handlers.onStatus?.(event.phase || event.status || '', event.round); break;

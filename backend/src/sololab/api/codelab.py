@@ -1,8 +1,8 @@
-"""CodeLab session 代理路由 — Backend 是 session 权威，代理到 OpenCode 引擎。
+"""CodeLab session proxy — backend owns session metadata, forwards to OpenCode.
 
-流程：
-  Frontend → Backend (本文件) → OpenCode (HTTP) + PostgreSQL (元数据)
-  SSE streaming 仍由前端直连 OpenCode，此处不代理。
+Flow:
+  Frontend → Backend (this file) → OpenCode (HTTP) + PostgreSQL (metadata)
+  SSE streaming runs frontend-direct to OpenCode and does not pass through here.
 """
 
 import logging
@@ -12,10 +12,11 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from sololab.api._deps import AuthDep
 from sololab.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(dependencies=[AuthDep])
 
 settings = get_settings()
 OPENCODE_URL = settings.opencode_url  # docker-compose 中为 http://opencode:3100

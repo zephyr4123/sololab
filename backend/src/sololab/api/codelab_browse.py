@@ -1,11 +1,13 @@
-"""CodeLab 目录浏览 — 独立端点（不依赖模块系统）。"""
+"""CodeLab directory browsing — standalone endpoint (no module-system dependency)."""
 
 import os
 
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/modules/codelab")
+from sololab.api._deps import AuthDep
+
+router = APIRouter(prefix="/modules/codelab", dependencies=[AuthDep])
 
 MOUNT_ROOT = "/workspace"
 PROJECT_MARKERS = [

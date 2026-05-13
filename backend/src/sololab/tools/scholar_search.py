@@ -13,7 +13,20 @@ _last_call_time = 0.0
 
 
 class SemanticScholarTool(ToolBase):
-    """在 Semantic Scholar 搜索论文和引用图谱。"""
+    """Search Semantic Scholar for papers + citation graphs."""
+
+    parameters_schema = {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "Search query"},
+            "max_results": {
+                "type": "integer",
+                "description": "Maximum number of results to return",
+                "default": 5,
+            },
+        },
+        "required": ["query"],
+    }
 
     @property
     def name(self) -> str:

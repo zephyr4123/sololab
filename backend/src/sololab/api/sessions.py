@@ -1,4 +1,4 @@
-"""会话管理的 API 路由。"""
+"""Session management API."""
 
 import logging
 from typing import Optional
@@ -6,8 +6,10 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from sololab.api._deps import AuthDep
+
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(dependencies=[AuthDep])
 
 
 class CreateSessionRequest(BaseModel):

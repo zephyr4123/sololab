@@ -8,17 +8,32 @@ logger = logging.getLogger(__name__)
 
 
 class DocParseTool(ToolBase):
-    """使用 MinerU 解析学术 PDF，进行全文提取。
+    """Parse academic PDFs via MinerU, extracting text/tables/formulas.
 
-    委托给 DocumentPipeline 处理实际解析工作。
-    支持 PDF、Markdown、HTML、DOCX 格式。
+    Delegates to DocumentPipeline. PDF / Markdown / HTML / DOCX supported.
     """
+
+    parameters_schema = {
+        "type": "object",
+        "properties": {
+            "file_path": {
+                "type": "string",
+                "description": "Path to the document file (PDF, MD, HTML, DOCX).",
+            },
+            "project_id": {
+                "type": "string",
+                "description": "Project namespace for indexing the parsed chunks.",
+                "default": "default",
+            },
+        },
+        "required": ["file_path"],
+    }
 
     def __init__(self, document_pipeline=None) -> None:
         self._pipeline = document_pipeline
 
     def set_pipeline(self, pipeline) -> None:
-        """延迟注入 DocumentPipeline（在 lifespan 中设置）。"""
+        """Lazy injection — pipeline is wired during app lifespan."""
         self._pipeline = pipeline
 
     @property
@@ -28,9 +43,8 @@ class DocParseTool(ToolBase):
     @property
     def description(self) -> str:
         return (
-            "Parse academic PDF documents using MinerU, extracting text, tables, "
-            "formulas, and figures. Input: {file_path: str, project_id?: str}. "
-            "Returns parsed markdown content and metadata."
+            "Parse academic documents (PDF/MD/HTML/DOCX) via MinerU; "
+            "returns parsed markdown content and metadata."
         )
 
     async def execute(self, params: dict) -> ToolResult:

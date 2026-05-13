@@ -27,7 +27,7 @@ from typing import Any, AsyncGenerator, List, Optional
 
 from sololab.core.llm_gateway import LLMGateway
 from sololab.core.tool_registry import ToolRegistry
-from sololab.models.agent import Message, MessageType
+from sololab.schemas.agent import Message, MessageType
 from sololab.modules.ideaspark.phases import (
     Phase,
     PhaseContext,

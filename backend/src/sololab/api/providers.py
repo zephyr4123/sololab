@@ -1,42 +1,37 @@
-"""提供商与费用的 API 路由。"""
+"""Provider and cost API — model metadata, smoke tests, cost reporting, traces."""
+
+from __future__ import annotations
 
 import logging
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
 
+from sololab.api._deps import AuthDep
+from sololab.config.settings import get_settings
+
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(dependencies=[AuthDep])
 
 
 @router.get("/providers")
 async def list_providers(request: Request) -> dict:
-    """列出可用的 LLM 提供商和模型。"""
+    """List the configured LLM channels (chat + embedding)."""
     llm = request.app.state.llm_gateway
-    config = llm.config
-
-    # 构建模型列表：default_model + fallback_chain（去重）
-    all_models = [config.default_model]
-    for model in config.fallback_chain:
-        if model not in all_models:
-            all_models.append(model)
-
-    models = [
-        {"id": m, "label": m.split("/")[-1] if "/" in m else m}
-        for m in all_models
-    ]
-
+    settings = get_settings()
     return {
-        "default_model": config.default_model,
-        "models": models,
-        "embedding_model": config.embedding_model,
-        "budget_limit_usd": config.budget_limit_usd,
+        "default_model": llm.config.default_model,
+        "models": [{"id": llm.config.default_model, "label": llm.config.default_model}],
+        "embedding_model": llm.config.embedding_model,
+        "budget_limit_usd": settings.budget_limit_usd,
+        "chat_provider": llm.chat_provider_name,
+        "embed_provider": llm.embed_provider_name,
     }
 
 
 @router.post("/providers/{name}/test")
 async def test_provider(request: Request, name: str) -> dict:
-    """测试提供商连通性。"""
+    """Smoke-test a provider by issuing a one-token hello."""
     llm = request.app.state.llm_gateway
     try:
         result = await llm.generate(
@@ -51,81 +46,71 @@ async def test_provider(request: Request, name: str) -> dict:
             "response": result.get("content", "")[:100],
         }
     except Exception as e:
+        logger.exception("provider_smoke_test_failed", extra={"provider": name})
         return {"provider": name, "status": "error", "error": str(e)[:200]}
 
 
 @router.get("/providers/cost")
 async def get_cost(request: Request, days: int = 30) -> dict:
-    """获取费用统计。"""
     cost_tracker = request.app.state.cost_tracker
-    if not cost_tracker:
-        raise HTTPException(503, "Cost tracker not initialized")
     return await cost_tracker.get_total_cost(days=days)
 
 
 @router.get("/providers/cost/module/{module_id}")
 async def get_module_cost(request: Request, module_id: str, days: int = 30) -> dict:
-    """获取模块费用统计。"""
     cost_tracker = request.app.state.cost_tracker
-    if not cost_tracker:
-        raise HTTPException(503, "Cost tracker not initialized")
     return await cost_tracker.get_module_cost(module_id, days=days)
 
 
 @router.get("/providers/cost/task/{task_id}")
 async def get_task_cost(request: Request, task_id: str) -> dict:
-    """获取任务费用统计。"""
     cost_tracker = request.app.state.cost_tracker
-    if not cost_tracker:
-        raise HTTPException(503, "Cost tracker not initialized")
     return await cost_tracker.get_task_cost(task_id)
 
 
 @router.get("/providers/traces")
-async def get_traces(request: Request, task_id: Optional[str] = None, limit: int = 50) -> dict:
-    """获取 LLM 调用追踪记录。"""
-    tracer = getattr(request.app.state, "llm_tracer", None)
-    if not tracer:
-        return {"traces": [], "summary": {}}
-    traces = tracer.get_traces(task_id=task_id, limit=limit)
-    summary = tracer.get_summary(task_id=task_id)
-    return {"traces": traces, "summary": summary}
+async def get_traces(
+    request: Request, task_id: Optional[str] = None, limit: int = 50
+) -> dict:
+    tracer = request.app.state.llm_tracer
+    return {
+        "traces": tracer.get_traces(task_id=task_id, limit=limit),
+        "summary": tracer.get_summary(task_id=task_id),
+    }
 
 
 @router.get("/providers/runs")
-async def get_run_history(request: Request, module_id: Optional[str] = None, limit: int = 20) -> dict:
-    """获取运行历史。"""
-    message_store = getattr(request.app.state, "message_store", None)
-    if not message_store:
-        raise HTTPException(503, "Message store not initialized")
+async def get_run_history(
+    request: Request, module_id: Optional[str] = None, limit: int = 20
+) -> dict:
+    message_store = request.app.state.message_store
     try:
         runs = await message_store.get_run_history(module_id=module_id, limit=limit)
-        return {"runs": runs}
     except Exception:
-        return {"runs": []}
+        logger.exception("run_history_query_failed", extra={"module_id": module_id})
+        raise HTTPException(500, "Failed to fetch run history")
+    return {"runs": runs}
 
 
 @router.get("/providers/runs/{task_id}/messages")
-async def get_run_messages(request: Request, task_id: str, msg_type: Optional[str] = None) -> dict:
-    """获取运行的黑板消息。"""
-    message_store = getattr(request.app.state, "message_store", None)
-    if not message_store:
-        raise HTTPException(503, "Message store not initialized")
+async def get_run_messages(
+    request: Request, task_id: str, msg_type: Optional[str] = None
+) -> dict:
+    message_store = request.app.state.message_store
     try:
         messages = await message_store.get_messages(task_id, msg_type=msg_type)
-        return {"task_id": task_id, "messages": messages}
     except Exception:
-        return {"task_id": task_id, "messages": []}
+        logger.exception("run_messages_query_failed", extra={"task_id": task_id})
+        raise HTTPException(500, "Failed to fetch run messages")
+    return {"task_id": task_id, "messages": messages}
 
 
 @router.get("/providers/runs/{task_id}/export")
 async def export_run(request: Request, task_id: str) -> dict:
-    """导出运行结果为 Markdown。"""
-    message_store = getattr(request.app.state, "message_store", None)
-    if not message_store:
-        raise HTTPException(503, "Message store not initialized")
+    message_store = request.app.state.message_store
     try:
         markdown = await message_store.export_run_as_markdown(task_id)
-        return {"task_id": task_id, "markdown": markdown}
     except Exception as e:
+        logger.exception("run_export_failed", extra={"task_id": task_id})
         raise HTTPException(500, f"Export failed: {e}")
+    return {"task_id": task_id, "markdown": markdown}

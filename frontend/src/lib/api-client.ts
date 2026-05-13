@@ -127,7 +127,7 @@ export const sessionApi = {
   },
 };
 
-// === CodeLab Session API (走 Backend 代理到 OpenCode) ===
+// === CodeLab Session API — proxied through backend to OpenCode ===
 export const codelabSessionApi = {
   list: async (directory?: string): Promise<Array<{ id: string; title: string; directory?: string; createdAt?: number; updatedAt?: number }>> => {
     const params = new URLSearchParams();
@@ -225,7 +225,7 @@ export const runHistoryApi = {
   },
 };
 
-// === CodeLab API (browse 走后端，其余走 opencode-client 直连) ===
+// === CodeLab API — `browse` proxies through backend; SSE streaming uses opencode-client directly ===
 export const codelabApi = {
   browse: async (path?: string) => {
     return fetchAPI<{

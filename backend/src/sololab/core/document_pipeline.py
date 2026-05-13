@@ -14,6 +14,8 @@ from typing import Any, List, Optional
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from sololab.db.models import DocumentChunkRecord, DocumentRecord
+
 logger = logging.getLogger(__name__)
 
 
@@ -121,8 +123,6 @@ class DocumentPipeline:
             (doc_id, is_new) - is_new 为 False 表示去重命中，无需再次处理。
         """
         import hashlib
-        from sololab.models.orm import DocumentRecord
-
         # SHA256 去重检查（匹配所有非失败状态）
         file_hash = hashlib.sha256(content).hexdigest()
         async with self.db() as session:
@@ -166,8 +166,6 @@ class DocumentPipeline:
 
     async def get_status(self, doc_id: str) -> Optional[dict]:
         """获取文档处理状态。"""
-        from sololab.models.orm import DocumentRecord
-
         async with self.db() as session:
             result = await session.execute(
                 select(DocumentRecord).where(DocumentRecord.doc_id == doc_id)
@@ -190,8 +188,6 @@ class DocumentPipeline:
 
     async def get_chunks(self, doc_id: str) -> List[dict]:
         """获取文档的所有分块。"""
-        from sololab.models.orm import DocumentChunkRecord
-
         async with self.db() as session:
             result = await session.execute(
                 select(DocumentChunkRecord)
@@ -383,8 +379,7 @@ class DocumentPipeline:
             return {}
 
     async def _embed_and_store_chunks(self, doc_id: str, chunks: List[ParsedChunk]) -> None:
-        """批量嵌入并存储分块到向量数据库。先清理旧分块，避免重复。"""
-        from sololab.models.orm import DocumentChunkRecord
+        """Embed + store chunks in the vector DB. Clears old chunks first to avoid duplicates."""
         from sqlalchemy import delete as sql_delete
 
         if not chunks:
@@ -429,8 +424,6 @@ class DocumentPipeline:
         self, parsed: ParsedDocument, metadata: dict, project_id: str
     ) -> None:
         """保存文档记录到数据库。"""
-        from sololab.models.orm import DocumentRecord
-
         async with self.db() as session:
             await session.execute(
                 update(DocumentRecord)
@@ -456,8 +449,6 @@ class DocumentPipeline:
         self, doc_id: str, status: str, error_message: Optional[str] = None
     ) -> None:
         """更新文档处理状态。"""
-        from sololab.models.orm import DocumentRecord
-
         async with self.db() as session:
             values = {"status": status}
             if error_message:
