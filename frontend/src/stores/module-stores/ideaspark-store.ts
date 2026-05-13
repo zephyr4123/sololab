@@ -16,6 +16,8 @@ interface AgentEvent {
   timestamp: number;
 }
 
+export type IdeaSparkMode = 'fast' | 'deep';
+
 interface IdeaSparkState {
   ideas: Idea[];
   topIdeas: Idea[];
@@ -23,12 +25,15 @@ interface IdeaSparkState {
   currentRound: number;
   phase: 'idle' | 'separate' | 'cluster' | 'together' | 'synthesize' | 'evaluate' | 'converged' | 'done' | 'cancelled';
   costUsd: number;
+  /** 执行模式：fast = 单轮速跑 ~5 分钟；deep = 3 轮深辩 ~25 分钟。 */
+  mode: IdeaSparkMode;
   addIdea: (idea: Omit<Idea, 'round'>) => void;
   setTopIdeas: (ideas: Idea[]) => void;
   addAgentEvent: (event: Omit<AgentEvent, 'timestamp'>) => void;
   setPhase: (phase: IdeaSparkState['phase']) => void;
   setRound: (round: number) => void;
   setCostUsd: (cost: number) => void;
+  setMode: (mode: IdeaSparkMode) => void;
   restoreFromHistory: (events: any[]) => void;
   reset: () => void;
 }
@@ -40,6 +45,7 @@ export const useIdeaSparkStore = create<IdeaSparkState>((set, _get) => ({
   currentRound: 0,
   phase: 'idle',
   costUsd: 0,
+  mode: 'fast',
   addIdea: (idea) =>
     set((s) => ({ ideas: [...s.ideas, { ...idea, round: s.currentRound }] })),
   setTopIdeas: (ideas) => set({ topIdeas: ideas }),
@@ -48,6 +54,7 @@ export const useIdeaSparkStore = create<IdeaSparkState>((set, _get) => ({
   setPhase: (phase) => set({ phase }),
   setRound: (round) => set({ currentRound: round }),
   setCostUsd: (cost) => set({ costUsd: cost }),
+  setMode: (mode) => set({ mode }),
   restoreFromHistory: (events) => {
     const ideas: Idea[] = [];
     const agentEvents: AgentEvent[] = [];
@@ -99,5 +106,14 @@ export const useIdeaSparkStore = create<IdeaSparkState>((set, _get) => ({
     set({ ideas, topIdeas, agentEvents, currentRound, phase, costUsd });
   },
   reset: () =>
-    set({ ideas: [], topIdeas: [], agentEvents: [], currentRound: 0, phase: 'idle', costUsd: 0 }),
+    set((s) => ({
+      ideas: [],
+      topIdeas: [],
+      agentEvents: [],
+      currentRound: 0,
+      phase: 'idle',
+      costUsd: 0,
+      // mode 由用户上一次选择决定，reset 不动；用户没主动改就保持上次的偏好
+      mode: s.mode,
+    })),
 }));

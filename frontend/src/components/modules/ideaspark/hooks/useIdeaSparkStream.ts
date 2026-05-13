@@ -26,6 +26,8 @@ const MODULE_ID = 'ideaspark';
 
 interface SendOptions {
   docIds?: string[];
+  /** 'fast' (默认 ~5 分钟) / 'deep' (~25 分钟，用户主动选)。 */
+  mode?: 'fast' | 'deep';
 }
 
 export interface UseIdeaSparkStreamResult {
@@ -61,7 +63,10 @@ export function useIdeaSparkStream(): UseIdeaSparkStreamResult {
     await client.start(
       MODULE_ID,
       topic,
-      { doc_ids: opts.docIds ?? [] },
+      {
+        doc_ids: opts.docIds ?? [],
+        mode: opts.mode ?? useIdeaSparkStore.getState().mode,
+      },
       {
         onTaskCreated: (sessionId) => {
           if (sessionId) useSessionStore.getState().setCurrentSession(sessionId);

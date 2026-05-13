@@ -53,6 +53,9 @@ class TogetherPhase(Phase):
             return ev
 
         for i in range(self.iterations):
+            # 迭代间自检：用户在第 1 轮辩论中点 stop，第 2 轮不再启动
+            if ctx.is_cancelled():
+                return
             # ── Critic 全量评议 ──
             yield {
                 "type": "agent",
@@ -60,7 +63,9 @@ class TogetherPhase(Phase):
                 "action": f"reviewing round {i + 1}",
                 "iteration": i,
             }
-            critic_runner = AgentRunner(critic_config, ctx.llm, ctx.tools)
+            critic_runner = AgentRunner(
+                critic_config, ctx.llm, ctx.tools, cancel_event=ctx.cancel_event
+            )
             critic_task = (
                 "对以下全部创意进行整体审辩。逐一找出每个创意的弱点并提出改进建议。\n\n"
                 + "\n\n".join(f"- {m.content}" for m in current_ideas)
@@ -95,7 +100,9 @@ class TogetherPhase(Phase):
                 "action": f"synthesizing round {i + 1}",
                 "iteration": i,
             }
-            conn_runner = AgentRunner(connector_config, ctx.llm, ctx.tools)
+            conn_runner = AgentRunner(
+                connector_config, ctx.llm, ctx.tools, cancel_event=ctx.cancel_event
+            )
             conn_task = (
                 "基于上述全部创意和审辩意见，"
                 "通过结合各创意的优势、化解审辩指出的风险，整合出 1 个更优的研究计划。"

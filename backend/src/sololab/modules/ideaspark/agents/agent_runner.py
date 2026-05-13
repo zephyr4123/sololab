@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import datetime
@@ -37,6 +38,12 @@ class AgentRunner:
     2. 调用 LLM（流式 generate_stream）+ 多轮工具调用循环
     3. 工具调用委派给 ToolDispatcher
     4. 最终内容委派给 OutputParser → Message 列表
+
+    Cancel 链路：构造时注入 cancel_event，在每个 chunk yield 前自检。
+    一旦被 set，立刻抛 asyncio.CancelledError —— 它是 BaseException 子类，
+    SeparatePhase._run_agent 的 `except Exception` 不会捕获，会沿任务边界
+    向上传播，phase finally 块清理子任务，orchestrator 在 phase 间检查
+    退出。从用户点 stop 到 generator 退出 < 500ms。
     """
 
     def __init__(
@@ -44,10 +51,12 @@ class AgentRunner:
         config: AgentConfig,
         llm_gateway: LLMGateway,
         tool_registry: Optional[ToolRegistry] = None,
+        cancel_event: Optional[asyncio.Event] = None,
     ) -> None:
         self.config = config
         self.llm = llm_gateway
         self.tools = tool_registry
+        self.cancel_event = cancel_event
         self.state = AgentState(name=config.name)
         # 子组件
         self._dispatcher = ToolDispatcher(
@@ -57,6 +66,11 @@ class AgentRunner:
             llm=llm_gateway,
         )
         self._parser = OutputParser(persona_name=config.name)
+
+    def _check_cancel(self) -> None:
+        """在 LLM chunk / tool round 边界自检 cancel。被 set 直接抛 CancelledError。"""
+        if self.cancel_event is not None and self.cancel_event.is_set():
+            raise asyncio.CancelledError(f"agent={self.config.name} cancelled")
 
     # ───────────────────── 兼容旧调用：tool_events 属性 ─────────────────────
 
@@ -128,6 +142,7 @@ class AgentRunner:
         content = ""
         result: Optional[Dict[str, Any]] = None
         for round_num in range(MAX_TOOL_ROUNDS + 1):
+            self._check_cancel()  # 每轮开始前
             result = None
             async for chunk in self.llm.generate_stream(
                 messages=messages,
@@ -135,6 +150,7 @@ class AgentRunner:
                 max_tokens=self.config.max_tokens,
                 tools=openai_tools,
             ):
+                self._check_cancel()  # 每个 chunk 处理前；点 stop 后 ≤ 一个 chunk 周期生效
                 t = chunk["type"]
                 if t == "reasoning":
                     yield {
@@ -192,6 +208,7 @@ class AgentRunner:
 
             # ── 通过 dispatcher 执行每个 tool_call，事件实时上吐 ──
             for tc in tool_calls:
+                self._check_cancel()  # 工具调用前；避免 stop 后还启动新的 arxiv/web 查询
                 tool_name = tc["function"]["name"]
                 # 工具开始事件：让前端立刻显示"正在调用 X"
                 try:

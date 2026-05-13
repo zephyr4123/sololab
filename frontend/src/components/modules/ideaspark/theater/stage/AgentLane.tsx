@@ -47,7 +47,8 @@ export function AgentLane({
   );
 
   const finalContent = useMemo(() => {
-    const final = events.find(
+    // Priority 1: explicit `agent` event with a synthesis/critique action.
+    const fromAgent = events.find(
       (e) =>
         e.type === 'agent' &&
         finalActions.includes(e.action) &&
@@ -55,7 +56,24 @@ export function AgentLane({
         typeof e.content === 'string' &&
         e.content.length > 30,
     );
-    return final?.content || '';
+    if (fromAgent) return (fromAgent as any).content as string;
+
+    // Priority 2: an `idea` event addressed to this agent.  The backend
+    // emits `type: 'idea'` (a top-level event type) rather than `type:
+    // 'agent', action: 'idea'`, so the lane needs to read it directly to
+    // drop the streaming caret once the parsed message lands.
+    if (finalActions.includes('idea')) {
+      const idea = events.find(
+        (e) =>
+          e.type === 'idea' &&
+          (!scoped || (e as any).author === agent) &&
+          typeof (e as any).content === 'string' &&
+          (e as any).content.length > 30,
+      );
+      if (idea) return (idea as any).content as string;
+    }
+
+    return '';
   }, [events, agent, scoped, finalActions]);
 
   const toolRows = useMemo(() => deriveToolRows(events, scoped ? agent : undefined), [events, agent, scoped]);

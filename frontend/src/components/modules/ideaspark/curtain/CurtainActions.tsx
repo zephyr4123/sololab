@@ -7,16 +7,23 @@
  *   - View full process recap (toggles ProcessRecap below)
  */
 
-import { ArrowRight, Download, History } from 'lucide-react';
+import { ArrowRight, Clock, Download, FolderOpen } from 'lucide-react';
 
 interface CurtainActionsProps {
   onExport: () => void;
   onNewRound: () => void;
   onToggleRecap: () => void;
+  onOpenDrawer: () => void;
   recapOpen: boolean;
 }
 
-export function CurtainActions({ onExport, onNewRound, onToggleRecap, recapOpen }: CurtainActionsProps) {
+export function CurtainActions({
+  onExport,
+  onNewRound,
+  onToggleRecap,
+  onOpenDrawer,
+  recapOpen,
+}: CurtainActionsProps) {
   return (
     <div className="flex flex-wrap items-center gap-3 pt-2">
       <button
@@ -41,8 +48,16 @@ export function CurtainActions({ onExport, onNewRound, onToggleRecap, recapOpen 
             : 'bg-card/40 text-muted-foreground/70 hover:bg-card/70 hover:text-foreground'
         }`}
       >
-        <History className="h-3.5 w-3.5" />
+        <Clock className="h-3.5 w-3.5" />
         {recapOpen ? '收起完整时间线' : '查看完整时间线'}
+      </button>
+      <button
+        onClick={onOpenDrawer}
+        title="我的辩论 (⌘H)"
+        className="inline-flex items-center gap-2 rounded-full bg-card/40 px-4 py-2 text-[12px] text-muted-foreground/70 transition-all hover:bg-card/70 hover:text-foreground"
+      >
+        <FolderOpen className="h-3.5 w-3.5" />
+        我的辩论
       </button>
     </div>
   );

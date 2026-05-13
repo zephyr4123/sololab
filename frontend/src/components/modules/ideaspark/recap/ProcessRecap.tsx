@@ -111,10 +111,10 @@ function RecapAct({ slice }: { slice: Slice }) {
       </button>
       {open && (
         <div className="px-5 pb-6 pt-2 animate-fade-in">
-          {slice.phase === 'separate' && <SeparateAct events={slice.events} state="done" />}
-          {slice.phase === 'together' && <TogetherAct events={slice.events} state="done" />}
-          {slice.phase === 'synthesize' && <SynthesizeAct events={slice.events} state="done" />}
-          {slice.phase === 'evaluate' && <TournamentAct events={slice.events} state="done" />}
+          {slice.phase === 'separate' && <SeparateAct events={slice.events} />}
+          {slice.phase === 'together' && <TogetherAct events={slice.events} />}
+          {slice.phase === 'synthesize' && <SynthesizeAct events={slice.events} />}
+          {slice.phase === 'evaluate' && <TournamentAct events={slice.events} />}
         </div>
       )}
     </div>

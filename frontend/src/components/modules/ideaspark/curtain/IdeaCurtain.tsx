@@ -21,9 +21,14 @@ import { useSessionStore } from '@/stores/session-store';
 interface IdeaCurtainProps {
   moduleId: string;
   onRequestNewRound: () => void;
+  onOpenDrawer: () => void;
 }
 
-export function IdeaCurtain({ moduleId: _moduleId, onRequestNewRound }: IdeaCurtainProps) {
+export function IdeaCurtain({
+  moduleId: _moduleId,
+  onRequestNewRound,
+  onOpenDrawer,
+}: IdeaCurtainProps) {
   const topIdeas = useIdeaSparkStore((s) => s.topIdeas);
   const costUsd = useIdeaSparkStore((s) => s.costUsd);
   const chatEntries = useSessionStore((s) => s.chatEntries);
@@ -164,6 +169,7 @@ export function IdeaCurtain({ moduleId: _moduleId, onRequestNewRound }: IdeaCurt
           onExport={handleExport}
           onNewRound={onRequestNewRound}
           onToggleRecap={() => setRecapOpen((v) => !v)}
+          onOpenDrawer={onOpenDrawer}
           recapOpen={recapOpen}
         />
 

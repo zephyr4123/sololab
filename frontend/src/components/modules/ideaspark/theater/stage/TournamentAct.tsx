@@ -19,11 +19,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy } from 'lucide-react';
 import { AgentSigil } from '../../shared/AgentSigil';
-import { ActHeader, type ActState } from './ActHeader';
 
 interface TournamentActProps {
   events: Array<{ type: string; [key: string]: any }>;
-  state: ActState;
 }
 
 interface CandidateState {
@@ -40,7 +38,7 @@ interface RecentMatch {
   winner: string;
 }
 
-export function TournamentAct({ events, state }: TournamentActProps) {
+export function TournamentAct({ events }: TournamentActProps) {
   /** Derived live ranking from match stream + final votes. */
   const { candidates, matchesDone, latestMatch } = useMemo(() => {
     const elo = new Map<string, CandidateState>();
@@ -100,17 +98,7 @@ export function TournamentAct({ events, state }: TournamentActProps) {
   }, [latestMatch]);
 
   return (
-    <section className="relative space-y-6">
-      <ActHeader
-        phase="evaluate"
-        state={state}
-        meta={
-          <span>
-            {matchesDone} 次比较 · {candidates.length} 候选
-          </span>
-        }
-      />
-
+    <div className="relative">
       {candidates.length === 0 ? (
         <p className="text-[11.5px] text-muted-foreground/45 italic pl-1">评审者正在准备比较…</p>
       ) : (
@@ -147,7 +135,7 @@ export function TournamentAct({ events, state }: TournamentActProps) {
           </motion.div>
         )}
       </AnimatePresence>
-    </section>
+    </div>
   );
 }
 

@@ -1,23 +1,17 @@
 'use client';
 
 /**
- * SynthesizeAct — Act III: a single Connector ⌗ collapses everything
- * into a tighter, deduplicated set. One persona, one lane, full width.
+ * SynthesizeAct — Act III body. A single Connector ⌗ collapses
+ * everything into a tighter, deduplicated set. One persona, one lane,
+ * full width. Header is owned by the parent ActSlot.
  */
 
 import { AgentLane } from './AgentLane';
-import { ActHeader, type ActState } from './ActHeader';
 
 interface SynthesizeActProps {
   events: Array<{ type: string; [key: string]: any }>;
-  state: ActState;
 }
 
-export function SynthesizeAct({ events, state }: SynthesizeActProps) {
-  return (
-    <section className="space-y-6">
-      <ActHeader phase="synthesize" state={state} />
-      <AgentLane agent="connector" events={events} finalActions={['synthesis']} />
-    </section>
-  );
+export function SynthesizeAct({ events }: SynthesizeActProps) {
+  return <AgentLane agent="connector" events={events} finalActions={['synthesis']} />;
 }

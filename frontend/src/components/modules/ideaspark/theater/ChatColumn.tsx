@@ -14,16 +14,16 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { History, Lightbulb, Loader2, Paperclip, Send, Square, X, FileText, CheckCircle } from 'lucide-react';
+import { History, Lightbulb, Loader2, Paperclip, Send, Square, X, FileText, CheckCircle, Zap, Sparkles } from 'lucide-react';
 import { useSessionStore } from '@/stores/session-store';
 import { ChatEntry } from './ChatEntry';
 import { useIdeaSparkStream } from '../hooks/useIdeaSparkStream';
+import { useIdeaSparkStore } from '@/stores/module-stores/ideaspark-store';
 import { documentApi } from '@/lib/api-client';
 
 interface ChatColumnProps {
   moduleId: string;
-  onToggleHistory: () => void;
-  historyOpen: boolean;
+  onOpenDrawer: () => void;
 }
 
 interface UploadedDoc {
@@ -32,9 +32,11 @@ interface UploadedDoc {
   status: 'uploading' | 'processing' | 'completed' | 'failed';
 }
 
-export function ChatColumn({ moduleId: _moduleId, onToggleHistory, historyOpen }: ChatColumnProps) {
+export function ChatColumn({ moduleId: _moduleId, onOpenDrawer }: ChatColumnProps) {
   const entries = useSessionStore((s) => s.chatEntries);
   const { send, stop, isStreaming, statusLabel } = useIdeaSparkStream();
+  const mode = useIdeaSparkStore((s) => s.mode);
+  const setMode = useIdeaSparkStore((s) => s.setMode);
 
   const [text, setText] = useState('');
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
@@ -106,11 +108,9 @@ export function ChatColumn({ moduleId: _moduleId, onToggleHistory, historyOpen }
           </span>
         </div>
         <button
-          onClick={onToggleHistory}
-          className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
-            historyOpen ? 'bg-warm/10 text-warm' : 'text-muted-foreground/55 hover:text-foreground hover:bg-foreground/[0.04]'
-          }`}
-          title="历史辩论"
+          onClick={onOpenDrawer}
+          className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground/55 hover:text-foreground hover:bg-foreground/[0.04] transition-colors"
+          title="我的辩论 (⌘H)"
         >
           <History className="h-3.5 w-3.5" />
         </button>
@@ -193,7 +193,7 @@ export function ChatColumn({ moduleId: _moduleId, onToggleHistory, historyOpen }
             placeholder={isStreaming ? '辩论进行中…' : '继续辩论 / 提一个新方向…'}
             rows={2}
             disabled={isStreaming}
-            className="w-full max-h-32 min-h-[44px] resize-none bg-transparent pl-12 pr-14 py-3 text-[13px] leading-relaxed placeholder:text-muted-foreground/35 focus:outline-none"
+            className="w-full max-h-32 min-h-[58px] resize-none bg-transparent pl-3 pr-14 pt-3 pb-10 text-[13px] leading-relaxed placeholder:text-muted-foreground/35 focus:outline-none"
           />
           <input
             ref={fileInputRef}
@@ -211,6 +211,24 @@ export function ChatColumn({ moduleId: _moduleId, onToggleHistory, historyOpen }
             title="附加 PDF"
           >
             <Paperclip className="h-3.5 w-3.5" />
+          </button>
+
+          <button
+            onClick={() => setMode(mode === 'fast' ? 'deep' : 'fast')}
+            disabled={isStreaming}
+            title={
+              mode === 'fast'
+                ? '速跑：单轮 ~5 分钟'
+                : '深度：3 轮辩论 ~25 分钟'
+            }
+            className={`absolute left-11 bottom-2.5 inline-flex h-7 items-center gap-1 rounded-md px-2 text-[10.5px] font-medium transition-all ${
+              mode === 'deep'
+                ? 'bg-warm/10 text-warm hover:bg-warm/18'
+                : 'bg-foreground/[0.04] text-muted-foreground/65 hover:bg-foreground/[0.07] hover:text-foreground/75'
+            }`}
+          >
+            {mode === 'fast' ? <Zap className="h-2.5 w-2.5" /> : <Sparkles className="h-2.5 w-2.5" />}
+            <span>{mode === 'fast' ? '速跑' : '深度'}</span>
           </button>
 
           {isStreaming ? (

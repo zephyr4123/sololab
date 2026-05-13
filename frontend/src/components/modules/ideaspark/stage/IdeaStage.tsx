@@ -8,15 +8,17 @@
  * for atmosphere. No tabs, no chrome — the entire surface is the prompt.
  */
 
-import { useRef, useState } from 'react';
-import { CheckCircle, FileText, Loader2, Paperclip, Send, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { CheckCircle, FileText, History, Loader2, Paperclip, Send, X, Zap, Sparkles } from 'lucide-react';
 import { SuggestionGrid } from './SuggestionGrid';
-import { RecentDebatesPill } from './RecentDebatesPill';
 import { useIdeaSparkStream } from '../hooks/useIdeaSparkStream';
+import { useIdeaSparkStore } from '@/stores/module-stores/ideaspark-store';
+import { useSessionStore } from '@/stores/session-store';
 import { documentApi } from '@/lib/api-client';
 
 interface IdeaStageProps {
   moduleId: string;
+  onOpenDrawer: () => void;
 }
 
 interface UploadedDoc {
@@ -25,13 +27,26 @@ interface UploadedDoc {
   status: 'uploading' | 'processing' | 'completed' | 'failed';
 }
 
-export function IdeaStage({ moduleId }: IdeaStageProps) {
+export function IdeaStage({ moduleId, onOpenDrawer }: IdeaStageProps) {
   const [text, setText] = useState('');
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
   const [prefillTick, setPrefillTick] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { send, isStreaming } = useIdeaSparkStream();
+  const mode = useIdeaSparkStore((s) => s.mode);
+  const setMode = useIdeaSparkStore((s) => s.setMode);
+  const sessions = useSessionStore((s) => s.sessions);
+  const fetchSessions = useSessionStore((s) => s.fetchSessions);
+
+  // Mount-only: prime the session count badge. Deferred 220ms so the entry
+  // animation has finished before the store update kicks a paint.
+  useEffect(() => {
+    const t = setTimeout(() => void fetchSessions(moduleId), 220);
+    return () => clearTimeout(t);
+  }, [moduleId, fetchSessions]);
+
+  const moduleSessionsCount = sessions.filter((s) => s.module_id === moduleId).length;
 
   const handlePick = (prompt: string) => {
     setText(prompt);
@@ -207,6 +222,33 @@ export function IdeaStage({ moduleId }: IdeaStageProps) {
                   <Paperclip className="h-4 w-4" />
                 </button>
 
+                <button
+                  onClick={() => setMode(mode === 'fast' ? 'deep' : 'fast')}
+                  disabled={isStreaming}
+                  title={
+                    mode === 'fast'
+                      ? '速跑模式：单轮辩论，约 5 分钟'
+                      : '深度模式：3 轮辩论 + 深度评议，约 25 分钟'
+                  }
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all ${
+                    mode === 'deep'
+                      ? 'bg-warm/12 text-warm hover:bg-warm/18'
+                      : 'bg-foreground/[0.04] text-muted-foreground/70 hover:bg-foreground/[0.06] hover:text-foreground/80'
+                  }`}
+                >
+                  {mode === 'fast' ? (
+                    <>
+                      <Zap className="h-3 w-3" />
+                      <span>速跑 · ~5 分</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-3 w-3" />
+                      <span>深度 · ~25 分</span>
+                    </>
+                  )}
+                </button>
+
                 <div className="flex-1" />
 
                 <button
@@ -227,7 +269,21 @@ export function IdeaStage({ moduleId }: IdeaStageProps) {
         </div>
       </div>
 
-      <RecentDebatesPill moduleId={moduleId} />
+      {/* History affordance — quiet pill, top-right. Always present. */}
+      <button
+        onClick={onOpenDrawer}
+        title="我的辩论 (⌘H)"
+        className="absolute top-5 right-6 z-20 inline-flex items-center gap-1.5 rounded-full bg-card/85 backdrop-blur-sm pl-2.5 pr-3 py-1.5 text-[11px] text-muted-foreground/70 transition-all hover:bg-card hover:text-foreground hover:shadow-[0_8px_24px_-12px_rgba(0,0,0,0.12)] animate-fade-in"
+        style={{ animationDelay: '400ms', animationFillMode: 'both' }}
+      >
+        <History className="h-3 w-3 text-warm/65" />
+        <span className="tracking-wide">我的辩论</span>
+        {moduleSessionsCount > 0 && (
+          <span className="tabular-nums text-foreground/80 font-medium">
+            {moduleSessionsCount}
+          </span>
+        )}
+      </button>
     </div>
   );
 }

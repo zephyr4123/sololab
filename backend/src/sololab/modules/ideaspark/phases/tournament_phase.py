@@ -50,7 +50,9 @@ class TournamentPhase(Phase):
                 pairs.append((a, b))
 
             async def _evaluate_pair(idea_a: Message, idea_b: Message):
-                runner = AgentRunner(evaluator_config, ctx.llm, ctx.tools)
+                runner = AgentRunner(
+                    evaluator_config, ctx.llm, ctx.tools, cancel_event=ctx.cancel_event
+                )
                 task_prompt = (
                     "比较以下两个研究创意，投票选出更优秀的一个。\n\n"
                     f"创意 A（来自 {idea_a.sender}）：\n{idea_a.content}\n\n"

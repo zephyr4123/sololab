@@ -24,7 +24,7 @@ class SynthesizePhase(Phase):
             return
 
         connector_config = get_persona("connector")
-        runner = AgentRunner(connector_config, ctx.llm, ctx.tools)
+        runner = AgentRunner(connector_config, ctx.llm, ctx.tools, cancel_event=ctx.cancel_event)
         task_prompt = (
             "你正在进行跨组全局整合。"
             "审阅之前讨论中的所有创意，识别最具独特性的优质创意。"

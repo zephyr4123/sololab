@@ -25,7 +25,10 @@ class SeparatePhase(Phase):
         yield {"type": "status", "phase": "separate", "round": ctx.round}
 
         sep_personas = [get_persona("divergent"), get_persona("expert")]
-        runners = [(p.name, AgentRunner(p, ctx.llm, ctx.tools)) for p in sep_personas]
+        runners = [
+            (p.name, AgentRunner(p, ctx.llm, ctx.tools, cancel_event=ctx.cancel_event))
+            for p in sep_personas
+        ]
 
         # 立即通知前端 agent 开始（占位 thinking 状态）
         for name, _ in runners:
@@ -99,6 +102,10 @@ class SeparatePhase(Phase):
         remaining = len(tasks)
         try:
             while remaining > 0:
+                # 在每次 queue 拉取前自检：被 set 的话尽快退出（agents 自己也会
+                # 抛 CancelledError，这里防止干等 SENTINEL 浪费时间）。
+                if ctx.is_cancelled():
+                    break
                 item = await queue.get()
                 if item is _SENTINEL:
                     remaining -= 1
