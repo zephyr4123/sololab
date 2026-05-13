@@ -16,35 +16,30 @@ interface AgentEvent {
   timestamp: number;
 }
 
-type TabId = 'chat' | 'board' | 'report';
-
 interface IdeaSparkState {
   ideas: Idea[];
   topIdeas: Idea[];
   agentEvents: AgentEvent[];
   currentRound: number;
-  phase: 'idle' | 'separate' | 'cluster' | 'together' | 'synthesize' | 'evaluate' | 'converged' | 'done';
+  phase: 'idle' | 'separate' | 'cluster' | 'together' | 'synthesize' | 'evaluate' | 'converged' | 'done' | 'cancelled';
   costUsd: number;
-  activeTab: TabId;
   addIdea: (idea: Omit<Idea, 'round'>) => void;
   setTopIdeas: (ideas: Idea[]) => void;
   addAgentEvent: (event: Omit<AgentEvent, 'timestamp'>) => void;
   setPhase: (phase: IdeaSparkState['phase']) => void;
   setRound: (round: number) => void;
   setCostUsd: (cost: number) => void;
-  setActiveTab: (tab: TabId) => void;
   restoreFromHistory: (events: any[]) => void;
   reset: () => void;
 }
 
-export const useIdeaSparkStore = create<IdeaSparkState>((set, get) => ({
+export const useIdeaSparkStore = create<IdeaSparkState>((set, _get) => ({
   ideas: [],
   topIdeas: [],
   agentEvents: [],
   currentRound: 0,
   phase: 'idle',
   costUsd: 0,
-  activeTab: 'chat',
   addIdea: (idea) =>
     set((s) => ({ ideas: [...s.ideas, { ...idea, round: s.currentRound }] })),
   setTopIdeas: (ideas) => set({ topIdeas: ideas }),
@@ -53,7 +48,6 @@ export const useIdeaSparkStore = create<IdeaSparkState>((set, get) => ({
   setPhase: (phase) => set({ phase }),
   setRound: (round) => set({ currentRound: round }),
   setCostUsd: (cost) => set({ costUsd: cost }),
-  setActiveTab: (tab) => set({ activeTab: tab }),
   restoreFromHistory: (events) => {
     const ideas: Idea[] = [];
     const agentEvents: AgentEvent[] = [];
@@ -105,5 +99,5 @@ export const useIdeaSparkStore = create<IdeaSparkState>((set, get) => ({
     set({ ideas, topIdeas, agentEvents, currentRound, phase, costUsd });
   },
   reset: () =>
-    set({ ideas: [], topIdeas: [], agentEvents: [], currentRound: 0, phase: 'idle', costUsd: 0, activeTab: 'chat' }),
+    set({ ideas: [], topIdeas: [], agentEvents: [], currentRound: 0, phase: 'idle', costUsd: 0 }),
 }));

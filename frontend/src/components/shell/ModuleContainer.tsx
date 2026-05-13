@@ -16,9 +16,10 @@ const TAB_ICON_MAP: Record<string, typeof MessageSquare> = {
 export function ModuleContainer({ moduleId }: ModuleContainerProps) {
   const plugin = useMemo(() => getModulePlugin(moduleId), [moduleId]);
 
-  // Fallback local state for plugins without external tab controller (e.g. CodeLab)
+  // Fallback local state for plugins without external tab controller.
+  // (Single-tab plugins like IdeaSpark and Writer skip the tab bar entirely
+  //  via the `showTabBar = plugin.tabs.length > 1` check below.)
   const [localTab, setLocalTab] = useState<string>(plugin?.tabs[0]?.id ?? '');
-  // Plugin may bind tab state to a module store (IdeaSpark binds to ideaspark-store.activeTab)
   const controller = plugin?.useTabController?.();
   const activeTab = controller?.activeTab ?? localTab;
   const setActiveTab = controller?.setActiveTab ?? setLocalTab;

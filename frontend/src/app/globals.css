@@ -257,18 +257,74 @@ html {
   box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.3);
 }
 
-/* ─── Agent Color Palette (softer, muted tones) ─── */
-.agent-divergent { --agent-bg: #F3F0FF; --agent-fg: #6D5BA3; --agent-border: #DDD6FE; }
-.agent-expert { --agent-bg: #EFF6FF; --agent-fg: #4B7BB5; --agent-border: #BFDBFE; }
-.agent-critic { --agent-bg: #FEF4F2; --agent-fg: #B05A4F; --agent-border: #FECACA; }
-.agent-connector { --agent-bg: #F0FAF5; --agent-fg: #4D8B6A; --agent-border: #BBF7D0; }
-.agent-evaluator { --agent-bg: #FFFBEB; --agent-fg: #92730A; --agent-border: #FDE68A; }
+/* ─── Soft Dividers ───────────────────────────────────────────
+ * Hairlines that fade at the edges — no crude pixel lines stitched
+ * across the canvas. Horizontal (.soft-divider) and vertical
+ * (.soft-divider-v) variants. Each is 1px thick at peak, fading
+ * via mask + gradient so adjacent surfaces blend.
+ */
+.soft-divider {
+  height: 1px;
+  border: 0;
+  background-image: linear-gradient(
+    to right,
+    transparent 0%,
+    color-mix(in oklab, var(--color-border) 80%, transparent) 18%,
+    color-mix(in oklab, var(--color-border) 80%, transparent) 82%,
+    transparent 100%
+  );
+}
 
-.dark .agent-divergent { --agent-bg: #1E1B2E; --agent-fg: #A78BFA; --agent-border: #3B3260; }
-.dark .agent-expert { --agent-bg: #172033; --agent-fg: #7CB3E0; --agent-border: #1E3A5F; }
-.dark .agent-critic { --agent-bg: #2D1B1A; --agent-fg: #EF9A8E; --agent-border: #5C2C27; }
-.dark .agent-connector { --agent-bg: #142420; --agent-fg: #6EE7A0; --agent-border: #1A4434; }
-.dark .agent-evaluator { --agent-bg: #2A2413; --agent-fg: #FACC15; --agent-border: #4D3E12; }
+.soft-divider-v {
+  width: 1px;
+  background-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in oklab, var(--color-border) 70%, transparent) 12%,
+    color-mix(in oklab, var(--color-border) 70%, transparent) 88%,
+    transparent 100%
+  );
+}
+
+/* Eyebrow leading rule — short fading line that introduces a section.
+   Used to mark Act headers without stitching a hard divider across. */
+.eyebrow-rule {
+  height: 1px;
+  width: 32px;
+  background-image: linear-gradient(
+    to right,
+    color-mix(in oklab, var(--color-warm) 65%, transparent),
+    transparent
+  );
+}
+
+/* Soft section seam — for vertical stack transitions. Uses two
+   stacked radial fades so the seam reads as atmosphere, not a line. */
+.section-seam {
+  position: relative;
+  height: 48px;
+}
+.section-seam::before,
+.section-seam::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.section-seam::before {
+  background: radial-gradient(
+    ellipse 60% 100% at 50% 0%,
+    color-mix(in oklab, var(--color-border) 25%, transparent),
+    transparent 70%
+  );
+}
+.section-seam::after {
+  background: radial-gradient(
+    ellipse 60% 100% at 50% 100%,
+    color-mix(in oklab, var(--color-warm) 8%, transparent),
+    transparent 70%
+  );
+}
 
 /* ─── Prose Typography Override ─── */
 /* Use CSS variables for ALL prose colors so dark/light mode works automatically.
@@ -340,6 +396,95 @@ html {
 
 .prose td, .prose th {
   border-color: var(--color-border);
+}
+
+/* ─── IdeaSpark Theater Specific ─────────────────────────────── */
+
+/* Streaming caret — used at the tail of agent_content_delta tokens. */
+@keyframes warmCaret {
+  0%, 45% { opacity: 0.85; }
+  55%, 100% { opacity: 0.1; }
+}
+.streaming-caret {
+  display: inline-block;
+  width: 2px;
+  height: 0.95em;
+  margin-left: 2px;
+  vertical-align: -0.12em;
+  background: var(--color-warm);
+  animation: warmCaret 1.05s ease-in-out infinite;
+  border-radius: 1px;
+}
+
+/* Idea card emerge — used when an agent finishes producing an idea. */
+@keyframes ideaEmerge {
+  0% { opacity: 0; transform: translateY(14px) scale(0.985); filter: blur(3px); }
+  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+.idea-emerge { animation: ideaEmerge 520ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Warm orb — background atmosphere for STAGE / CURTAIN.
+ * Performance notes:
+ *   - blur kept at 80px (was 96px) — visual feel preserved but GPU rasterize
+ *     halves the work on integrated GPUs.
+ *   - opacity tightened so a single orb still reads as atmospheric.
+ *   - `will-change: transform` promotes to its own composite layer so the
+ *     blur is rasterized once and cached, not re-blurred per frame when
+ *     adjacent elements animate in.
+ */
+.warm-orb {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--color-warm) 0%, transparent 70%);
+  opacity: 0.26;
+  filter: blur(80px);
+  will-change: transform;
+  transform: translateZ(0);
+}
+.dark .warm-orb { opacity: 0.18; }
+
+/* Curtain rise — used on Act → Curtain transition. */
+@keyframes curtainRise {
+  0% { opacity: 0; transform: translateY(22px); filter: blur(6px); }
+  100% { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+.curtain-rise { animation: curtainRise 680ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Stage soft frame — for the right pane in THEATER. No hard border;
+   just a faint inset glow that suggests a containing surface. */
+.stage-frame {
+  position: relative;
+}
+.stage-frame::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse 80% 30% at 50% 0%, color-mix(in oklab, var(--color-border) 18%, transparent), transparent 70%),
+    radial-gradient(ellipse 80% 30% at 50% 100%, color-mix(in oklab, var(--color-border) 14%, transparent), transparent 70%);
+}
+
+/* Suggestion card hover — single layer (background + box-shadow),
+ * no pseudo elements. Replaces the dual-pseudo halo that cost 8 extra
+ * composite layers on the empty-state stage. */
+.suggestion-card {
+  background: transparent;
+}
+.suggestion-card:hover {
+  background-color: color-mix(in oklab, var(--color-card) 55%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklab, var(--color-warm) 14%, transparent),
+    0 8px 22px -12px color-mix(in oklab, var(--color-warm) 28%, transparent);
+}
+
+/* Tournament rank glow — applied to the current #1 card. */
+.rank-glow-1 {
+  box-shadow:
+    0 1px 0 color-mix(in oklab, var(--color-warm) 18%, transparent) inset,
+    0 12px 40px -16px color-mix(in oklab, var(--color-warm) 35%, transparent);
 }
 
 /* ── Thinking Indicator Dots ── */
