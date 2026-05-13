@@ -2,7 +2,7 @@
 
 import { useWriterStore } from '@/stores/module-stores/writer-store';
 import { writerApi } from '@/lib/api-client';
-import TemplateSelector from './TemplateSelector';
+import TemplateSelector from '../compose/TemplateSelector';
 
 export default function DocumentToolbar() {
   const { docId, wordCount, phase, sections, isExporting, setIsExporting } = useWriterStore();

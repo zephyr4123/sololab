@@ -4,7 +4,7 @@ import { registerPlugin } from '@/lib/module-loader';
 import { useWriterStore } from '@/stores/module-stores/writer-store';
 import { useSessionStore } from '@/stores/session-store';
 import { useTaskStore } from '@/stores/task-store';
-import WriterChat from './WriterChat';
+import WriterShell from './WriterShell';
 
 registerPlugin('writer', {
   tabs: [
@@ -12,7 +12,7 @@ registerPlugin('writer', {
       id: 'write',
       label: '写作',
       icon: 'PenTool',
-      component: WriterChat,
+      component: WriterShell,
     },
   ],
   reset: () => {
