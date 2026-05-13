@@ -58,6 +58,7 @@ benchmark_results*/
 
 # --- Claude Code ---
 CLAUDE.md
+.claude/
 
 # --- Serena MCP ---
 .serena/

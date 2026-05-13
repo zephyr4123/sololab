@@ -14,28 +14,28 @@ interface Suggestion {
 
 const SUGGESTIONS: Suggestion[] = [
   {
-    topic: '3D 高斯泼溅 · 内存优化',
-    detail: 'CVPR · LOD 与压缩 · NeRF 对照',
+    topic: '3D 高斯泼溅 · 找新突破口',
+    detail: '内存似乎已经走到头 · 求被忽略的角度',
     prompt:
-      '我要写一篇 CVPR 投稿，主题是 3D 高斯泼溅 (3DGS) 的内存优化。希望从 LOD 与压缩两条路径出发，得到与 NeRF 系列在显存占用 / 渲染速度上的清晰对比。',
+      '3D 高斯泼溅 (3DGS) 最近被研究得很透，我感觉"内存优化"这条路径已经被吃干净。还有哪些被低估或被忽略的方向值得继续做？给我几个互相不重叠的角度，并指出每个角度最大的风险。',
   },
   {
-    topic: 'AlphaFold 3 · 药物发现',
-    detail: 'Nature 综述 · 案例 · 时间线',
+    topic: '扩散模型 × 蛋白设计',
+    detail: '采样 / condition / representation',
     prompt:
-      '为我设计一篇 Nature 综述：AlphaFold 3 在药物发现中的应用。要图文并茂，包括技术演进时间线、性能对比表、若干典型案例（kinase inhibitor / GPCR / antibody design）。',
+      '扩散模型用在蛋白质 backbone 生成上已经能 work，但下一步是什么？是改采样策略、改 condition 信号，还是干脆换 representation？我希望看到至少 3 条完全不同的研究路线，每条都说说凭什么会赢。',
   },
   {
-    topic: '多智能体强化学习',
-    detail: '《自动化学报》· 公式 · 中文 SOTA',
+    topic: 'AlphaFold 之后 · 下一个真问题',
+    detail: '结构 → 功能 → 动力学',
     prompt:
-      '给《自动化学报》写一篇中文综述：多智能体强化学习在自动驾驶决策中的应用。需要数学公式推导、算法伪代码、SMAC/MetaDrive 等 benchmark 横向对比。',
+      '蛋白质结构预测已经接近上限。我直觉下一个值得做的是"动力学 / 构象采样"，但我不确定。请反驳这个判断，或者指出其他被低估、但更有 leverage 的方向。',
   },
   {
-    topic: '扩散模型 · 分子生成',
-    detail: 'ICML · 损失曲线 · GraphRNN 对照',
+    topic: 'LLM 做科学发现 · 真路径',
+    detail: '反 demo · 要可衡量的里程碑',
     prompt:
-      '撰写一篇 ICML 论文：扩散模型在分子生成 (de novo molecule design) 中的应用。包含模型结构图、训练损失曲线、与 GraphRNN / MolGAN 的定量对比。',
+      '目前 LLM-as-scientist 的工作多停留在 demo 层面。如果要让"自动科学发现"成为一个真正可衡量、可比较的研究问题，应该如何定义里程碑？给我几个互不相同的 framing。',
   },
 ];
 

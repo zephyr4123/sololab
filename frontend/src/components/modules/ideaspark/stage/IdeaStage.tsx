@@ -181,7 +181,7 @@ export function IdeaStage({ moduleId }: IdeaStageProps) {
                     void submit();
                   }
                 }}
-                placeholder="描述你想研究的方向 —— 主题、目标会议、希望的角度……"
+                placeholder="抛一个研究问题或假设 —— 你怀疑什么、想被反驳什么、想找什么样的新角度……"
                 rows={3}
                 disabled={isStreaming}
                 className="w-full resize-none bg-transparent px-5 pt-5 pb-2 text-[14.5px] leading-relaxed placeholder:text-muted-foreground/35 text-foreground/90 focus:outline-none max-h-[260px]"
