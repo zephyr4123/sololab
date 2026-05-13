@@ -27,16 +27,6 @@ class TestIdeaSparkFlow:
         assert any(m["id"] == "ideaspark" for m in modules)
 
     @pytest.mark.integration
-    async def test_tools_registered(self, app_client):
-        """外部工具应已注册。"""
-        resp = await app_client.get("/api/tools")
-        tools = resp.json()
-        tool_names = [t["name"] for t in tools]
-        assert "web_search" in tool_names
-        assert "arxiv_search" in tool_names
-        assert "scholar_search" in tool_names
-
-    @pytest.mark.integration
     async def test_ideaspark_stream_produces_events(self, app_client):
         """POST /api/modules/ideaspark/stream 应产出 SSE 事件。
 

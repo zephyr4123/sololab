@@ -54,17 +54,10 @@ class WriterModule(ModuleBase):
         templates_dir = Path(__file__).parent / "templates"
         self.template_registry = TemplateRegistry(templates_dir)
 
-        # Document manager — 直接从 settings 创建 DB 连接
-        # ModuleContext 不包含 db_session_factory，Writer 模块自建连接池
-        db_factory = None
-        try:
-            from sololab.models.orm import create_db_engine, create_session_factory
-            engine = create_db_engine(settings.database_url)
-            db_factory = create_session_factory(engine)
-            logger.info("WriterAI DB connection pool initialized")
-        except Exception as e:
-            logger.warning("WriterAI DB initialization failed (will retry lazily): %s", e)
-        self.document_manager = DocumentManager(db_factory)
+        # Document manager — 复用 app.state 的 DB 连接池（通过 ModuleContext 注入）
+        self.document_manager = DocumentManager(ctx.db_session_factory)
+        if ctx.db_session_factory is None:
+            logger.warning("WriterAI loaded without DB — document persistence disabled")
 
         # Sandbox executor
         self.sandbox_executor = SandboxExecutor(

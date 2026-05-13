@@ -46,16 +46,15 @@ def mock_redis():
 
 @pytest.fixture
 def real_llm_config():
-    """从 settings 加载真实 LLM 配置。"""
+    """从 settings 加载真实 LLM 配置（复用 IdeaSpark 的主 LLM 通道）。"""
     from sololab.config.settings import get_settings
-
-    settings = get_settings()
     from sololab.core.llm_gateway import LLMConfig
 
+    settings = get_settings()
     return LLMConfig(
-        base_url=settings.llm_base_url,
-        api_key=settings.llm_api_key,
-        default_model=settings.llm_model,
+        base_url=settings.ideaspark_base_url,
+        api_key=settings.ideaspark_api_key,
+        default_model=settings.ideaspark_model,
         embedding_base_url=settings.embedding_base_url,
         embedding_api_key=settings.embedding_api_key,
         embedding_model=settings.embedding_model,

@@ -49,6 +49,7 @@ class ModuleContext:
     memory_manager: Any  # MemoryManager
     task_state_manager: Any  # TaskStateManager
     document_pipeline: Any = None  # DocumentPipeline（可选）
+    db_session_factory: Any = None  # async_sessionmaker（可选，需要 DB 的模块使用）
     manifest: ModuleManifest = field(default_factory=lambda: ModuleManifest("", "", "", "", "", ""))
     cancel_event: Optional[asyncio.Event] = None  # 取消信号
     task_id: Optional[str] = None  # 当前任务 ID

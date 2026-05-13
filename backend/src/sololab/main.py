@@ -8,11 +8,10 @@ import redis.asyncio as aioredis
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from sololab.api import codelab, codelab_browse, documents, modules, providers, sessions, tasks, tools, writer
+from sololab.api import codelab, codelab_browse, documents, modules, providers, sessions, tasks, writer
 from sololab.config.settings import get_settings
 from sololab.core.llm_gateway import LLMConfig, LLMGateway
 from sololab.core.module_registry import ModuleContext, ModuleRegistry
-from sololab.core.prompt_manager import PromptManager
 from sololab.core.task_state_manager import TaskStateManager
 from sololab.core.tool_registry import ToolRegistry
 
@@ -55,9 +54,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     doc_parse_tool = DocParseTool()
     for tool in [TavilySearchTool(), ArxivTool(), SemanticScholarTool(), doc_parse_tool]:
         tool_registry.register(tool)
-
-    # 提示词管理器
-    app.state.prompt_manager = PromptManager()
 
     # --- Phase 3: 数据库 + 新服务 ---
     db_session = None
@@ -165,6 +161,7 @@ def _build_module_context(app: FastAPI) -> ModuleContext:
         memory_manager=app.state.memory_manager,
         task_state_manager=app.state.task_state_manager,
         document_pipeline=getattr(app.state, "document_pipeline", None),
+        db_session_factory=getattr(app.state, "db_session", None),
     )
 
 
@@ -210,7 +207,6 @@ def create_app() -> FastAPI:
     app.include_router(documents.router, prefix="/api", tags=["documents"])
     app.include_router(sessions.router, prefix="/api", tags=["sessions"])
     app.include_router(providers.router, prefix="/api", tags=["providers"])
-    app.include_router(tools.router, prefix="/api", tags=["tools"])
     app.include_router(codelab.router, prefix="/api", tags=["codelab"])
     app.include_router(codelab_browse.router, prefix="/api", tags=["codelab"])
     app.include_router(writer.router, prefix="/api", tags=["writer"])

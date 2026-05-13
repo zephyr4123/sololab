@@ -76,10 +76,3 @@ class TestModulesAPI:
         assert "default_model" in data
         assert "models" in data
         assert "embedding_model" in data
-
-    @pytest.mark.unit
-    async def test_list_tools(self, async_client):
-        """GET /api/tools 应返回列表（可能为空）。"""
-        response = await async_client.get("/api/tools")
-        assert response.status_code == 200
-        assert isinstance(response.json(), list)

@@ -18,11 +18,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
        | tar xz --strip-components=1 -C /usr/local/bin docker/docker \
     && rm -rf /var/lib/apt/lists/*
 
-# 复制代码并安装依赖（非 editable 模式，生产环境无需 -e）
+# 复制代码并安装依赖（含 [dev] extras: pytest + ruff + mypy + httpx + fakeredis，
+# 让 `docker compose exec backend pytest ...` 与 CLAUDE.md 的指引一致地工作。
+# SoloLab 是个人研究工具，单镜像 dev+prod 不影响交付）
 COPY backend/ backend/
 COPY infra/docker/entrypoint.sh /entrypoint.sh
 COPY infra/docker/writer-sandbox.Dockerfile /app/infra/docker/writer-sandbox.Dockerfile
-RUN pip install --no-cache-dir backend/ && chmod +x /entrypoint.sh
+RUN pip install --no-cache-dir 'backend/[dev]' && chmod +x /entrypoint.sh
 
 # Playwright + Chromium（PDF 导出引擎，与预览像素一致）
 RUN playwright install --with-deps chromium

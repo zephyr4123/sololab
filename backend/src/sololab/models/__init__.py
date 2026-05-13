@@ -1,33 +1,16 @@
-"""Data models package."""
+"""Data models package — Pydantic schemas shared across modules.
 
-from sololab.models.agent import AgentConfig, AgentState, Message
-from sololab.models.base import TimestampMixin
-from sololab.models.document import DocType, ParsedChunk, ParsedDocument
-from sololab.models.module import (
-    AgentAction,
-    ModuleConfig,
-    ModuleRunRequest,
-    StatusUpdate,
-    TextChunk,
-    ToolCall,
-)
-from sololab.models.task import TaskEvent, TaskState, TaskStatus
+ORM (SQLAlchemy) models live in `orm.py` and are imported on demand
+to keep this package focused on transport-layer types.
+"""
+
+from sololab.models.agent import AgentConfig, AgentState, Message, MessageType
+from sololab.models.module import ModuleRunRequest
 
 __all__ = [
-    "AgentAction",
     "AgentConfig",
     "AgentState",
-    "DocType",
     "Message",
-    "ModuleConfig",
+    "MessageType",
     "ModuleRunRequest",
-    "ParsedChunk",
-    "ParsedDocument",
-    "StatusUpdate",
-    "TaskEvent",
-    "TaskState",
-    "TaskStatus",
-    "TextChunk",
-    "TimestampMixin",
-    "ToolCall",
 ]

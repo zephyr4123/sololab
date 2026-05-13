@@ -13,8 +13,6 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 class Settings(BaseSettings):
     """SoloLab 应用配置。"""
 
-    # 应用
-    app_name: str = "SoloLab"
     debug: bool = False
 
     # 数据库
@@ -34,11 +32,6 @@ class Settings(BaseSettings):
     embedding_api_key: str = "sk-xxx"
     embedding_model: str = "text-embedding-3-small"
 
-    # Judge LLM 配置（Benchmark 评测专用，可独立于主 LLM）
-    judge_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    judge_api_key: str = "sk-xxx"
-    judge_model: str = "qwen3.5-plus"
-
     # 工作区（CodeLab 沙箱边界）
     workspace_dir: str = ""
 
@@ -49,12 +42,8 @@ class Settings(BaseSettings):
     tavily_api_key: Optional[str] = None
     s2_api_key: Optional[str] = None  # Semantic Scholar API Key
 
-    # OpenCode 引擎（CodeLab 模块）
+    # OpenCode 引擎（CodeLab 模块代理目标）
     opencode_url: str = "http://localhost:3100"
-    opencode_server_password: Optional[str] = None
-    codelab_base_url: str = "https://api.moonshot.cn/v1"
-    codelab_api_key: str = "sk-xxx"
-    codelab_model: str = "moonshotai-cn/kimi-k2.5"
 
     # WriterAI 模块
     writer_base_url: str = ""  # LLM Provider（留空复用 IDEASPARK_*）

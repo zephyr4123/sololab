@@ -40,16 +40,6 @@ class TestDocParseIntegration:
             assert tool._pipeline is None
 
     @pytest.mark.integration
-    async def test_tools_api_lists_doc_parse(self, app_client):
-        """GET /api/tools 应列出 doc_parse。"""
-        client, _ = app_client
-        resp = await client.get("/api/tools")
-        assert resp.status_code == 200
-        tools = resp.json()
-        names = [t["name"] for t in tools]
-        assert "doc_parse" in names
-
-    @pytest.mark.integration
     async def test_report_endpoint_with_ideaspark(self, app_client):
         """POST /modules/ideaspark/report 端点应可访问（不真实执行模块）。"""
         client, _ = app_client
