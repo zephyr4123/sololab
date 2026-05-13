@@ -14,11 +14,11 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { History, Lightbulb, Loader2, Paperclip, Send, Square, X, FileText, CheckCircle, Zap, Sparkles } from 'lucide-react';
+import { History, Lightbulb, Loader2, Paperclip, Send, Square, X, FileText, CheckCircle } from 'lucide-react';
 import { useSessionStore } from '@/stores/session-store';
 import { ChatEntry } from './ChatEntry';
+import { ModeMenu } from '../shared/ModeMenu';
 import { useIdeaSparkStream } from '../hooks/useIdeaSparkStream';
-import { useIdeaSparkStore } from '@/stores/module-stores/ideaspark-store';
 import { documentApi } from '@/lib/api-client';
 
 interface ChatColumnProps {
@@ -35,8 +35,6 @@ interface UploadedDoc {
 export function ChatColumn({ moduleId: _moduleId, onOpenDrawer }: ChatColumnProps) {
   const entries = useSessionStore((s) => s.chatEntries);
   const { send, stop, isStreaming, statusLabel } = useIdeaSparkStream();
-  const mode = useIdeaSparkStore((s) => s.mode);
-  const setMode = useIdeaSparkStore((s) => s.setMode);
 
   const [text, setText] = useState('');
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
@@ -213,23 +211,9 @@ export function ChatColumn({ moduleId: _moduleId, onOpenDrawer }: ChatColumnProp
             <Paperclip className="h-3.5 w-3.5" />
           </button>
 
-          <button
-            onClick={() => setMode(mode === 'fast' ? 'deep' : 'fast')}
-            disabled={isStreaming}
-            title={
-              mode === 'fast'
-                ? '速跑：单轮 ~5 分钟'
-                : '深度：3 轮辩论 ~25 分钟'
-            }
-            className={`absolute left-11 bottom-2.5 inline-flex h-7 items-center gap-1 rounded-md px-2 text-[10.5px] font-medium transition-all ${
-              mode === 'deep'
-                ? 'bg-warm/10 text-warm hover:bg-warm/18'
-                : 'bg-foreground/[0.04] text-muted-foreground/65 hover:bg-foreground/[0.07] hover:text-foreground/75'
-            }`}
-          >
-            {mode === 'fast' ? <Zap className="h-2.5 w-2.5" /> : <Sparkles className="h-2.5 w-2.5" />}
-            <span>{mode === 'fast' ? '速跑' : '深度'}</span>
-          </button>
+          <div className="absolute left-11 bottom-2.5">
+            <ModeMenu disabled={isStreaming} compact placement="up" />
+          </div>
 
           {isStreaming ? (
             <button

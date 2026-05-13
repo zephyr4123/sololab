@@ -9,10 +9,10 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { CheckCircle, FileText, History, Loader2, Paperclip, Send, X, Zap, Sparkles } from 'lucide-react';
+import { CheckCircle, FileText, History, Loader2, Paperclip, Send, X } from 'lucide-react';
 import { SuggestionGrid } from './SuggestionGrid';
+import { ModeMenu } from '../shared/ModeMenu';
 import { useIdeaSparkStream } from '../hooks/useIdeaSparkStream';
-import { useIdeaSparkStore } from '@/stores/module-stores/ideaspark-store';
 import { useSessionStore } from '@/stores/session-store';
 import { documentApi } from '@/lib/api-client';
 
@@ -34,8 +34,6 @@ export function IdeaStage({ moduleId, onOpenDrawer }: IdeaStageProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { send, isStreaming } = useIdeaSparkStream();
-  const mode = useIdeaSparkStore((s) => s.mode);
-  const setMode = useIdeaSparkStore((s) => s.setMode);
   const sessions = useSessionStore((s) => s.sessions);
   const fetchSessions = useSessionStore((s) => s.fetchSessions);
 
@@ -222,32 +220,7 @@ export function IdeaStage({ moduleId, onOpenDrawer }: IdeaStageProps) {
                   <Paperclip className="h-4 w-4" />
                 </button>
 
-                <button
-                  onClick={() => setMode(mode === 'fast' ? 'deep' : 'fast')}
-                  disabled={isStreaming}
-                  title={
-                    mode === 'fast'
-                      ? '速跑模式：单轮辩论，约 5 分钟'
-                      : '深度模式：3 轮辩论 + 深度评议，约 25 分钟'
-                  }
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all ${
-                    mode === 'deep'
-                      ? 'bg-warm/12 text-warm hover:bg-warm/18'
-                      : 'bg-foreground/[0.04] text-muted-foreground/70 hover:bg-foreground/[0.06] hover:text-foreground/80'
-                  }`}
-                >
-                  {mode === 'fast' ? (
-                    <>
-                      <Zap className="h-3 w-3" />
-                      <span>速跑 · ~5 分</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="h-3 w-3" />
-                      <span>深度 · ~25 分</span>
-                    </>
-                  )}
-                </button>
+                <ModeMenu disabled={isStreaming} placement="up" />
 
                 <div className="flex-1" />
 

@@ -504,6 +504,28 @@ html {
   scrollbar-color: color-mix(in oklab, var(--color-foreground) 12%, transparent) transparent;
 }
 
+/* ── Refined dropdown panel ──
+   Used by ModeMenu (IdeaSpark) + TemplateMenu (Writer). Soft rise with a
+   slight scale; the caret pointer inherits the bg via the same surface so
+   panel + caret read as one floating object. */
+@keyframes menuPanelRise {
+  0%   { opacity: 0; transform: translateY(6px) scale(0.96); filter: blur(2px); }
+  100% { opacity: 1; transform: translateY(0)   scale(1);    filter: blur(0); }
+}
+@keyframes menuPanelDrop {
+  0%   { opacity: 0; transform: translateY(-6px) scale(0.96); filter: blur(2px); }
+  100% { opacity: 1; transform: translateY(0)    scale(1);    filter: blur(0); }
+}
+.mode-menu-panel {
+  transform-origin: top left;
+  animation: menuPanelRise 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* When placement="down" the panel drops from above. Caller adds .menu-down. */
+.mode-menu-panel.menu-down {
+  transform-origin: top left;
+  animation: menuPanelDrop 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 /* ── Thinking Indicator Dots ── */
 @keyframes thinking-dot-bounce {
   0%, 80%, 100% {

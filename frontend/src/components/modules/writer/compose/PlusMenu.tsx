@@ -190,15 +190,18 @@ export default function PlusMenu() {
 
   return (
     <div ref={rootRef} className="relative">
-      {/* ── Trigger "+" button ── */}
+      {/* ── Trigger "+" button — matches IdeaSpark Paperclip aesthetic ──
+        No hard border. Quiet by default, warm wash on hover or when the
+        popover is open. The attachment count badge stays warm-toned so
+        it reads as a status marker rather than a notification dot. */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         title="更多操作"
-        className={`group relative flex h-8 w-8 items-center justify-center rounded-lg border transition-all ${
+        className={`group relative flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
           open
-            ? 'border-warm/40 bg-warm/10 text-warm'
-            : 'border-border/40 bg-card/40 text-muted-foreground/70 hover:border-warm/30 hover:bg-warm/5 hover:text-warm'
+            ? 'bg-warm/12 text-warm'
+            : 'text-muted-foreground/55 hover:bg-foreground/[0.04] hover:text-foreground/80'
         }`}
       >
         <Plus
@@ -206,9 +209,9 @@ export default function PlusMenu() {
         />
         {attachmentCount > 0 && (
           <span
-            className={`absolute -right-1 -top-1 flex h-3.5 min-w-[14px] items-center justify-center rounded-full px-1 text-[9px] font-semibold leading-none ${
+            className={`absolute -right-0.5 -top-0.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full px-1 text-[9px] font-semibold leading-none tabular-nums ring-2 ring-card ${
               hasProcessing
-                ? 'bg-blue-500 text-white'
+                ? 'bg-warm/65 text-warm-foreground animate-pulse'
                 : 'bg-warm text-warm-foreground'
             }`}
           >
