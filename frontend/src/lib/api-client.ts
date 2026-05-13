@@ -147,10 +147,27 @@ export const codelabSessionApi = {
     return res.json() as Promise<{ id: string; title: string; directory?: string }>;
   },
 
-  delete: async (ocSessionId: string) => {
+  delete: async (ocSessionId: string): Promise<{
+    id: string;
+    status: 'ok' | 'partial';
+    opencode_deleted: boolean;
+    pg_deleted: boolean;
+    opencode_error: string | null;
+  }> => {
     const res = await fetch(`${API_BASE}/api/codelab/sessions/${ocSessionId}`, { method: 'DELETE' });
     if (!res.ok) throw new Error(`CodeLab session delete failed: ${res.statusText}`);
-    return res.json();
+    const body = await res.json();
+    // Partial = OpenCode 这一边没删干净；后端没动 PG 让用户可以重试。
+    // 抛个带信息的 Error 让 caller 走 catch 给用户提示。
+    if (body.status === 'partial') {
+      const err = new Error(
+        `OpenCode 暂时不可达，会话已保留以便重试${body.opencode_error ? `（${body.opencode_error}）` : ''}`,
+      );
+      (err as any).partial = true;
+      (err as any).body = body;
+      throw err;
+    }
+    return body;
   },
 };
 

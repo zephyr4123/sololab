@@ -129,26 +129,44 @@ async def delete_codelab_session(
     request: Request,
     oc_session_id: str,
 ) -> dict:
-    """删除 CodeLab 会话（OpenCode + PG 双删）。"""
-    # 1) 调 OpenCode 删除（失败也继续，可能容器重建后 session 已不存在）
+    """删除 CodeLab 会话（OpenCode + PG 双删）。
+
+    返回真实的双删状态供前端判断：
+    - status='ok'      —— OpenCode + PG 都成功（404 视为 OpenCode 已删）
+    - status='partial' —— OpenCode 删除失败（非 404），PG 此时**不动**，
+                          因为下次 GET 会从 OpenCode 把这条 upsert 回 PG，
+                          删 PG 会造成"删除成功 → 刷新复活"的幽灵体验。
+                          前端应当 toast 提示"OpenCode 暂时不可达，稍后重试"。
+    """
+    # 1) 调 OpenCode 删除；404 视为已删除（容器重建后 session 自然不在）
+    opencode_deleted = False
+    opencode_error: Optional[str] = None
     try:
         await _oc_request("DELETE", f"/session/{oc_session_id}")
+        opencode_deleted = True
     except httpx.HTTPStatusError as e:
-        if e.response.status_code != 404:
+        if e.response.status_code == 404:
+            opencode_deleted = True  # idempotent: already gone
+        else:
+            opencode_error = f"HTTP {e.response.status_code}"
             logger.warning("OpenCode session 删除失败: %s", e)
     except httpx.HTTPError as e:
+        opencode_error = str(e) or type(e).__name__
         logger.warning("OpenCode session 删除失败: %s", e)
 
-    # 2) PG 硬删除
-    session_mgr = request.app.state.session_manager
+    # 2) 只在 OpenCode 已删的前提下才删 PG。否则保留 PG 行让用户重试看到。
     pg_deleted = False
-    if session_mgr:
-        pg_deleted = await session_mgr.delete_by_opencode_id(oc_session_id)
+    if opencode_deleted:
+        session_mgr = request.app.state.session_manager
+        if session_mgr:
+            pg_deleted = await session_mgr.delete_by_opencode_id(oc_session_id)
 
     return {
         "id": oc_session_id,
-        "status": "deleted",
+        "status": "ok" if opencode_deleted else "partial",
+        "opencode_deleted": opencode_deleted,
         "pg_deleted": pg_deleted,
+        "opencode_error": opencode_error,
     }
 
 

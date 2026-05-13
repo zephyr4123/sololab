@@ -69,6 +69,11 @@ export function CodeLabSidebar({ moduleId }: { moduleId: string }) {
       }
     } catch (e) {
       console.error('Failed to delete session:', e);
+      // Partial = backend kept PG; show the row stays so user can retry.
+      // Anything else = real failure, also keep the row.
+      const isPartial = !!(e as { partial?: boolean })?.partial;
+      const msg = e instanceof Error ? e.message : '会话删除失败，请稍后重试';
+      alert(isPartial ? msg : `会话删除失败：${msg}`);
     } finally {
       setDeletingSessionId(null);
     }
