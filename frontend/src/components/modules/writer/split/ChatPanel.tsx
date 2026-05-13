@@ -37,9 +37,9 @@ export default function ChatPanel({ onOpenDrawer }: ChatPanelProps) {
   }, [chatEntries, agentStatus]);
 
   return (
-    <div className="flex flex-col w-[420px] min-w-[380px] max-w-[460px] shrink-0 border-r border-border/30">
+    <div className="flex flex-col w-[420px] min-w-[380px] max-w-[460px] shrink-0">
       {/* Header — aligns to 52px with rail header + document toolbar */}
-      <div className="h-[52px] px-4 border-b border-border/30 shrink-0 flex items-center gap-2">
+      <div className="h-[52px] px-4 shrink-0 flex items-center gap-2">
         <button
           onClick={onOpenDrawer}
           title="文档列表 (⌘B)"
@@ -65,14 +65,14 @@ export default function ChatPanel({ onOpenDrawer }: ChatPanelProps) {
           <ChatEntry key={entry.id} entry={entry} />
         ))}
 
-        {/* Live status pill */}
+        {/* Live status — inline whisper, no box */}
         {isStreaming && statusLabel && (
-          <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-warm/5 border border-warm/10">
+          <div className="flex items-center gap-2 px-1 py-1.5 animate-fade-in">
             <span className="relative flex h-2 w-2 shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-warm opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-warm" />
             </span>
-            <span className="text-xs text-foreground/60 whitespace-nowrap">
+            <span className="text-[11.5px] italic text-warm/80 whitespace-nowrap tracking-wide">
               {statusLabel}
             </span>
           </div>
@@ -81,7 +81,7 @@ export default function ChatPanel({ onOpenDrawer }: ChatPanelProps) {
       </div>
 
       {/* Input */}
-      <div className="p-4 border-t border-border/30 shrink-0">
+      <div className="p-4 shrink-0">
         <ComposeInput variant="chat" />
         {costUsd > 0 && (
           <p className="text-[10px] text-muted-foreground/40 mt-2 text-right tabular-nums">

@@ -32,36 +32,33 @@ export default function DocumentToolbar() {
   };
 
   return (
-    <div className="h-[52px] flex items-center justify-between px-4 border-b border-border/30 bg-card/30 shrink-0">
+    <div className="relative h-[52px] flex items-center justify-between px-4 shrink-0">
       <div className="flex items-center gap-2">
         <TemplateSelector />
       </div>
 
       <div className="flex items-center gap-3">
         {totalSections > 0 && (
-          <span className="text-[11px] text-muted-foreground/60 tabular-nums">
+          <span className="text-[11px] text-muted-foreground/55 tabular-nums">
             {completedSections}/{totalSections} 章节
           </span>
         )}
         {wordCount > 0 && (
           <>
-            <div className="w-px h-3.5 bg-border/30" />
-            <span className="text-[11px] text-muted-foreground/60 font-mono tabular-nums">
+            <span className="text-muted-foreground/25">·</span>
+            <span className="text-[11px] text-muted-foreground/55 font-mono tabular-nums">
               {wordCount.toLocaleString()} 字
             </span>
           </>
         )}
         {phase !== 'idle' && (
-          <>
-            <div className="w-px h-3.5 bg-border/30" />
-            <button
-              onClick={handleExport}
-              disabled={isExporting || !docId}
-              className="text-xs px-3 py-1.5 rounded-md border border-border/50 hover:bg-accent/40 transition-colors disabled:opacity-30 text-foreground/70"
-            >
-              {isExporting ? '导出中...' : '导出 PDF'}
-            </button>
-          </>
+          <button
+            onClick={handleExport}
+            disabled={isExporting || !docId}
+            className="ml-2 text-xs px-3 py-1.5 rounded-md border border-border/40 hover:bg-warm/8 hover:border-warm/30 transition-all disabled:opacity-30 text-foreground/70"
+          >
+            {isExporting ? '导出中...' : '导出 PDF'}
+          </button>
         )}
       </div>
     </div>

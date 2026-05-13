@@ -33,14 +33,14 @@ export default function DocumentRail({ documents, onOpenDrawer }: DocumentRailPr
       <aside
         onMouseEnter={() => setHovering(true)}
         onMouseLeave={() => setHovering(false)}
-        className={`absolute inset-y-0 left-0 flex flex-col bg-card/95 backdrop-blur-sm border-r border-border/40 transition-[width,box-shadow] duration-200 ease-out overflow-hidden ${
+        className={`absolute inset-y-0 left-0 flex flex-col transition-[width,box-shadow,background-color] duration-200 ease-out overflow-hidden ${
           hovering
-            ? 'w-[280px] shadow-[8px_0_28px_-14px_rgba(0,0,0,0.22)] dark:shadow-[8px_0_28px_-14px_rgba(0,0,0,0.55)]'
-            : 'w-[60px]'
+            ? 'w-[280px] bg-card/95 backdrop-blur-sm shadow-[8px_0_28px_-14px_rgba(0,0,0,0.22)] dark:shadow-[8px_0_28px_-14px_rgba(0,0,0,0.55)]'
+            : 'w-[60px] bg-transparent'
         }`}
       >
         {/* Header — opens the full drawer */}
-        <div className="h-[52px] flex items-center shrink-0 px-3 border-b border-border/30">
+        <div className="h-[52px] flex items-center shrink-0 px-3">
           <button
             onClick={onOpenDrawer}
             title="完整文档列表 (⌘B)"
@@ -87,7 +87,7 @@ export default function DocumentRail({ documents, onOpenDrawer }: DocumentRailPr
         </div>
 
         {/* Footer — new doc */}
-        <div className="border-t border-border/30 shrink-0 px-2 py-2.5">
+        <div className="shrink-0 px-2 py-2.5">
           <button
             onClick={newDoc}
             disabled={isStreaming}

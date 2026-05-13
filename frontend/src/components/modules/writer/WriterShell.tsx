@@ -73,7 +73,10 @@ export default function WriterShell({ moduleId: _moduleId }: { moduleId: string 
           recentDocsCount={documents.docs.length}
         />
       ) : (
-        <div className="flex h-full">
+        // One faint hairline along the top is the only border in SPLIT —
+        // every other pane boundary is conveyed by spacing + the floating
+        // paper canvas, not by lines.
+        <div className="flex h-full border-t border-border/25">
           <DocumentRail documents={documents} onOpenDrawer={openDrawer} />
           <ChatPanel onOpenDrawer={openDrawer} />
           <div className="flex-1 min-w-0">
