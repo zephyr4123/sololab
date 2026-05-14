@@ -4,12 +4,18 @@
  * ActSlot — accordion-style wrapper around an Act body.
  *
  * Layout rules:
- *   - state="active"  → header + body, body has a bounded max-height with
- *                       internal scroll so the four acts always fit on
- *                       one screen and the active one carries the focus.
- *   - state="done"    → header only, click to expand inline (no scroll
- *                       constraint — completed content is small enough
- *                       that the outer scroll handles it).
+ *   - state="active"  → header + body. Body is height-bounded
+ *                       (~42vh, capped at 520px) with internal scroll so
+ *                       all four acts stay on one screen and the active
+ *                       one carries focus. min-h keeps streaming
+ *                       content from making the surface jitter.
+ *   - state="done"    → header only by default; clicking expands the
+ *                       body inline. Expanded body is ALSO height-bounded
+ *                       (~58vh, capped at 640px) with internal scroll.
+ *                       A single Act can run thousands of pixels of
+ *                       agent output + tool calls + inline citations;
+ *                       an unbounded done-body would push the remaining
+ *                       acts (and the stage chrome) clean off-screen.
  *   - state="pending" → header only, no toggle affordance.
  *
  * The header (eyebrow + roman + status pill) is owned by this slot so
@@ -20,6 +26,17 @@ import { ReactNode, useEffect, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { ActHeader, type ActState } from './ActHeader';
 import type { PhaseId } from '../../shared/PersonaMeta';
+
+/* Body presentation rules.
+ *
+ * Scroll behavior (overflow + thin warm scrollbar via .act-scroll) is
+ * shared between active and expanded states; what differs is the height
+ * envelope. Keeping these as named constants makes it explicit that
+ * "active Act gets one envelope, expanded done Act gets another", rather
+ * than burying the policy in a ternary inside JSX. */
+const SCROLLABLE_BODY = 'mt-4 overflow-y-auto pr-1 act-scroll';
+const ACTIVE_BODY = `${SCROLLABLE_BODY} max-h-[clamp(280px,42vh,520px)] min-h-[160px]`;
+const EXPANDED_BODY = `${SCROLLABLE_BODY} animate-fade-in max-h-[clamp(320px,58vh,640px)]`;
 
 interface ActSlotProps {
   phase: PhaseId;
@@ -70,13 +87,7 @@ export function ActSlot({ phase, state, meta, children }: ActSlotProps) {
       </div>
 
       {showBody && (
-        <div
-          className={
-            state === 'active'
-              ? 'mt-4 max-h-[clamp(280px,42vh,520px)] min-h-[160px] overflow-y-auto pr-1 act-scroll'
-              : 'mt-4 animate-fade-in'
-          }
-        >
+        <div className={state === 'active' ? ACTIVE_BODY : EXPANDED_BODY}>
           {children}
         </div>
       )}

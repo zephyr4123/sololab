@@ -24,7 +24,13 @@ class TournamentPhase(Phase):
         self.k_factor = k_factor
 
     async def run(self, ctx: PhaseContext) -> AsyncGenerator[PhaseEvent, None]:
-        ideas = ctx.synthesized
+        # Pull from the most-mature pool that actually has content. The
+        # pipeline composition is mode-dependent — `fast` mode skips
+        # SynthesizePhase, so `ctx.synthesized` stays empty and Tournament
+        # would otherwise see zero candidates. Falling back to
+        # `refined_ideas` (Together output) then `ideas` (Separate output)
+        # keeps Tournament agnostic to which upstream phases ran.
+        ideas = ctx.synthesized or ctx.refined_ideas or ctx.ideas
         yield {
             "type": "status",
             "phase": "evaluate",
