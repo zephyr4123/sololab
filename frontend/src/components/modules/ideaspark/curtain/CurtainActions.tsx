@@ -1,38 +1,33 @@
 'use client';
 
 /**
- * CurtainActions — three quiet actions at the curtain's foot:
+ * CurtainActions — secondary content-level actions at the foot of
+ * the Curtain. Two buttons:
  *   - Export markdown report
- *   - Continue with a new round (focuses composer in the Theater chat)
- *   - View full process recap (toggles ProcessRecap below)
+ *   - Toggle the full process recap (ProcessRecap below)
+ *
+ * Navigation actions ("新辩论", "切换历史") live in
+ * `CurtainContextStrip` at the top of the Curtain, where the user
+ * will see them on entry without scrolling. This split keeps the
+ * hierarchy clear: top = where am I / how do I leave, bottom = what
+ * can I do with this content.
  */
 
-import { ArrowRight, Clock, Download, FolderOpen } from 'lucide-react';
+import { Clock, Download } from 'lucide-react';
 
 interface CurtainActionsProps {
   onExport: () => void;
-  onNewRound: () => void;
   onToggleRecap: () => void;
-  onOpenDrawer: () => void;
   recapOpen: boolean;
 }
 
 export function CurtainActions({
   onExport,
-  onNewRound,
   onToggleRecap,
-  onOpenDrawer,
   recapOpen,
 }: CurtainActionsProps) {
   return (
     <div className="flex flex-wrap items-center gap-3 pt-2">
-      <button
-        onClick={onNewRound}
-        className="group inline-flex items-center gap-2 rounded-full bg-warm px-5 py-2 text-[12.5px] font-medium text-warm-foreground transition-all hover:opacity-95 shadow-[0_6px_20px_-8px_rgba(184,149,106,0.45)]"
-      >
-        再开一轮辩论
-        <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-      </button>
       <button
         onClick={onExport}
         className="inline-flex items-center gap-2 rounded-full bg-card/70 px-4 py-2 text-[12px] text-foreground/75 transition-all hover:bg-card hover:text-foreground"
@@ -49,15 +44,7 @@ export function CurtainActions({
         }`}
       >
         <Clock className="h-3.5 w-3.5" />
-        {recapOpen ? '收起完整时间线' : '查看完整时间线'}
-      </button>
-      <button
-        onClick={onOpenDrawer}
-        title="我的辩论 (⌘H)"
-        className="inline-flex items-center gap-2 rounded-full bg-card/40 px-4 py-2 text-[12px] text-muted-foreground/70 transition-all hover:bg-card/70 hover:text-foreground"
-      >
-        <FolderOpen className="h-3.5 w-3.5" />
-        我的辩论
+        {recapOpen ? '收起推演记录' : '查看推演记录'}
       </button>
     </div>
   );

@@ -102,13 +102,13 @@ export function ChatColumn({ moduleId: _moduleId, onOpenDrawer }: ChatColumnProp
             IdeaSpark
           </span>
           <span className="text-[10px] text-muted-foreground/45 tracking-wide">
-            五心智 · 一辩论
+            5 个智能体 · 协同推演
           </span>
         </div>
         <button
           onClick={onOpenDrawer}
           className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground/55 hover:text-foreground hover:bg-foreground/[0.04] transition-colors"
-          title="我的辩论 (⌘H)"
+          title="历史记录 (⌘H)"
         >
           <History className="h-3.5 w-3.5" />
         </button>
@@ -118,8 +118,8 @@ export function ChatColumn({ moduleId: _moduleId, onOpenDrawer }: ChatColumnProp
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
         {entries.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center text-center animate-fade-in">
-            <p className="text-[12px] text-muted-foreground/55 max-w-[220px] leading-relaxed">
-              输入研究主题，五个智能体会在右侧舞台展开辩论。
+            <p className="text-[12px] text-muted-foreground/55 max-w-[260px] leading-relaxed">
+              输入研究主题。5 个智能体将在右侧并行推理，互相评议。
             </p>
           </div>
         )}
@@ -188,7 +188,7 @@ export function ChatColumn({ moduleId: _moduleId, onOpenDrawer }: ChatColumnProp
                 void submit();
               }
             }}
-            placeholder={isStreaming ? '辩论进行中…' : '继续辩论 / 提一个新方向…'}
+            placeholder={isStreaming ? '推理进行中…' : '提出新方向 / 追问当前结果…'}
             rows={2}
             disabled={isStreaming}
             className="w-full max-h-32 min-h-[58px] resize-none bg-transparent pl-3 pr-14 pt-3 pb-10 text-[13px] leading-relaxed placeholder:text-muted-foreground/35 focus:outline-none"

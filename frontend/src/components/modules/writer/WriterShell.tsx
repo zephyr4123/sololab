@@ -3,39 +3,55 @@
 /**
  * WriterShell — module entry point + layout controller.
  *
- * Picks between two layouts based on whether the current document has any
- * conversation or written sections:
+ * Two surfaces (mirrors IdeaSparkShell's Stage / Theater / Curtain
+ * pattern, condensed to two states since Writer doesn't have a
+ * finalised "results" surface):
  *
  *   - STAGE  : empty-state focused compose surface (ComposeStage).
- *   - SPLIT  : DocumentRail + ChatPanel + DocumentPreview.
+ *   - SPLIT  : DocumentRail + ChatPanel + DocumentPreview, with a
+ *              top context strip (title + phase + navigation).
  *
- * The shell owns three cross-cutting concerns:
- *   1. Restoring the user's last document on first mount.
- *   2. Document-list state (shared between the stage pill, rail, and drawer).
- *   3. The global ⌘B / Ctrl+B shortcut to toggle the doc drawer.
+ * Mount-time freshness:
+ *   The writer store is a singleton in memory — client-side nav from
+ *   Home back into this module does NOT unmount it, so a finished
+ *   document (phase='complete' + sections) sits there until something
+ *   clears it. We detect that "stale SPLIT" on mount and reset, so the
+ *   user always lands on a clean Compose stage unless they explicitly
+ *   open a document from the drawer. An in-flight stream (phase='writing')
+ *   is preserved so context-switching mid-draft doesn't lose work.
+ *
+ * What we removed: previously this shell called `loadLastDocument()`
+ * on mount, which would silently reopen whichever document the user
+ * had touched last. That broke the user's mental model — clicking
+ * the sidebar should land on a fresh page, not strand the user in
+ * yesterday's draft. The DocumentDrawer (⌘B, or via the strip)
+ * surfaces the latest document at the top of the list, so getting
+ * back to it is one click.
  *
  * Components are split by responsibility:
  *   - stage/        : empty-state composition
- *   - split/        : working-state three-column layout
+ *   - split/        : working-state three-column layout + context strip
  *   - documents/    : doc list rendering + drawer
  *   - compose/      : shared prompt input
  *   - hooks/        : SSE wiring + document data layer
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useWriterStore } from '@/stores/module-stores/writer-store';
 import ComposeStage from './stage/ComposeStage';
 import DocumentRail from './split/DocumentRail';
 import ChatPanel from './split/ChatPanel';
 import DocumentPreview from './preview/DocumentPreview';
 import DocumentDrawer from './documents/DocumentDrawer';
+import WriterContextStrip from './split/WriterContextStrip';
 import { useWriterDocuments } from './hooks/useWriterDocuments';
 
 export default function WriterShell({ moduleId: _moduleId }: { moduleId: string }) {
   const chatEntries = useWriterStore((s) => s.chatEntries);
   const sections = useWriterStore((s) => s.sections);
   const docId = useWriterStore((s) => s.docId);
-  const loadLastDocument = useWriterStore((s) => s.loadLastDocument);
+  const title = useWriterStore((s) => s.title);
+  const phase = useWriterStore((s) => s.phase);
 
   const isStage = chatEntries.length === 0 && sections.length === 0;
 
@@ -44,13 +60,19 @@ export default function WriterShell({ moduleId: _moduleId }: { moduleId: string 
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
   const documents = useWriterDocuments();
 
-  // Restore the user's last document on first mount (persisted via localStorage).
+  // Stale-SPLIT detection — see header comment. Runs once per mount.
+  // If we land here with a finished document's state still in the
+  // store, wipe it so the user sees Stage. Active streams (writing)
+  // are left alone so context-switching mid-draft doesn't lose work.
   useEffect(() => {
-    if (!docId) {
-      void loadLastDocument();
+    const s = useWriterStore.getState();
+    const isStaleSplit =
+      s.phase === 'complete' &&
+      s.sections.length > 0 &&
+      !s.isStreaming;
+    if (isStaleSplit) {
+      s.reset();
     }
-    // mount-only
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ⌘B / Ctrl+B toggles the document drawer.
@@ -65,6 +87,19 @@ export default function WriterShell({ moduleId: _moduleId }: { moduleId: string 
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  const handleNewDocument = useCallback(() => {
+    useWriterStore.getState().reset();
+  }, []);
+
+  // Look up the current document's metadata for the context strip's
+  // relative-time chip. The strip degrades gracefully if it's missing.
+  const updatedAtMs = useMemo(() => {
+    const doc = documents.docs.find((d) => d.doc_id === docId);
+    if (!doc?.updated_at) return undefined;
+    const ms = new Date(doc.updated_at).getTime();
+    return Number.isFinite(ms) && ms > 0 ? ms : undefined;
+  }, [documents.docs, docId]);
+
   return (
     <div className="relative h-full">
       {isStage ? (
@@ -73,14 +108,23 @@ export default function WriterShell({ moduleId: _moduleId }: { moduleId: string 
           recentDocsCount={documents.docs.length}
         />
       ) : (
-        // One faint hairline along the top is the only border in SPLIT —
-        // every other pane boundary is conveyed by spacing + the floating
-        // paper canvas, not by lines.
-        <div className="flex h-full border-t border-border/25">
-          <DocumentRail documents={documents} onOpenDrawer={openDrawer} />
-          <ChatPanel onOpenDrawer={openDrawer} />
-          <div className="flex-1 min-w-0">
-            <DocumentPreview />
+        <div className="flex h-full flex-col">
+          <WriterContextStrip
+            title={title}
+            phase={phase}
+            updatedAtMs={updatedAtMs}
+            onNewDocument={handleNewDocument}
+            onOpenDrawer={openDrawer}
+          />
+          {/* Three-column working layout — one faint hairline along
+              the top is the only border; pane boundaries are conveyed
+              by spacing + the floating paper canvas, not by lines. */}
+          <div className="flex flex-1 min-h-0 border-t border-border/25">
+            <DocumentRail documents={documents} onOpenDrawer={openDrawer} />
+            <ChatPanel onOpenDrawer={openDrawer} />
+            <div className="flex-1 min-w-0">
+              <DocumentPreview />
+            </div>
           </div>
         </div>
       )}

@@ -15,6 +15,15 @@
  *
  * Shell also owns the SessionDrawer state and ⌘H global hotkey so all
  * three surfaces can open the same drawer.
+ *
+ * Mount-time freshness:
+ *   The ideaspark store is a singleton in memory — client-side nav from
+ *   Home back into this module does NOT unmount it, so a finished debate
+ *   (phase='done' + topIdeas) sits there until something clears it. We
+ *   detect that "stale Curtain" on mount and reset, so the user always
+ *   lands on a clean Stage unless they explicitly open a session from
+ *   the Drawer. Theater mid-stream is preserved (phase still 'separate'
+ *   etc.), so context-switching mid-debate doesn't lose work.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -63,6 +72,19 @@ export default function IdeaSparkShell({ moduleId }: IdeaSparkShellProps) {
   const openDrawer = useCallback(() => setDrawerOpen(true), []);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
 
+  // Stale-Curtain detection — see header comment. Runs once per mount.
+  // If we land here with a finished debate's state still in the store,
+  // wipe it so the user sees Stage. Active streams (separate / cluster
+  // / together / synthesize / evaluate) are left alone.
+  useEffect(() => {
+    const s = useIdeaSparkStore.getState();
+    const isStaleCurtain =
+      (s.phase === 'done' || s.phase === 'converged') && s.topIdeas.length > 0;
+    if (isStaleCurtain) {
+      useSessionStore.getState().resetConversation();
+    }
+  }, []);
+
   // Global ⌘H / Ctrl+H — toggle the session drawer from any surface.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -75,8 +97,12 @@ export default function IdeaSparkShell({ moduleId }: IdeaSparkShellProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // "New debate" — full reset to Stage. The previous version only set
+  // phase='idle' but kept topIdeas, which made deriveSurface fall into
+  // Theater instead of Stage. resetConversation() clears chat entries,
+  // ideaspark store, and task store in one call.
   const handleNewRound = useCallback(() => {
-    useIdeaSparkStore.getState().setPhase('idle');
+    useSessionStore.getState().resetConversation();
   }, []);
 
   return (

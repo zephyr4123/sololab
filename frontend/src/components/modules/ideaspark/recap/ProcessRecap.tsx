@@ -87,12 +87,12 @@ function RecapAct({ slice }: { slice: Slice }) {
   const meta = PHASE_META[slice.phase];
 
   let summary = '';
-  if (slice.phase === 'separate') summary = `${ideas} 个创意 · ${tools} 次检索`;
+  if (slice.phase === 'separate') summary = `${ideas} 个候选 · ${tools} 次检索`;
   else if (slice.phase === 'together') {
     const iters = new Set(slice.events.filter((e) => typeof e.iteration === 'number').map((e) => e.iteration)).size;
-    summary = `${iters} 轮辩论 · ${tools} 次检索`;
+    summary = `${iters} 轮评议 · ${tools} 次检索`;
   } else if (slice.phase === 'synthesize') summary = `${tools} 次检索 · 全局整合`;
-  else if (slice.phase === 'evaluate') summary = `${matches} 次比较`;
+  else if (slice.phase === 'evaluate') summary = `${matches} 次评估`;
 
   return (
     <div className="rounded-xl bg-card/40 backdrop-blur-sm">

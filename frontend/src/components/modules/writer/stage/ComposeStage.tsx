@@ -59,23 +59,23 @@ export default function ComposeStage({ onOpenDrawer, recentDocsCount }: ComposeS
             className="text-[10px] font-semibold uppercase tracking-[0.28em] text-warm/75 mb-5 animate-fade-in-up"
             style={{ animationDelay: '60ms' }}
           >
-            writer studio
+            writer · academic drafting
           </span>
 
           {/* Headline */}
           <h1
-            className="text-[clamp(28px,4vw,38px)] leading-[1.15] tracking-tight mb-2.5 animate-fade-in-up text-foreground"
+            className="text-[clamp(26px,3.8vw,38px)] leading-[1.18] tracking-tight mb-3 animate-fade-in-up text-foreground"
             style={{ animationDelay: '130ms', fontFamily: 'var(--font-display)' }}
           >
-            Compose your next paper.
+            从研究主题到结构化论文初稿。
           </h1>
 
           {/* Subhead */}
           <p
-            className="text-[14px] text-muted-foreground/65 mb-9 animate-fade-in-up tracking-wide"
+            className="text-[13.5px] text-muted-foreground/65 mb-9 animate-fade-in-up tracking-wide max-w-[540px]"
             style={{ animationDelay: '190ms' }}
           >
-            一句话，一篇论文。
+            8 个写作工具协同 · LaTeX/Markdown 双输出 · 引文 / 图表 / 公式一站完成。
           </p>
 
           {/* Compose card — keyed by prefill tick so picking a suggestion

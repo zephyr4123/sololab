@@ -65,7 +65,7 @@ function StreamEntryDigest({ events }: { events: Array<{ type: string; [key: str
   if (!digest.doneEv) {
     return (
       <div className="px-2 py-2 text-[11px] text-muted-foreground/55 italic animate-fade-in">
-        辩论正在右侧舞台进行…
+        推理正在右侧并行进行…
       </div>
     );
   }

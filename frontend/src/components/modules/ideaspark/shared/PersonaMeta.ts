@@ -44,11 +44,11 @@ export type PhaseId = 'separate' | 'cluster' | 'together' | 'synthesize' | 'eval
 export const PHASE_ORDER: PhaseId[] = ['separate', 'together', 'synthesize', 'evaluate'];
 
 export const PHASE_META: Record<PhaseId, { caps: string; zh: string; subtitle: string }> = {
-  separate: { caps: 'ACT I · SEPARATE', zh: '生成创意', subtitle: '两个心智独立检索 + 提案' },
-  cluster: { caps: 'ACT · CLUSTER', zh: '创意分组', subtitle: '按相似度聚类' },
-  together: { caps: 'ACT II · TOGETHER', zh: '协同评议', subtitle: '审辩与整合的来回辩论' },
-  synthesize: { caps: 'ACT III · SYNTHESIZE', zh: '整合最佳', subtitle: '全局收敛为更优方案' },
-  evaluate: { caps: 'ACT IV · TOURNAMENT', zh: 'Elo 排序', subtitle: '成对比较，分出名次' },
+  separate: { caps: 'PHASE I · SEPARATE', zh: '并行发散', subtitle: '5 个智能体独立检索文献并提出方向' },
+  cluster: { caps: 'PHASE · CLUSTER', zh: '方向聚类', subtitle: '按相似度合并候选' },
+  together: { caps: 'PHASE II · TOGETHER', zh: '协同评议', subtitle: '审辩与整合的来回讨论' },
+  synthesize: { caps: 'PHASE III · SYNTHESIZE', zh: '全局整合', subtitle: '收敛为更优候选' },
+  evaluate: { caps: 'PHASE IV · RANKING', zh: 'Elo 排序', subtitle: '成对评估并排序' },
   converged: { caps: 'CURTAIN', zh: '已完成', subtitle: '' },
   done: { caps: 'CURTAIN', zh: '已完成', subtitle: '' },
   cancelled: { caps: 'CANCELLED', zh: '已取消', subtitle: '' },

@@ -84,7 +84,7 @@ export function RecentWork() {
             collected.push({
               id: `is-${s.session_id}`,
               moduleId: 'ideaspark',
-              title: s.title ?? '未命名辩论',
+              title: s.title ?? '未命名会话',
               updatedMs: ms,
             });
           }

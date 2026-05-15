@@ -44,12 +44,12 @@ export function relativeTime(ms: number, opts: { english?: boolean } = {}): stri
 
 /**
  * Returns the Chinese unit suffix for a given module's collection noun.
- * Used in places like "3 场辩论 · 2 小时前".
+ * Used in places like "3 次推演 · 2 小时前".
  */
 export const MODULE_NOUN_ZH: Record<'ideaspark' | 'writer' | 'codelab', string> = {
-  ideaspark: '场辩论',
+  ideaspark: '次推演',
   writer: '篇草稿',
-  codelab: '次会话',
+  codelab: '个会话',
 };
 
 /**
@@ -57,7 +57,7 @@ export const MODULE_NOUN_ZH: Record<'ideaspark' | 'writer' | 'codelab', string> 
  * Used where typography needs the letter-spacing visual rhythm.
  */
 export const MODULE_NOUN_EN: Record<'ideaspark' | 'writer' | 'codelab', string> = {
-  ideaspark: 'debates',
+  ideaspark: 'runs',
   writer: 'drafts',
   codelab: 'sessions',
 };

@@ -72,7 +72,7 @@ export function HeroBanner() {
           if (!s) return;
           tryAdd({
             module: 'IdeaSpark',
-            title: s.title || '未命名辩论',
+            title: s.title || '未命名会话',
             updatedMs: new Date(s.updated_at ?? s.created_at ?? 0).getTime(),
           });
         })

@@ -15,7 +15,7 @@
  *   - CodeLab      → /api/codelab/sessions
  *
  * If everything fails the page still shows IdeaSpark as hero with
- * "0 场辩论 · 暂无活动" — never a blank space.
+ * "0 次推演 · 暂无活动" — never a blank space.
  */
 
 import Image from 'next/image';
@@ -68,21 +68,21 @@ const ROOMS: RoomMeta[] = [
     id: 'ideaspark',
     name: 'IdeaSpark',
     icon: Lightbulb,
-    signature: 'Multi-agent hypothesis generation.',
+    signature: '多智能体并行推理 · Elo 排序候选方向',
     photo: '/atelier/room-ideaspark.png',
   },
   {
     id: 'writer',
     name: 'WriterAI',
     icon: PenTool,
-    signature: 'Academic manuscript drafting.',
+    signature: '学术论文初稿生成 · LaTeX/Markdown 双输出',
     photo: '/atelier/room-writer.png',
   },
   {
     id: 'codelab',
     name: 'CodeLab',
     icon: Code,
-    signature: 'AI-assisted experiment scaffolding.',
+    signature: 'AI 辅助实验代码 · OpenCode 引擎 + MCP/LSP',
     photo: '/atelier/room-codelab.png',
   },
 ];

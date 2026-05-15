@@ -48,14 +48,14 @@ const OPTIONS: OptionMeta[] = [
     icon: Zap,
     label: '速跑',
     time: '~5 分钟',
-    rationale: '单轮辩论 · 适合先看一遍想法',
+    rationale: '单轮推理 · 快速浏览候选方向',
   },
   {
     id: 'deep',
     icon: Sparkles,
     label: '深度',
     time: '~25 分钟',
-    rationale: '3 轮辩论 + 深度评议 · 适合要细节',
+    rationale: '3 轮推理 + 深度评议 · 用于精细评估',
   },
 ];
 

@@ -1,6 +1,15 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+/* Tailwind v4 dark variant — required for `dark:xxx` Tailwind utility
+   classes to respond to the `.dark` class we toggle on <html> (see
+   `ThemeInitializer.tsx`). Without this directive, Tailwind v4 falls
+   back to `prefers-color-scheme: dark`, ignoring our manual toggle
+   and leaving every `dark:bg-...` / `dark:text-...` site in the code
+   silently broken (most visibly: the Writer paper canvas stayed white
+   in dark mode because `bg-white dark:bg-[#1E1D1B]` never fired). */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ─── Google Fonts ─── */
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@300;400;500;600;700&family=Noto+Serif+SC:wght@400;500;600;700&display=swap');
 
@@ -801,4 +810,225 @@ html {
   font-size: 16px;
   color: var(--color-warm-foreground);
   letter-spacing: -0.04em;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Curtain · Spotlight Champion
+   ─────────────────────────────────────────────────────────────────
+
+   The Champion card is the Curtain's hero moment. It's not a card in
+   the "panel of content" sense — it's a stage with the winning idea
+   standing in a column of light. Four layers compose it:
+
+   1. `.champion-card`      — the surface (rounded shell + warm halo)
+   2. `.champion-backdrop`  — an atmospheric photo bleeding in from
+                              the right, masked so it never competes
+                              with the text on the left
+   3. `.champion-spotlight` — a radial warm wash falling from the top
+                              centre (the "stage light")
+   4. `.champion-watermark` — a single 240px+ serif numeral pinned at
+                              the top-left corner, dialled down to
+                              5–8% opacity so it reads as paper
+                              embossing rather than UI noise
+*/
+
+.champion-card {
+  position: relative;
+  isolation: isolate;
+  border-radius: 28px;
+  background: color-mix(in oklab, var(--color-card) 78%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow:
+    0 32px 90px -32px color-mix(in oklab, var(--color-warm) 38%, transparent),
+    0 8px 24px -10px rgba(0, 0, 0, 0.08),
+    inset 0 0 0 1px color-mix(in oklab, var(--color-warm) 14%, transparent);
+}
+.dark .champion-card {
+  background: color-mix(in oklab, var(--color-card) 70%, transparent);
+  box-shadow:
+    0 36px 110px -28px color-mix(in oklab, var(--color-warm) 32%, transparent),
+    0 10px 30px -10px rgba(0, 0, 0, 0.35),
+    inset 0 0 0 1px color-mix(in oklab, var(--color-warm) 12%, transparent);
+}
+
+.champion-backdrop {
+  background-image: url('/atelier/room-ideaspark.png');
+  background-position: center right;
+  background-size: cover;
+  opacity: 0.32;
+  /* Tri-axis fade — left, top, bottom — so the image is only present
+     in the upper-right "stage wing" and never crowds the text column. */
+  -webkit-mask-image:
+    linear-gradient(to left, black 0%, black 30%, transparent 95%),
+    linear-gradient(to bottom, black 25%, transparent 95%);
+  -webkit-mask-composite: source-in;
+          mask-image:
+    linear-gradient(to left, black 0%, black 30%, transparent 95%),
+    linear-gradient(to bottom, black 25%, transparent 95%);
+          mask-composite: intersect;
+  pointer-events: none;
+}
+.dark .champion-backdrop { opacity: 0.22; }
+
+.champion-spotlight {
+  background: radial-gradient(
+    ellipse 70% 90% at 50% -10%,
+    color-mix(in oklab, var(--color-warm) 16%, transparent),
+    transparent 60%
+  );
+  pointer-events: none;
+}
+.dark .champion-spotlight {
+  /* Darker card needs a stronger warm pour to read as "stage light"
+     rather than getting swallowed by the deep charcoal background. */
+  background: radial-gradient(
+    ellipse 70% 90% at 50% -10%,
+    color-mix(in oklab, var(--color-warm) 24%, transparent),
+    transparent 60%
+  );
+}
+
+.champion-watermark {
+  position: absolute;
+  top: -28px;
+  left: 4px;
+  font-family: var(--font-display);
+  font-size: clamp(180px, 22vw, 260px);
+  line-height: 0.85;
+  letter-spacing: -0.06em;
+  color: var(--color-warm);
+  opacity: 0.075;
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
+}
+.dark .champion-watermark { opacity: 0.13; }
+
+.champion-elo {
+  font-family: var(--font-mono);
+  font-size: clamp(56px, 7vw, 82px);
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-warm);
+  font-weight: 500;
+}
+
+/* Drop cap on the first paragraph of the Champion's idea.
+   Targets the .prose subtree rendered by MarkdownViewer. */
+.champion-content .prose > p:first-of-type::first-letter,
+.champion-content > div > p:first-of-type::first-letter {
+  font-family: var(--font-display);
+  font-size: 4.6em;
+  line-height: 0.86;
+  float: left;
+  margin: 0.06em 0.12em 0 -0.04em;
+  color: var(--color-warm);
+  font-weight: 400;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Curtain · Runner cards (2nd / 3rd place)
+   Smaller, paired side-by-side. Each has its own ghost rank numeral
+   bleeding off the top-left corner so the user reads ranks at a
+   glance even without the headline number.
+   ───────────────────────────────────────────────────────────────── */
+
+.runner-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 22px;
+  padding: 28px 30px 26px;
+  background: color-mix(in oklab, var(--color-card) 60%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 280ms;
+  box-shadow:
+    0 14px 44px -22px rgba(0, 0, 0, 0.16),
+    inset 0 0 0 1px color-mix(in oklab, var(--color-border) 55%, transparent);
+}
+.dark .runner-card {
+  background: color-mix(in oklab, var(--color-card) 55%, transparent);
+  box-shadow:
+    0 16px 52px -22px rgba(0, 0, 0, 0.4),
+    inset 0 0 0 1px color-mix(in oklab, var(--color-border) 50%, transparent);
+}
+.runner-card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 22px 56px -22px color-mix(in oklab, var(--color-warm) 28%, rgba(0,0,0,0.16)),
+    inset 0 0 0 1px color-mix(in oklab, var(--color-warm) 18%, transparent);
+}
+
+.runner-watermark {
+  position: absolute;
+  top: -16px;
+  left: 8px;
+  font-family: var(--font-display);
+  font-size: 132px;
+  line-height: 0.85;
+  letter-spacing: -0.05em;
+  color: var(--color-foreground);
+  opacity: 0.08;
+  pointer-events: none;
+  user-select: none;
+}
+.dark .runner-watermark { opacity: 0.11; }
+
+/* ─────────────────────────────────────────────────────────────────
+   Curtain · Tournament bracket dot
+   Lightweight visualisation of evaluate_match events. Each match is
+   a circular dot on a horizontal axis; the dot's fill marks the
+   winner's persona, and a faint line links adjacent matches in time.
+   ───────────────────────────────────────────────────────────────── */
+
+.bracket-dot {
+  transition: r 200ms ease-out, fill-opacity 200ms ease-out;
+  cursor: pointer;
+}
+.bracket-dot:hover { r: 7; fill-opacity: 1; }
+
+.bracket-axis {
+  stroke: color-mix(in oklab, var(--color-border) 70%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Curtain · Mentions row
+   The honourable mentions get a hover state and an agent-monogram
+   chip so they don't read as a flat list footnote.
+   ───────────────────────────────────────────────────────────────── */
+
+.mention-row {
+  display: grid;
+  grid-template-columns: 2.5rem 9rem minmax(0, 1fr) 4.5rem 1rem;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.65rem 1.25rem 0.65rem 0.5rem;
+  border-radius: 14px;
+  transition: background-color 220ms ease, transform 220ms ease;
+  cursor: pointer;
+}
+.mention-row:hover {
+  background: color-mix(in oklab, var(--color-card) 60%, transparent);
+  transform: translateX(2px);
+}
+
+@keyframes champion-rise {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.985);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+.champion-rise {
+  animation: champion-rise 920ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }

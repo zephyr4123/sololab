@@ -3,7 +3,12 @@
 import { create } from 'zustand';
 import { writerApi, type WriterAttachment } from '@/lib/api-client';
 
-const LAST_DOC_KEY = 'sololab.writer.lastDocId';
+/* Document state lives only in memory. We deliberately do NOT persist
+   the "last opened doc id" to localStorage anymore: silently reopening
+   yesterday's draft when the user clicks the Writer module in the
+   sidebar broke their mental model (they expected a fresh page).
+   The DocumentDrawer already lists recent docs by updated_at, so
+   getting back to the most-recent draft is one click. */
 
 /* ── Types ── */
 
@@ -142,7 +147,6 @@ interface WriterActions {
   // Lifecycle
   restoreFromDocument: (doc: Record<string, unknown>) => void;
   loadDocument: (docId: string) => Promise<boolean>;
-  loadLastDocument: () => Promise<void>;
   newDocument: () => void;
   /**
    * Guarantee a docId exists. Returns current docId if set; otherwise
@@ -155,20 +159,6 @@ interface WriterActions {
 }
 
 /* ── Helpers ── */
-
-function persistDocId(docId: string | null): void {
-  if (typeof window === 'undefined') return;
-  if (docId) {
-    window.localStorage.setItem(LAST_DOC_KEY, docId);
-  } else {
-    window.localStorage.removeItem(LAST_DOC_KEY);
-  }
-}
-
-function readPersistedDocId(): string | null {
-  if (typeof window === 'undefined') return null;
-  return window.localStorage.getItem(LAST_DOC_KEY);
-}
 
 /**
  * Convert the persisted OpenAI-format `conversation` field into the
@@ -259,10 +249,7 @@ export const useWriterStore = create<WriterState & WriterActions>((set, get) => 
   ...initialState,
 
   // ── Document ──
-  setDocId: (id) => {
-    persistDocId(id || null);
-    set({ docId: id });
-  },
+  setDocId: (id) => set({ docId: id }),
   setTitle: (title) => set({ title }),
   setTemplateId: (id) => set({ templateId: id }),
   setPhase: (phase) => set({ phase }),
@@ -371,7 +358,6 @@ export const useWriterStore = create<WriterState & WriterActions>((set, get) => 
   // ── Lifecycle ──
   restoreFromDocument: (doc) => {
     const docId = (doc.doc_id as string) || null;
-    persistDocId(docId);
     const sectionsRaw = (doc.sections as Array<Record<string, unknown>>) || [];
     set({
       docId,
@@ -426,16 +412,7 @@ export const useWriterStore = create<WriterState & WriterActions>((set, get) => 
     }
   },
 
-  loadLastDocument: async () => {
-    const last = readPersistedDocId();
-    if (!last) return;
-    await get().loadDocument(last);
-  },
-
-  newDocument: () => {
-    persistDocId(null);
-    set(initialState);
-  },
+  newDocument: () => set(initialState),
 
   ensureDocId: async () => {
     const current = get().docId;
@@ -459,8 +436,5 @@ export const useWriterStore = create<WriterState & WriterActions>((set, get) => 
     }
   },
 
-  reset: () => {
-    persistDocId(null);
-    set(initialState);
-  },
+  reset: () => set(initialState),
 }));

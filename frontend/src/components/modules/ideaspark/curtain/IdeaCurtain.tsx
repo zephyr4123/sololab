@@ -1,20 +1,36 @@
 'use client';
 
 /**
- * IdeaCurtain — done state. The applause moment.
+ * IdeaCurtain — results panel for a finished IdeaSpark run.
  *
- * Hero summary on the left margin (eyebrow + serif headline + tabular
- * stats), then Top 3 cards stagger into view, then the rest in a quiet
- * column. CurtainActions sit at the bottom; toggling "完整时间线"
- * surfaces ProcessRecap inline.
+ * Layout (top to bottom):
+ *   1. CurtainContextStrip · session info + escape hatches
+ *   2. Hero band           · "EVALUATION COMPLETE" eyebrow + Chinese
+ *                            functional headline + tabular run stats
+ *   3. ChampionCard        · Top 1 — spotlight + watermark + drop cap
+ *   4. RunnerCard × 2      · Top 2/3 paired side-by-side
+ *   5. TournamentBracket   · SVG of every evaluate_match dot
+ *   6. MentionsList        · Top 4..N with expandable bodies
+ *   7. CurtainActions      · export / recap toggle (content actions)
+ *   8. ProcessRecap        · inline expansion of #7
+ *
+ * Navigation (new run / switch history) lives in the context strip
+ * at the top — see CurtainContextStrip's comment for the rationale.
+ *
+ * Tone: SoloLab is a research tool, not a competition. The copy in
+ * this surface deliberately avoids tournament / courtroom / theatre
+ * metaphors. The user wants to know which directions are worth
+ * pursuing, not which one "won" — phrasing follows that.
  */
 
-import { useMemo, useState } from 'react';
-import { AgentSigil } from '../shared/AgentSigil';
-import { ResultCard } from './ResultCard';
+import { useEffect, useMemo, useState } from 'react';
+import { ChampionCard } from './ChampionCard';
+import { RunnerCard } from './RunnerCard';
+import { TournamentBracket } from './TournamentBracket';
+import { MentionsList } from './MentionsList';
 import { CurtainActions } from './CurtainActions';
+import { CurtainContextStrip } from './CurtainContextStrip';
 import { ProcessRecap } from '../recap/ProcessRecap';
-import { MarkdownViewer } from '@/components/shared/MarkdownViewer';
 import { useIdeaSparkStore } from '@/stores/module-stores/ideaspark-store';
 import { useSessionStore } from '@/stores/session-store';
 
@@ -25,40 +41,65 @@ interface IdeaCurtainProps {
 }
 
 export function IdeaCurtain({
-  moduleId: _moduleId,
+  moduleId,
   onRequestNewRound,
   onOpenDrawer,
 }: IdeaCurtainProps) {
   const topIdeas = useIdeaSparkStore((s) => s.topIdeas);
   const costUsd = useIdeaSparkStore((s) => s.costUsd);
   const chatEntries = useSessionStore((s) => s.chatEntries);
+  const currentSessionId = useSessionStore((s) => s.currentSessionId);
+  const sessions = useSessionStore((s) => s.sessions);
+  const fetchSessions = useSessionStore((s) => s.fetchSessions);
   const [recapOpen, setRecapOpen] = useState(false);
+
+  useEffect(() => {
+    if (sessions.length === 0) {
+      void fetchSessions(moduleId);
+    }
+  }, [moduleId, sessions.length, fetchSessions]);
+
+  const currentSession = useMemo(
+    () => sessions.find((s) => s.session_id === currentSessionId) ?? null,
+    [sessions, currentSessionId],
+  );
+
+  const completedAtMs = currentSession?.updated_at
+    ? new Date(currentSession.updated_at).getTime()
+    : undefined;
 
   const ranked = useMemo(
     () => [...topIdeas].sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99)),
     [topIdeas],
   );
 
-  const stats = useMemo(() => {
+  const events = useMemo(() => {
     const lastStream = [...chatEntries].reverse().find((e) => e.kind === 'stream');
-    const events = lastStream?.events ?? [];
-    return {
+    return lastStream?.events ?? [];
+  }, [chatEntries]);
+
+  const stats = useMemo(
+    () => ({
       tools: events.filter((e) => e.type === 'tool').length,
       papers: events
-        .filter((e) => e.type === 'tool' && typeof (e as any).result_count === 'number')
+        .filter(
+          (e) => e.type === 'tool' && typeof (e as any).result_count === 'number',
+        )
         .reduce((s, e) => s + ((e as any).result_count || 0), 0),
       ideas: events.filter((e) => e.type === 'idea').length,
       matches: events.filter((e) => e.type === 'evaluate_match').length,
-    };
-  }, [chatEntries]);
+    }),
+    [events],
+  );
 
-  const top3 = ranked.slice(0, 3);
-  const rest = ranked.slice(3);
+  const champion = ranked[0];
+  const runners = ranked.slice(1, 3);
+  const mentions = ranked.slice(3);
 
   const handleExport = () => {
     if (!ranked.length) return;
     const now = new Date().toLocaleString('zh-CN');
-    let md = `# IdeaSpark — 辩论结果\n\n> ${now}  ·  Top ${ranked.length}  ·  费用 $${costUsd.toFixed(4)}\n\n---\n\n`;
+    let md = `# IdeaSpark — 推演结果\n\n> ${now}  ·  Top ${ranked.length}  ·  费用 $${costUsd.toFixed(4)}\n\n---\n\n`;
     for (const idea of ranked) {
       md += `## #${idea.rank ?? '?'}  —  Elo ${Math.round(idea.eloScore)}\n\n> 来源：${idea.author}\n\n${idea.content}\n\n---\n\n`;
     }
@@ -73,107 +114,98 @@ export function IdeaCurtain({
 
   return (
     <div className="relative h-full overflow-y-auto">
-      {/* Single warm orb — atmosphere without GPU cost. */}
-      <div className="warm-orb" style={{ top: '-8%', right: '-4%', width: 560, height: 560 }} aria-hidden />
+      {/* Atmospheric blob anchored top-right, behind the hero band */}
+      <div
+        className="warm-orb"
+        style={{ top: '-12%', right: '-6%', width: 620, height: 620 }}
+        aria-hidden
+      />
 
-      <div className="relative mx-auto w-full max-w-[820px] px-10 py-12 space-y-12 curtain-rise">
-        {/* Hero summary */}
-        <header className="flex items-start gap-5">
-          <span className="eyebrow-rule shrink-0 mt-3" style={{ width: 56 }} aria-hidden />
-          <div className="flex-1 min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.32em] text-warm/75">
-              curtain · debate concluded
-            </p>
-            <h1
-              className="mt-3 text-[clamp(28px,3.6vw,38px)] leading-[1.1] tracking-[-0.02em] text-foreground/90"
-              style={{ fontFamily: 'var(--font-display)' }}
+      <div className="relative mx-auto w-full max-w-[960px] space-y-12 px-10 py-10 champion-rise">
+        <CurtainContextStrip
+          sessionTitle={currentSession?.title}
+          completedAtMs={completedAtMs}
+          onNewRound={onRequestNewRound}
+          onOpenDrawer={onOpenDrawer}
+        />
+
+        {/* Hero band — eyebrow + functional headline + run stats */}
+        <header className="space-y-5">
+          <div className="flex items-center gap-3">
+            <span aria-hidden className="h-px w-10 bg-warm/55" />
+            <span
+              className="atelier-eyebrow text-warm/95"
+              style={{ letterSpacing: '0.36em' }}
             >
-              {ranked.length} 个创意，已分出名次。
-            </h1>
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] text-muted-foreground/60 tabular-nums">
-              <span>{stats.tools} 次检索</span>
-              <span className="text-muted-foreground/30">·</span>
-              <span>{stats.papers} 篇文献</span>
-              <span className="text-muted-foreground/30">·</span>
-              <span>{stats.ideas} 个候选</span>
-              <span className="text-muted-foreground/30">·</span>
-              <span>{stats.matches} 次比较</span>
-              {costUsd > 0 && (
-                <>
-                  <span className="text-muted-foreground/30">·</span>
-                  <span className="text-warm/80">${costUsd.toFixed(4)}</span>
-                </>
-              )}
-            </div>
+              Evaluation Complete
+            </span>
+          </div>
+          <h1
+            className="leading-[1.1] tracking-[-0.02em] text-foreground/95"
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 'clamp(34px, 4.8vw, 56px)',
+            }}
+          >
+            已生成 <span className="text-warm">{ranked.length}</span> 个研究方向，按 Elo 评分排序。
+          </h1>
+          <div
+            className="flex flex-wrap items-center gap-x-5 gap-y-1.5 pt-1 text-[11.5px] tabular-nums text-muted-foreground/65"
+            style={{ fontFamily: 'var(--font-mono)' }}
+          >
+            <StatPill label="检索" value={stats.tools} />
+            <StatPill label="文献" value={stats.papers} />
+            <StatPill label="候选" value={stats.ideas} />
+            <StatPill label="评估对" value={stats.matches} />
+            {costUsd > 0 && (
+              <StatPill
+                label="USD"
+                value={`$${costUsd.toFixed(4)}`}
+                tone="warm"
+              />
+            )}
           </div>
         </header>
 
-        {/* Top 3 */}
-        {top3.length > 0 && (
-          <section className="space-y-6">
-            {top3.map((idea, i) => (
-              <ResultCard
-                key={idea.id}
-                rank={idea.rank ?? i + 1}
-                author={idea.author}
-                eloScore={idea.eloScore}
-                content={idea.content}
-                delayMs={200 + i * 180}
+        {/* Champion */}
+        {champion && (
+          <ChampionCard
+            rank={champion.rank ?? 1}
+            author={champion.author}
+            eloScore={champion.eloScore}
+            content={champion.content}
+          />
+        )}
+
+        {/* Silver + Bronze */}
+        {runners.length > 0 && (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            {runners.map((r, i) => (
+              <RunnerCard
+                key={r.id}
+                rank={r.rank ?? i + 2}
+                author={r.author}
+                eloScore={r.eloScore}
+                content={r.content}
+                delaySec={0.4 + i * 0.16}
               />
             ))}
-          </section>
+          </div>
         )}
 
-        {/* Rest */}
-        {rest.length > 0 && (
-          <section className="space-y-2">
-            <div className="flex items-center gap-3">
-              <span className="eyebrow-rule" aria-hidden />
-              <span className="text-[9.5px] font-semibold uppercase tracking-[0.28em] text-muted-foreground/50">
-                Honourable mentions
-              </span>
-            </div>
-            <div className="space-y-3 pt-2">
-              {rest.map((idea, i) => (
-                <div
-                  key={idea.id}
-                  className="group/r relative rounded-xl px-5 py-3.5 transition-colors hover:bg-card/50"
-                >
-                  <div className="flex items-start gap-4">
-                    <span
-                      className="shrink-0 w-8 text-center text-[18px] leading-none text-muted-foreground/55 tabular-nums"
-                      style={{ fontFamily: 'var(--font-display)' }}
-                    >
-                      {idea.rank ?? i + 4}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="mb-1.5 flex items-center gap-3">
-                        <AgentSigil agent={idea.author} state="done" size="sm" />
-                        <span className="ml-auto font-mono tabular-nums text-[10.5px] text-muted-foreground/55">
-                          Elo {Math.round(idea.eloScore)}
-                        </span>
-                      </div>
-                      <div className="text-[12.5px]">
-                        <MarkdownViewer content={idea.content} compact />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
+        {/* Tournament path */}
+        <TournamentBracket events={events} />
 
-        {/* Actions */}
+        {/* Honourable mentions */}
+        <MentionsList mentions={mentions} />
+
+        {/* Secondary content actions — navigation lives in the strip above */}
         <CurtainActions
           onExport={handleExport}
-          onNewRound={onRequestNewRound}
           onToggleRecap={() => setRecapOpen((v) => !v)}
-          onOpenDrawer={onOpenDrawer}
           recapOpen={recapOpen}
         />
 
-        {/* Inline recap */}
         {recapOpen && (
           <section className="pt-2">
             <ProcessRecap />
@@ -181,5 +213,40 @@ export function IdeaCurtain({
         )}
       </div>
     </div>
+  );
+}
+
+function StatPill({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number | string;
+  tone?: 'warm';
+}) {
+  // Detect Chinese / non-ASCII labels so we don't apply the wide
+  // uppercase tracking that's meant for caps eyebrows. Mixed Latin
+  // (e.g., "USD") keeps the eyebrow treatment.
+  const isAsciiLabel = /^[\x00-\x7F]+$/.test(label);
+  return (
+    <span className="inline-flex items-baseline gap-1.5">
+      <span
+        className={`tabular-nums ${
+          tone === 'warm' ? 'text-warm/85' : 'text-foreground/82'
+        }`}
+      >
+        {value}
+      </span>
+      <span
+        className={
+          isAsciiLabel
+            ? 'text-[9.5px] uppercase tracking-[0.26em] text-muted-foreground/55'
+            : 'text-[11px] tracking-tight text-muted-foreground/65'
+        }
+      >
+        {label}
+      </span>
+    </span>
   );
 }

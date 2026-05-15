@@ -80,7 +80,7 @@ export default function SessionDrawer({ moduleId, open, onClose }: SessionDrawer
 
   const handleDelete = async (e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
-    if (!confirm('删除这场辩论？无法恢复。')) return;
+    if (!confirm('删除这次会话？无法恢复。')) return;
     await deleteSession(sessionId);
   };
 
@@ -108,13 +108,13 @@ export default function SessionDrawer({ moduleId, open, onClose }: SessionDrawer
             <div className="flex items-center gap-2">
               <Lightbulb className="h-4 w-4 text-warm/75" />
               <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/65">
-                我的辩论
+                历史记录
               </span>
             </div>
             <div className="flex items-center gap-1">
               <button
                 onClick={handleNew}
-                title="新建辩论"
+                title="新建会话"
                 className="flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-medium text-warm hover:bg-warm/10 transition-colors"
               >
                 <Plus className="h-3 w-3" />
@@ -144,9 +144,9 @@ export default function SessionDrawer({ moduleId, open, onClose }: SessionDrawer
             {!isLoadingSessions && moduleSessions.length === 0 && (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <Lightbulb className="h-7 w-7 text-muted-foreground/15 mb-2" />
-                <p className="text-[11px] text-muted-foreground/40">还没有辩论记录</p>
+                <p className="text-[11px] text-muted-foreground/40">还没有运行记录</p>
                 <p className="mt-1 text-[10px] text-muted-foreground/30">
-                  关闭抽屉后输入一个研究问题
+                  关闭抽屉后输入一个研究主题
                 </p>
               </div>
             )}
@@ -166,7 +166,7 @@ export default function SessionDrawer({ moduleId, open, onClose }: SessionDrawer
                   tabIndex={0}
                 >
                   <p className="text-[12.5px] font-medium leading-snug line-clamp-2 pr-7 text-foreground/85">
-                    {session.title || '未命名辩论'}
+                    {session.title || '未命名会话'}
                   </p>
                   <div className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground/45 tabular-nums">
                     <Clock className="h-2.5 w-2.5" />

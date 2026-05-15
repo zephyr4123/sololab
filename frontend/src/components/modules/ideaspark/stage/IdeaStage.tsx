@@ -114,21 +114,21 @@ export function IdeaStage({ moduleId, onOpenDrawer }: IdeaStageProps) {
             className="text-[10px] font-semibold uppercase tracking-[0.32em] text-warm/70 mb-6 animate-fade-in-up"
             style={{ animationDelay: '50ms' }}
           >
-            ideaspark · studio
+            ideaspark · multi-agent reasoning
           </span>
 
           <h1
-            className="text-[clamp(34px,4.6vw,46px)] leading-[1.08] tracking-[-0.02em] text-foreground/90 animate-fade-in-up"
+            className="text-[clamp(32px,4.4vw,46px)] leading-[1.12] tracking-[-0.02em] text-foreground/90 animate-fade-in-up"
             style={{ animationDelay: '120ms', fontFamily: 'var(--font-display)' }}
           >
-            Where ideas collide.
+            多智能体并行推理，定位有价值的研究方向。
           </h1>
 
           <p
-            className="mt-3 text-[14px] text-muted-foreground/65 animate-fade-in-up tracking-wide max-w-[440px]"
+            className="mt-4 text-[13.5px] text-muted-foreground/65 animate-fade-in-up tracking-wide max-w-[520px]"
             style={{ animationDelay: '200ms' }}
           >
-            一句话，五个心智，一场辩论 —— 把研究主题交给 IdeaSpark 看看会迸出什么。
+            5 个独立智能体从不同视角同步发散 · 经 Elo 评分排序 · 输出可执行的候选方向。
           </p>
 
           <div
@@ -229,7 +229,7 @@ export function IdeaStage({ moduleId, onOpenDrawer }: IdeaStageProps) {
                   disabled={!text.trim()}
                   className="group/btn inline-flex items-center gap-1.5 rounded-lg bg-warm px-4 py-2 text-[12.5px] font-medium text-warm-foreground transition-all disabled:opacity-25 hover:opacity-95 shadow-[0_4px_16px_-6px_rgba(184,149,106,0.45)]"
                 >
-                  开始辩论
+                  开始推演
                   <Send className="h-3.5 w-3.5 transition-transform group-hover/btn:translate-x-0.5" />
                 </button>
               </div>
@@ -245,12 +245,12 @@ export function IdeaStage({ moduleId, onOpenDrawer }: IdeaStageProps) {
       {/* History affordance — quiet pill, top-right. Always present. */}
       <button
         onClick={onOpenDrawer}
-        title="我的辩论 (⌘H)"
+        title="历史记录 (⌘H)"
         className="absolute top-5 right-6 z-20 inline-flex items-center gap-1.5 rounded-full bg-card/85 backdrop-blur-sm pl-2.5 pr-3 py-1.5 text-[11px] text-muted-foreground/70 transition-all hover:bg-card hover:text-foreground hover:shadow-[0_8px_24px_-12px_rgba(0,0,0,0.12)] animate-fade-in"
         style={{ animationDelay: '400ms', animationFillMode: 'both' }}
       >
         <History className="h-3 w-3 text-warm/65" />
-        <span className="tracking-wide">我的辩论</span>
+        <span className="tracking-wide">历史记录</span>
         {moduleSessionsCount > 0 && (
           <span className="tabular-nums text-foreground/80 font-medium">
             {moduleSessionsCount}
