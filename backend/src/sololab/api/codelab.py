@@ -14,20 +14,12 @@ from pydantic import BaseModel
 
 from sololab.api._deps import AuthDep
 from sololab.config.settings import get_settings
+from sololab.core.path_mapper import to_container
 
 logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[AuthDep])
 
-settings = get_settings()
-OPENCODE_URL = settings.opencode_url  # docker-compose 中为 http://opencode:3100
-WORKSPACE_DIR = settings.workspace_dir  # 宿主机路径，如 /Users/xxx/coding
-
-
-def _to_container_path(host_path: str) -> str:
-    """宿主机路径 → 容器 /workspace/ 路径（本地开发时原样返回）。"""
-    if WORKSPACE_DIR and host_path.startswith(WORKSPACE_DIR):
-        return "/workspace" + host_path[len(WORKSPACE_DIR):]
-    return host_path
+OPENCODE_URL = get_settings().opencode_url  # docker-compose 中为 http://opencode:3100
 
 
 async def _oc_request(method: str, path: str, **kwargs) -> dict | list | bool:
@@ -49,7 +41,7 @@ async def list_codelab_sessions(
     # 1) 调 OpenCode 获取 sessions
     params = {"roots": "true"}
     if directory:
-        params["directory"] = _to_container_path(directory)
+        params["directory"] = to_container(directory)
     try:
         oc_sessions = await _oc_request("GET", "/session", params=params)
     except httpx.HTTPError as e:
@@ -98,7 +90,7 @@ async def create_codelab_session(
     """创建 CodeLab 会话（OpenCode + PG 双写）。"""
     # 1) 调 OpenCode 创建 session
     try:
-        container_dir = _to_container_path(body.directory)
+        container_dir = to_container(body.directory)
         oc_session = await _oc_request(
             "POST",
             f"/session?directory={container_dir}",

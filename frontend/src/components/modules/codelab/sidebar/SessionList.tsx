@@ -3,25 +3,28 @@
 /**
  * SessionList — the sidebar's session-history section.
  *
- * Lists OpenCode sessions scoped to the current working directory.
- * Each row is a thin paper slip: warm dot on the left marks the
- * active session, title in the middle, time ago + trash on the
- * right (trash always visible, not hover-gated — matches the
- * IdeaSpark / Writer drawer pattern).
+ * Lists OpenCode sessions scoped to the current working directory. Each row
+ * is a thin paper slip: warm dot on the left marks the active session, title
+ * in the middle, time-ago + trash on the right (trash always visible — the
+ * same affordance as the IdeaSpark / Writer drawers).
  *
- * Session loading: clicking a row pulls the full message history
- * from OpenCode and replays it into the store. Until the response
- * lands, the row's timestamp slot shows "加载中…" so the user knows
- * something's happening.
+ * Session loading: clicking a row pulls the full message history from
+ * OpenCode and replays it through `normalizeOcTool` into the store. The
+ * replayed cards look identical to live-streamed cards because both paths
+ * share the same normalizer — clicking "EDIT src/foo.ts" on an old session
+ * still renders its unified diff.
+ *
+ * "Active session" is read directly from `codelab-store.sessionId` — no
+ * session-store dependency. CodeLab owns its own session identity.
  */
 
 import { useEffect, useState } from 'react';
 import { MessageSquare, Plus, Trash2 } from 'lucide-react';
 import { useCodeLabStore } from '@/stores/module-stores/codelab-store';
 import type { CodeLabMessage, MessagePart } from '@/stores/module-stores/codelab-store';
-import { useSessionStore } from '@/stores/session-store';
 import { opencode } from '@/lib/opencode-client';
 import { codelabSessionApi } from '@/lib/api-client';
+import { normalizeOcTool, type OcToolPart } from '../shared/normalize';
 
 interface OcSessionInfo {
   id: string;
@@ -40,10 +43,43 @@ function timeAgo(dateStr: string | null | undefined): string {
   return `${Math.floor(hours / 24)}d`;
 }
 
+/** Convert one OpenCode message-with-parts into the store-shaped form. */
+function convertHistoryMessage(m: {
+  info: { id?: string; role: string; time?: { created?: number } };
+  parts?: Array<{ type: string; id?: string; text?: string; tool?: string; state?: unknown }>;
+}): CodeLabMessage {
+  const role = (m.info.role === 'assistant' ? 'assistant' : 'user') as 'user' | 'assistant';
+  const ocParts = m.parts ?? [];
+
+  const parts: MessagePart[] = [];
+  let textContent = '';
+
+  for (const p of ocParts) {
+    if (p.type === 'text' && p.text) {
+      parts.push({ kind: 'text', content: p.text });
+      textContent += p.text;
+    } else if (p.type === 'tool' && p.tool !== 'task') {
+      // Children of task tools are surfaced via parallel-tasks, not as flat
+      // tool entries. Skipping `task` here mirrors the live stream.
+      parts.push({
+        kind: 'tool',
+        toolCall: normalizeOcTool(p as OcToolPart, p.id),
+      });
+    }
+  }
+
+  return {
+    id: m.info.id || `msg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    role,
+    content: textContent,
+    parts,
+    timestamp: m.info.time?.created ?? Date.now(),
+  };
+}
+
 export function SessionList({ workingDirectory }: { workingDirectory: string }) {
   const sessionListVersion = useCodeLabStore((s) => s.sessionListVersion);
-  const { currentSessionId, resetConversation } = useSessionStore();
-  const codelabSessionId = useCodeLabStore((s) => s.sessionId);
+  const activeSessionId = useCodeLabStore((s) => s.sessionId);
 
   const [sessions, setSessions] = useState<OcSessionInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -70,57 +106,18 @@ export function SessionList({ workingDirectory }: { workingDirectory: string }) 
 
   const loadHistory = async (sid: string) => {
     setLoadingSessionId(sid);
+    const store = useCodeLabStore.getState();
     try {
-      const rawMessages = await opencode.getMessages(sid);
-      const msgs: CodeLabMessage[] = rawMessages
+      const raw = await opencode.getMessages(sid);
+      const msgs: CodeLabMessage[] = raw
         .filter((m) => m.info.role === 'user' || m.info.role === 'assistant')
-        .map((m) => {
-          const role = m.info.role as 'user' | 'assistant';
-          const ocParts = m.parts || [];
-          const textContent = ocParts
-            .filter((p) => p.type === 'text')
-            .map((p) => p.text || '')
-            .join('');
-          const parts: MessagePart[] = [];
-          for (const p of ocParts) {
-            if (p.type === 'text' && p.text) {
-              parts.push({ kind: 'text', content: p.text });
-            } else if (p.type === 'tool') {
-              if (p.tool === 'task') continue;
-              parts.push({
-                kind: 'tool',
-                toolCall: {
-                  id: p.id || `tc_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
-                  tool: p.tool || 'unknown',
-                  input: (p.state?.input as Record<string, unknown>) || {},
-                  output: (p.state?.output as string) || '',
-                  status: 'completed',
-                  title: (p.state?.title as string) || p.tool || 'unknown',
-                  timestamp: (p.state?.time?.start as number) || Date.now(),
-                },
-              });
-            }
-          }
-          return {
-            id: m.info.id || `msg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-            role,
-            content: textContent,
-            parts,
-            toolCalls: parts
-              .filter((p): p is Extract<MessagePart, { kind: 'tool' }> => p.kind === 'tool')
-              .map((p) => p.toolCall),
-            timestamp: m.info.time?.created || Date.now(),
-          };
-        });
-      useCodeLabStore.getState().setMessages(msgs);
-      useCodeLabStore.getState().setSessionId(sid);
-      useCodeLabStore.getState().setFiles([]);
-      useCodeLabStore.getState().clearToolCalls();
-      useSessionStore.getState().setCurrentSession(sid);
+        .map(convertHistoryMessage);
+      store.setMessages(msgs);
+      store.setSessionId(sid);
+      store.setFiles([]);
     } catch {
-      useCodeLabStore.getState().setMessages([]);
-      useCodeLabStore.getState().setSessionId(sid);
-      useSessionStore.getState().setCurrentSession(sid);
+      store.setMessages([]);
+      store.setSessionId(sid);
     } finally {
       setLoadingSessionId(null);
     }
@@ -132,12 +129,15 @@ export function SessionList({ workingDirectory }: { workingDirectory: string }) 
     try {
       await codelabSessionApi.delete(sid);
       setSessions((prev) => prev.filter((s) => s.id !== sid));
-      if (sid === codelabSessionId || sid === currentSessionId) {
-        useCodeLabStore.getState().setMessages([]);
-        useCodeLabStore.getState().setSessionId(null);
-        useCodeLabStore.getState().setFiles([]);
-        useCodeLabStore.getState().clearToolCalls();
-        resetConversation();
+      // Deleting the active session: clear the working surface entirely.
+      // The active stream (if any) is aborted via cleanup so we don't
+      // continue pushing deltas into a deleted session.
+      if (sid === useCodeLabStore.getState().sessionId) {
+        useCodeLabStore.setState({
+          messages: [],
+          files: [],
+          sessionId: null,
+        });
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : '会话删除失败';
@@ -148,11 +148,11 @@ export function SessionList({ workingDirectory }: { workingDirectory: string }) 
   };
 
   const startNew = () => {
-    resetConversation();
-    useCodeLabStore.getState().setMessages([]);
-    useCodeLabStore.getState().setSessionId(null);
-    useCodeLabStore.getState().setFiles([]);
-    useCodeLabStore.getState().clearToolCalls();
+    useCodeLabStore.setState({
+      messages: [],
+      files: [],
+      sessionId: null,
+    });
   };
 
   return (
@@ -187,7 +187,7 @@ export function SessionList({ workingDirectory }: { workingDirectory: string }) 
 
       <div className="flex-1 overflow-y-auto space-y-0.5">
         {sessions.map((session) => {
-          const isActive = session.id === currentSessionId;
+          const isActive = session.id === activeSessionId;
           return (
             <div
               key={session.id}
@@ -197,7 +197,7 @@ export function SessionList({ workingDirectory }: { workingDirectory: string }) 
             >
               <button
                 onClick={() => {
-                  if (!loadingSessionId && session.id !== currentSessionId) {
+                  if (!loadingSessionId && session.id !== activeSessionId) {
                     void loadHistory(session.id);
                   }
                 }}

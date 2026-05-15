@@ -1,9 +1,23 @@
 /**
- * OpenCode 直连客户端 — 替代后端 bridge.py + module.py 翻译层。
+ * OpenCode 直连客户端 — 浏览器侧 SSE 流式适配层。
  *
- * 浏览器直连 OpenCode Server（与重构前直连 FastAPI 端口一致），
- * 避免 Next.js rewrite proxy 缓冲 SSE 流式响应。
+ * 后端 (`api/codelab.py`) 代理 session CRUD 与 PG 元数据，而 SSE 走这里
+ * 直连 OpenCode Server。Next.js rewrite proxy 会缓冲流式响应，因此实时流
+ * 必须越过它，直接和 OpenCode 的 `/event` 端点对话。
+ *
+ * 设计原则：
+ *
+ * 1. **OpenCode 是只读的事件源**——我们不重新定义 SSE 协议，只 normalize
+ *    它的 `message.part.updated` 事件成 store-shaped 数据结构。
+ * 2. **父子两条路径对称**——主线程 (parent session) 和子 agent (child
+ *    session) 共用 `normalizeOcTool`，所以子 agent 的 fileDiff/isNewFile
+ *    不会丢失，前端展示能看到完整 diff。
+ * 3. **handler 接口稳定**——CodeLabChat 依赖 8 个回调，本文件保证它们的
+ *    语义清晰；任何新增字段都通过 normalize 模块统一供给。
  */
+
+import { normalizeOcTool, type OcToolPart } from '@/components/modules/codelab/shared/normalize';
+import type { CodeLabToolCall } from '@/stores/module-stores/codelab-store';
 
 const OC_BASE = process.env.NEXT_PUBLIC_OPENCODE_URL || 'http://localhost:3101';
 
@@ -56,8 +70,8 @@ export interface OcSession {
 }
 
 export const opencode = {
-  // Session CRUD 已迁移至 Backend 代理（codelabSessionApi in api-client.ts）
-  // 此处保留 OpenCode 直连的运行时方法（SSE streaming、消息历史、中止）
+  // Session CRUD 已迁移至 Backend 代理 (codelabSessionApi in api-client.ts)
+  // 此处保留运行时直连方法：消息历史、中止、权限回复
 
   /** 获取消息历史（数据在 OpenCode SQLite，直连读取） */
   async getMessages(sessionId: string): Promise<OcMessageWithParts[]> {
@@ -69,7 +83,7 @@ export const opencode = {
     await ocFetch(`/session/${sessionId}/abort`, { method: 'POST' });
   },
 
-  /** 回复权限请求 */
+  /** 回复权限请求（保留接口，permission 流接通时直接调用） */
   async replyPermission(permissionId: string, allowed: boolean): Promise<void> {
     await ocFetch(`/permission/${permissionId}`, {
       method: 'POST',
@@ -115,18 +129,9 @@ export interface OcMessageWithParts {
 export interface OpenCodeStreamHandlers {
   onText(delta: string): void;
   onAgent(agent: string, action: 'thinking' | 'idle'): void;
-  onToolCall(data: {
-    tool: string;
-    status: string;
-    title: string;
-    input: Record<string, unknown>;
-    output: string;
-    fileDiff?: { file: string; additions: number; deletions: number; before: string; after: string };
-    isNewFile?: boolean;
-  }): void;
+  onToolCall(toolCall: CodeLabToolCall): void;
   onParallelTaskStart(taskId: string, agent: string, description: string): void;
-  onParallelTaskTool(taskId: string, tool: string, status: string, title: string, input: Record<string, unknown>, output: string): void;
-  onParallelTaskText?(taskId: string, content: string): void;
+  onParallelTaskTool(taskId: string, toolCall: CodeLabToolCall): void;
   onParallelTaskDone(taskId: string, summary: string, filesRead: string[], filesModified: string[], errors: string[], timedOut: boolean): void;
   onTitleUpdate?(title: string): void;
   onDone(costUsd: number): void;
@@ -140,6 +145,19 @@ interface ChildSessionInfo {
 
 const MAX_STREAM_MS = 600_000; // 10 min
 const READ_TIMEOUT_MS = 60_000; // 60s
+
+interface StreamContext {
+  parentSid: string;
+  handlers: OpenCodeStreamHandlers;
+  childSessions: Map<string, ChildSessionInfo>;
+  pendingChildEvents: Map<string, Array<RawEvent>>;
+  cost: { total: number };
+}
+
+interface RawEvent {
+  type: string;
+  properties: Record<string, unknown>;
+}
 
 /**
  * 发送 prompt 并流式接收 OpenCode 原生 SSE 事件。
@@ -169,12 +187,15 @@ export async function streamPrompt(
   const reader = eventResp.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  let totalCost = 0;
   const streamStart = Date.now();
 
-  // 子 session 并行任务追踪
-  const childSessions = new Map<string, ChildSessionInfo>();
-  const pendingChildEvents = new Map<string, Array<{ type: string; properties: Record<string, unknown> }>>();
+  const ctx: StreamContext = {
+    parentSid: sessionId,
+    handlers,
+    childSessions: new Map(),
+    pendingChildEvents: new Map(),
+    cost: { total: 0 },
+  };
 
   // 2. SSE 连接已建立，现在发送 prompt（事件不会丢失）
   await ocFetch(`/session/${sessionId}/prompt_async?${dirParam}`, {
@@ -185,13 +206,11 @@ export async function streamPrompt(
 
   try {
     while (true) {
-      // 总超时检查
       if (Date.now() - streamStart > MAX_STREAM_MS) {
         handlers.onError('Stream timeout after 10 minutes');
         return;
       }
 
-      // 读取超时
       const readPromise = reader.read();
       const timeoutPromise = new Promise<{ done: true; value: undefined }>((resolve) =>
         setTimeout(() => resolve({ done: true, value: undefined }), READ_TIMEOUT_MS),
@@ -199,11 +218,7 @@ export async function streamPrompt(
       const { done, value } = await Promise.race([readPromise, timeoutPromise]);
 
       if (done && !value) {
-        // timeout or stream ended
-        if (Date.now() - streamStart < MAX_STREAM_MS) {
-          // Didn't hit max timeout — check if real EOF
-          break;
-        }
+        if (Date.now() - streamStart < MAX_STREAM_MS) break;
         handlers.onError('SSE read timeout');
         return;
       }
@@ -211,7 +226,6 @@ export async function streamPrompt(
 
       buffer += decoder.decode(value, { stream: true });
 
-      // 按 \n\n 分割 SSE 事件
       while (buffer.includes('\n\n')) {
         const idx = buffer.indexOf('\n\n');
         const eventStr = buffer.slice(0, idx);
@@ -220,14 +234,8 @@ export async function streamPrompt(
         const event = parseSSE(eventStr);
         if (!event) continue;
 
-        const result = handleEvent(
-          event, sessionId, childSessions, pendingChildEvents,
-          handlers, { total: totalCost },
-        );
-        totalCost = result.cost;
-
-        if (result.action === 'done') {
-          handlers.onDone(totalCost);
+        if (handleEvent(event, ctx) === 'done') {
+          handlers.onDone(ctx.cost.total);
           return;
         }
       }
@@ -236,13 +244,13 @@ export async function streamPrompt(
     reader.cancel().catch(() => {});
   }
 
-  // 流正常结束但未收到 idle 信号
-  handlers.onDone(totalCost);
+  // 流自然结束（EOF），上报最终 cost
+  handlers.onDone(ctx.cost.total);
 }
 
 // ── SSE 解析 ────────────────────────────────────────
 
-function parseSSE(raw: string): { type: string; properties: Record<string, unknown> } | null {
+function parseSSE(raw: string): RawEvent | null {
   const dataLines: string[] = [];
   for (const line of raw.split('\n')) {
     if (line.startsWith('data:')) {
@@ -257,179 +265,140 @@ function parseSSE(raw: string): { type: string; properties: Record<string, unkno
   }
 }
 
-// ── 事件调度（移植自 module.py _translate_event + _handle_chat 子 session 逻辑）──
+// ── 事件调度 ──
 
-function handleEvent(
-  event: { type: string; properties: Record<string, unknown> },
-  parentSid: string,
-  childSessions: Map<string, ChildSessionInfo>,
-  pendingChildEvents: Map<string, Array<{ type: string; properties: Record<string, unknown> }>>,
-  handlers: OpenCodeStreamHandlers,
-  costRef: { total: number },
-): { action: 'continue' | 'done'; cost: number } {
+/**
+ * Per-event handler. Returns `'done'` if the stream is finished (idle or error),
+ * `'continue'` otherwise. Cost accumulation, child-session bookkeeping and
+ * tool normalization all funnel through here.
+ */
+function handleEvent(event: RawEvent, ctx: StreamContext): 'continue' | 'done' {
   const { type: etype, properties: props } = event;
   const evtSid = (props.sessionID as string) ?? '';
 
-  // ── 子 session 事件 ──
-  if (evtSid && evtSid !== parentSid) {
-    // 累积子 session cost
-    if (etype === 'message.updated') {
-      const info = props.info as Record<string, unknown> | undefined;
-      if (info?.finish && info?.role === 'assistant') {
-        costRef.total += (info.cost as number) ?? 0;
-      }
-    }
-
-    if (childSessions.has(evtSid)) {
-      dispatchChildEvent(event, evtSid, handlers);
+  // 子 session 路径：buffer or dispatch
+  if (evtSid && evtSid !== ctx.parentSid) {
+    accumulateChildCost(etype, props, ctx);
+    if (ctx.childSessions.has(evtSid)) {
+      dispatchChildEvent(event, evtSid, ctx.handlers);
     } else {
-      // 缓存未知子 session 事件
-      if (!pendingChildEvents.has(evtSid)) pendingChildEvents.set(evtSid, []);
-      pendingChildEvents.get(evtSid)!.push(event);
+      const buf = ctx.pendingChildEvents.get(evtSid) ?? [];
+      buf.push(event);
+      ctx.pendingChildEvents.set(evtSid, buf);
     }
-    return { action: 'continue', cost: costRef.total };
+    return 'continue';
   }
 
-  // ── 父 session 事件 ──
+  // 父 session 路径
+  switch (etype) {
+    case 'message.updated':       return handleMessageUpdated(props, ctx);
+    case 'message.part.delta':    return handleMessagePartDelta(props, ctx);
+    case 'message.part.updated':  return handleMessagePartUpdated(props, ctx);
+    case 'session.status':        return handleSessionStatus(props);
+    case 'session.updated':       return handleSessionUpdated(props, ctx);
+    case 'session.error':         return handleSessionError(props, ctx);
+    default:                      return 'continue';
+  }
+}
 
-  // 累积 cost
-  if (etype === 'message.updated') {
-    const info = props.info as Record<string, unknown> | undefined;
-    if (info?.finish && info?.role === 'assistant') {
-      costRef.total += (info.cost as number) ?? 0;
+function accumulateChildCost(etype: string, props: Record<string, unknown>, ctx: StreamContext): void {
+  if (etype !== 'message.updated') return;
+  const info = props.info as Record<string, unknown> | undefined;
+  if (info?.finish && info?.role === 'assistant') {
+    ctx.cost.total += (info.cost as number) ?? 0;
+  }
+}
+
+function handleMessageUpdated(props: Record<string, unknown>, ctx: StreamContext): 'continue' {
+  const info = props.info as Record<string, unknown> | undefined;
+  if (!info) return 'continue';
+
+  if (info.finish && info.role === 'assistant') {
+    ctx.cost.total += (info.cost as number) ?? 0;
+  }
+  if (info.role === 'assistant' && !info.finish) {
+    const agent = (info.agent as string) ?? '';
+    if (agent) ctx.handlers.onAgent(agent, 'thinking');
+  }
+  return 'continue';
+}
+
+function handleMessagePartDelta(props: Record<string, unknown>, ctx: StreamContext): 'continue' {
+  const delta = (props.delta as string) ?? '';
+  if (delta) ctx.handlers.onText(delta);
+  return 'continue';
+}
+
+function handleMessagePartUpdated(props: Record<string, unknown>, ctx: StreamContext): 'continue' {
+  const part = props.part as Record<string, unknown> | undefined;
+  if (!part) return 'continue';
+
+  const partType = part.type as string;
+
+  if (partType === 'tool') {
+    const toolName = (part.tool as string) ?? 'unknown';
+    if (toolName === 'task') {
+      handleTaskTool(part as OcToolPart, ctx);
+      return 'continue';
     }
-    // agent 开始思考（无 finish 字段时）
-    if (info?.role === 'assistant') {
-      const agent = (info.agent as string) ?? '';
-      if (!info.finish && agent) {
-        handlers.onAgent(agent, 'thinking');
-      }
-    }
+    ctx.handlers.onToolCall(normalizeOcTool(part as OcToolPart, (part.id as string) || undefined));
   }
+  // step-start 故意不在这里设 agent —— 真实 agent 名来自 message.updated.info.agent。
+  // 旧版本曾 hardcode 'build'，造成在 explore/plan 运行时 badge 闪回 build。
+  return 'continue';
+}
 
-  // 文本流式
-  if (etype === 'message.part.delta') {
-    const delta = (props.delta as string) ?? '';
-    if (delta) handlers.onText(delta);
-  }
+function handleSessionStatus(props: Record<string, unknown>): 'continue' | 'done' {
+  const status = props.status as Record<string, unknown> | undefined;
+  return status?.type === 'idle' ? 'done' : 'continue';
+}
 
-  // 工具调用 / 并行任务追踪
-  if (etype === 'message.part.updated') {
-    const part = props.part as Record<string, unknown> | undefined;
-    if (!part) return { action: 'continue', cost: costRef.total };
+function handleSessionUpdated(props: Record<string, unknown>, ctx: StreamContext): 'continue' {
+  const info = props.info as Record<string, unknown> | undefined;
+  const title = (info?.title as string) ?? '';
+  if (title) ctx.handlers.onTitleUpdate?.(title);
+  return 'continue';
+}
 
-    const partType = part.type as string;
-
-    if (partType === 'tool') {
-      const toolName = (part.tool as string) ?? 'unknown';
-
-      // task 工具：管理子 session 生命周期
-      if (toolName === 'task') {
-        handleTaskTool(part, childSessions, pendingChildEvents, handlers);
-        return { action: 'continue', cost: costRef.total };
-      }
-
-      // 普通工具调用
-      const state = (part.state as Record<string, unknown>) ?? {};
-      const metadata = (state.metadata as Record<string, unknown>) ?? {};
-      const status = (state.status as string) ?? 'running';
-      const output = status === 'completed' ? ((state.output as string) ?? '') : '';
-
-      let fileDiff: { file: string; additions: number; deletions: number; before: string; after: string } | undefined;
-      if (status === 'completed' && toolName === 'edit') {
-        const fd = metadata.filediff as Record<string, unknown> | undefined;
-        if (fd) {
-          fileDiff = {
-            file: (fd.file as string) ?? '',
-            additions: (fd.additions as number) ?? 0,
-            deletions: (fd.deletions as number) ?? 0,
-            before: (fd.before as string) ?? '',
-            after: (fd.after as string) ?? '',
-          };
-        }
-      }
-
-      let isNewFile: boolean | undefined;
-      if (status === 'completed' && toolName === 'write') {
-        isNewFile = !(metadata.exists as boolean ?? true);
-      }
-
-      handlers.onToolCall({
-        tool: toolName,
-        status,
-        title: (state.title as string) ?? toolName,
-        input: (state.input as Record<string, unknown>) ?? {},
-        output,
-        fileDiff,
-        isNewFile,
-      });
-    }
-
-    if (partType === 'step-start') {
-      handlers.onAgent('build', 'thinking');
-    }
-  }
-
-  // Session 完成
-  if (etype === 'session.status') {
-    const status = props.status as Record<string, unknown> | undefined;
-    if (status?.type === 'idle') {
-      return { action: 'done', cost: costRef.total };
-    }
-  }
-
-  // Title 更新
-  if (etype === 'session.updated') {
-    const info = props.info as Record<string, unknown> | undefined;
-    const title = (info?.title as string) ?? '';
-    if (title) handlers.onTitleUpdate?.(title);
-  }
-
-  // 错误
-  if (etype === 'session.error') {
-    const errorObj = props.error as Record<string, unknown> | undefined;
-    const msg = (errorObj?.data as Record<string, unknown>)?.message as string
-      ?? (errorObj?.name as string)
-      ?? 'Unknown error';
-    handlers.onError(msg);
-    return { action: 'done', cost: costRef.total };
-  }
-
-  return { action: 'continue', cost: costRef.total };
+function handleSessionError(props: Record<string, unknown>, ctx: StreamContext): 'done' {
+  const errorObj = props.error as Record<string, unknown> | undefined;
+  const data = errorObj?.data as Record<string, unknown> | undefined;
+  const msg = (data?.message as string) ?? (errorObj?.name as string) ?? 'Unknown error';
+  ctx.handlers.onError(msg);
+  return 'done';
 }
 
 // ── task 工具子 session 管理 ──
 
-function handleTaskTool(
-  part: Record<string, unknown>,
-  childSessions: Map<string, ChildSessionInfo>,
-  pendingChildEvents: Map<string, Array<{ type: string; properties: Record<string, unknown> }>>,
-  handlers: OpenCodeStreamHandlers,
-) {
-  const state = (part.state as Record<string, unknown>) ?? {};
-  const metadata = (state.metadata as Record<string, unknown>) ?? {};
+function handleTaskTool(part: OcToolPart, ctx: StreamContext): void {
+  const state = part.state ?? {};
+  const metadata = state.metadata ?? {};
   const childSid = (metadata.sessionId as string) ?? '';
-  const status = (state.status as string) ?? '';
-  const toolInput = (state.input as Record<string, unknown>) ?? {};
+  const status = state.status ?? '';
+  const toolInput = state.input ?? {};
 
-  if (status === 'running' && childSid && !childSessions.has(childSid)) {
-    // 新子 agent 注册
+  if (!childSid) return;
+
+  if (status === 'running' && !ctx.childSessions.has(childSid)) {
     const agent = (toolInput.subagent_type as string) ?? 'explore';
     const description = (toolInput.description as string) ?? '';
-    childSessions.set(childSid, { agent, description });
-    handlers.onParallelTaskStart(childSid, agent, description);
+    ctx.childSessions.set(childSid, { agent, description });
+    ctx.handlers.onParallelTaskStart(childSid, agent, description);
 
-    // Flush 缓存的子 session 事件
-    const buffered = pendingChildEvents.get(childSid);
+    // Flush buffered child events (events that arrived before the task tool reached running)
+    const buffered = ctx.pendingChildEvents.get(childSid);
     if (buffered) {
-      pendingChildEvents.delete(childSid);
+      ctx.pendingChildEvents.delete(childSid);
       for (const evt of buffered) {
-        dispatchChildEvent(evt, childSid, handlers);
+        dispatchChildEvent(evt, childSid, ctx.handlers);
       }
     }
-  } else if (status === 'completed' && childSid && childSessions.has(childSid)) {
+    return;
+  }
+
+  if (status === 'completed' && ctx.childSessions.has(childSid)) {
     const structured = (metadata.structured as Record<string, unknown>) ?? {};
-    handlers.onParallelTaskDone(
+    ctx.handlers.onParallelTaskDone(
       childSid,
       (structured.summary as string) ?? '',
       (structured.filesRead as string[]) ?? [],
@@ -437,47 +406,36 @@ function handleTaskTool(
       (structured.errors as string[]) ?? [],
       (metadata.timedOut as boolean) ?? false,
     );
-    childSessions.delete(childSid);
-    pendingChildEvents.delete(childSid);
-  } else if (status === 'error' && childSid && childSessions.has(childSid)) {
-    const errorMsg = (state.error as string) ?? 'Task failed';
-    handlers.onParallelTaskDone(childSid, '', [], [], [errorMsg], false);
-    childSessions.delete(childSid);
-    pendingChildEvents.delete(childSid);
+    ctx.childSessions.delete(childSid);
+    ctx.pendingChildEvents.delete(childSid);
+    return;
+  }
+
+  if (status === 'error' && ctx.childSessions.has(childSid)) {
+    const errorMsg = ((state as Record<string, unknown>).error as string) ?? 'Task failed';
+    ctx.handlers.onParallelTaskDone(childSid, '', [], [], [errorMsg], false);
+    ctx.childSessions.delete(childSid);
+    ctx.pendingChildEvents.delete(childSid);
   }
 }
 
 // ── 子 session 事件转发 ──
+// 子 agent 的工具调用通过 normalize 同入口流出 —— fileDiff/isNewFile 在
+// 父子两条路径上对称提取，因此 explore/build 子 agent 修改的文件在 ForkSpoke
+// 里也能完整渲染 diff。
 
-function dispatchChildEvent(
-  event: { type: string; properties: Record<string, unknown> },
-  childSid: string,
-  handlers: OpenCodeStreamHandlers,
-) {
+function dispatchChildEvent(event: RawEvent, childSid: string, handlers: OpenCodeStreamHandlers): void {
   const { type: etype, properties: props } = event;
+  if (etype !== 'message.part.updated') return;
 
-  // 工具调用
-  if (etype === 'message.part.updated') {
-    const part = props.part as Record<string, unknown> | undefined;
-    if (part?.type === 'tool') {
-      const toolName = (part.tool as string) ?? 'unknown';
-      if (toolName === 'task') return; // 不转发嵌套 task
-      const state = (part.state as Record<string, unknown>) ?? {};
-      const status = (state.status as string) ?? 'running';
-      handlers.onParallelTaskTool(
-        childSid,
-        toolName,
-        status,
-        (state.title as string) ?? toolName,
-        (state.input as Record<string, unknown>) ?? {},
-        status === 'completed' ? ((state.output as string) ?? '') : '',
-      );
-    }
-  }
+  const part = props.part as Record<string, unknown> | undefined;
+  if (part?.type !== 'tool') return;
 
-  // 文本流式
-  if (etype === 'message.part.delta') {
-    const delta = (props.delta as string) ?? '';
-    if (delta) handlers.onParallelTaskText?.(childSid, delta);
-  }
+  const toolName = (part.tool as string) ?? 'unknown';
+  if (toolName === 'task') return; // 不转发嵌套 task（OpenCode 当前不会嵌套，预防性 guard）
+
+  handlers.onParallelTaskTool(
+    childSid,
+    normalizeOcTool(part as OcToolPart, (part.id as string) || undefined),
+  );
 }

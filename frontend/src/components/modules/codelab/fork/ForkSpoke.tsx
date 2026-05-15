@@ -24,7 +24,7 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle, Check, Clock, Loader2 } from 'lucide-react';
 import type { CodeLabToolCall, ParallelTaskInfo } from '@/stores/module-stores/codelab-store';
 import { getAgent } from '../shared/AgentMeta';
-import { getTool, shortPath } from '../shared/ToolMeta';
+import { extractFilePath, shortPath } from '../shared/ToolMeta';
 
 interface ForkSpokeProps {
   task: ParallelTaskInfo;
@@ -48,7 +48,7 @@ function pickLatestTool(toolCalls: CodeLabToolCall[]): CodeLabToolCall | undefin
     const tc = toolCalls[i];
     if (tc.status === 'pending') continue;
     const inp = tc.input as Record<string, unknown>;
-    if (inp?.file_path || inp?.filePath || inp?.path || inp?.pattern || inp?.command || inp?.query) {
+    if (extractFilePath(inp) || inp?.pattern || inp?.command || inp?.query) {
       return tc;
     }
   }
@@ -63,14 +63,15 @@ function formatToolLine(tc: CodeLabToolCall): string {
     return `$ ${cmd.slice(0, 60)}`;
   }
   if (tool === 'read' || tool === 'write' || tool === 'edit' || tool === 'multiedit') {
-    return `${tool} ${shortPath(inp?.file_path || inp?.filePath || inp?.path)}`;
+    return `${tool} ${shortPath(extractFilePath(inp))}`;
   }
   if (tool === 'glob') return `glob ${inp?.pattern ?? inp?.path ?? ''}`;
   if (tool === 'grep') {
-    const path = inp?.path || inp?.file_path;
+    const path = extractFilePath(inp);
     return `grep "${inp?.pattern ?? ''}"${path ? ` ${shortPath(path)}` : ''}`;
   }
-  const fallback = inp?.file_path || inp?.filePath || inp?.path || inp?.pattern || inp?.command || inp?.query;
+  const fp = extractFilePath(inp);
+  const fallback = fp || inp?.pattern || inp?.command || inp?.query;
   return fallback ? `${tool} ${String(fallback).slice(0, 50)}` : (tc.title || tool);
 }
 

@@ -101,36 +101,19 @@ function AssistantMessage({
         {showThinking && <ThinkingIndicator />}
 
         {/* Interleaved parts — text and tools in SSE order */}
-        {msg.parts && msg.parts.length > 0 ? (
-          msg.parts.map((part, i) =>
-            part.kind === 'text' ? (
-              <div
-                key={`t${i}`}
-                className="text-[13.5px] prose prose-sm max-w-none py-0.5"
-              >
-                <MarkdownViewer content={part.content} compact />
-              </div>
-            ) : part.kind === 'parallel-tasks' ? (
-              <ForkDiagram key={`pt${i}`} group={part.group} />
-            ) : (
-              <ToolCallCard key={part.toolCall.id} toolCall={part.toolCall} />
-            )
+        {msg.parts.map((part, i) =>
+          part.kind === 'text' ? (
+            <div
+              key={`t${i}`}
+              className="text-[13.5px] prose prose-sm max-w-none py-0.5"
+            >
+              <MarkdownViewer content={part.content} compact />
+            </div>
+          ) : part.kind === 'parallel-tasks' ? (
+            <ForkDiagram key={`pt${i}`} group={part.group} />
+          ) : (
+            <ToolCallCard key={part.toolCall.id} toolCall={part.toolCall} />
           )
-        ) : (
-          <>
-            {msg.toolCalls && msg.toolCalls.length > 0 && (
-              <div className="my-1">
-                {msg.toolCalls.map((tc) => (
-                  <ToolCallCard key={tc.id} toolCall={tc} />
-                ))}
-              </div>
-            )}
-            {msg.content && (
-              <div className="text-[13.5px] prose prose-sm max-w-none">
-                <MarkdownViewer content={msg.content} compact />
-              </div>
-            )}
-          </>
         )}
 
         {showCaret && (

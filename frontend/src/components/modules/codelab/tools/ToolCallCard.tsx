@@ -28,7 +28,7 @@
 import { useEffect, useState } from 'react';
 import { ChevronRight, FilePlus, Loader2 } from 'lucide-react';
 import type { CodeLabToolCall } from '@/stores/module-stores/codelab-store';
-import { getTool, shortPath } from '../shared/ToolMeta';
+import { extractFilePath, getTool, shortPath } from '../shared/ToolMeta';
 import { agentColor } from '../shared/AgentMeta';
 import { UnifiedDiff } from './UnifiedDiff';
 import { InlineDiff } from './InlineDiff';
@@ -53,7 +53,7 @@ function planRender(toolCall: CodeLabToolCall): RenderPlan {
   const t = toolCall.tool;
   const out = toolCall.output ?? '';
   const isRunning = toolCall.status === 'running';
-  const fp = String(inp?.file_path || inp?.filePath || inp?.path || '');
+  const fp = extractFilePath(inp);
 
   let title = toolCall.title || t;
   let badge: string | null = null;
@@ -105,7 +105,7 @@ export function ToolCallCard({ toolCall, agent }: ToolCallCardProps) {
   const isRunning = toolCall.status === 'running';
   const isError = toolCall.status === 'error';
   const inp = toolCall.input as Record<string, unknown>;
-  const fp = String(inp?.file_path || inp?.path || inp?.filepath || '');
+  const fp = extractFilePath(inp);
 
   const plan = planRender(toolCall);
 
