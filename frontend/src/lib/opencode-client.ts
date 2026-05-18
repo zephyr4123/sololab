@@ -69,9 +69,16 @@ export interface OcSession {
   time: { created: number; updated: number };
 }
 
+export interface OcSkillEntry {
+  name: string;
+  description: string;
+  location: string;
+  content: string;
+}
+
 export const opencode = {
   // Session CRUD 已迁移至 Backend 代理 (codelabSessionApi in api-client.ts)
-  // 此处保留运行时直连方法：消息历史、中止、权限回复
+  // 此处保留运行时直连方法：消息历史、中止、skill 全文、权限回复
 
   /** 获取消息历史（数据在 OpenCode SQLite，直连读取） */
   async getMessages(sessionId: string): Promise<OcMessageWithParts[]> {
@@ -81,6 +88,16 @@ export const opencode = {
   /** 中止执行 */
   async abort(sessionId: string): Promise<void> {
     await ocFetch(`/session/${sessionId}/abort`, { method: 'POST' });
+  },
+
+  /**
+   * 列出 skill 及其 SKILL.md 全文。
+   *
+   * 后端代理（codelabSkillApi.list）只返回 name + description（够 SkillPicker 用），
+   * 前端 prompt 注入需要 content，所以直接走 OpenCode `/skill` 端点。
+   */
+  async listSkills(): Promise<OcSkillEntry[]> {
+    return ocFetch<OcSkillEntry[]>('/skill');
   },
 
   /** 回复权限请求（保留接口，permission 流接通时直接调用） */

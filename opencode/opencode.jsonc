@@ -7,10 +7,10 @@
   //   CODELAB_MODEL    — 模型（格式: providerID/modelID）
   //   CODELAB_BASE_URL — LLM API 端点（anthropic/openai/google 原生 SDK 可不设）
   //
-  // 切换 Provider 示例：
+  // 切换 Provider 示例（BASE_URL 一律按 provider 官方文档写，不要随手加 /v1）：
   //   Qwen:       CODELAB_MODEL=alibaba-cn/qwen3.5-plus         CODELAB_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
   //   Moonshot:   CODELAB_MODEL=moonshotai-cn/kimi-k2.5         CODELAB_BASE_URL=https://api.moonshot.cn/v1
-  //   DeepSeek:   CODELAB_MODEL=deepseek/deepseek-chat          CODELAB_BASE_URL=https://api.deepseek.com/v1
+  //   DeepSeek:   CODELAB_MODEL=deepseek/deepseek-v4-pro        CODELAB_BASE_URL=https://api.deepseek.com
   //   Anthropic:  CODELAB_MODEL=anthropic/claude-sonnet-4-5      （无需 BASE_URL）
   //   OpenAI:     CODELAB_MODEL=openai/gpt-4o                   （无需 BASE_URL）
   //   Google:     CODELAB_MODEL=google/gemini-2.5-flash          （无需 BASE_URL）

@@ -34,7 +34,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useCodeLabStore } from '@/stores/module-stores/codelab-store';
 import type { MessagePart, ParallelTaskGroup } from '@/stores/module-stores/codelab-store';
 import { opencode, streamPrompt } from '@/lib/opencode-client';
-import type { OpenCodeStreamHandlers } from '@/lib/opencode-client';
+import type { OpenCodeStreamHandlers, OcSkillEntry } from '@/lib/opencode-client';
 import { codelabSessionApi } from '@/lib/api-client';
 import { extractFilePath, toolFileStatus } from '../shared/ToolMeta';
 import { ProjectStage } from '../stage/ProjectStage';
@@ -42,6 +42,44 @@ import { CodeLabContextStrip } from './CodeLabContextStrip';
 import { ChatEmptyState } from './ChatEmptyState';
 import { ChatMessage } from './ChatMessage';
 import { ChatComposer } from './ChatComposer';
+
+/**
+ * Inline a skill's SKILL.md straight into the wire prompt — bypassing the
+ * model's autonomy over whether to call the `skill` tool.
+ *
+ * Why: per OpenCode's official docs, "the agent decides autonomously when
+ * to load skills" and "there is no mechanism to force skill invocation."
+ * In practice this means DeepSeek-class models, with mid-tier tool-calling
+ * discipline, often *narrate* loading a skill ("let me load this skill...")
+ * without ever emitting a real tool_call. The UX promise of "/skill" then
+ * silently degrades.
+ *
+ * Solution: when the user types `/<skill> <body>`, look up the skill's full
+ * content and emit a `<skill_content name="…">…</skill_content>` block —
+ * the exact shape OpenCode's own skill tool produces. From the model's
+ * vantage point this is indistinguishable from a successful tool call, so
+ * the skill's instructions are *guaranteed* to land in its context.
+ *
+ * UI invariant: the rendered user-message bubble keeps the raw `/<skill> …`
+ * form. Only the wire payload is rewritten. The user reads what they typed.
+ */
+function rewriteSkillPrompt(text: string, skills: Map<string, string>): string {
+  const match = text.match(/^\/([A-Za-z][\w-]*)\s+([\s\S]+)$/);
+  if (!match) return text;
+  const [, skillName, body] = match;
+  const content = skills.get(skillName);
+  // Unknown skill name: keep the raw text, let the model handle it as plain prose.
+  if (!content) return text;
+  return [
+    `<skill_content name="${skillName}">`,
+    `# Skill: ${skillName}`,
+    '',
+    content.trim(),
+    '</skill_content>',
+    '',
+    body,
+  ].join('\n');
+}
 
 export function CodeLabChat({ moduleId: _moduleId }: { moduleId: string }) {
   const messages = useCodeLabStore((s) => s.messages);
@@ -54,12 +92,27 @@ export function CodeLabChat({ moduleId: _moduleId }: { moduleId: string }) {
 
   const endRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  /** name → full SKILL.md content. Populated once at mount via /skill API. */
+  const skillContentRef = useRef<Map<string, string>>(new Map());
   const [prefill, setPrefill] = useState<{ value: string; tick: number } | null>(null);
 
   // Auto-scroll on message change
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, agentStatus]);
+
+  // Cache full skill content for prompt-time injection. Fetched once because
+  // it's static for the lifetime of the OpenCode container; SkillPicker still
+  // uses the lighter backend endpoint (name + description only) for the list.
+  useEffect(() => {
+    opencode.listSkills()
+      .then((list: OcSkillEntry[]) => {
+        const map = new Map<string, string>();
+        for (const s of list) map.set(s.name, s.content);
+        skillContentRef.current = map;
+      })
+      .catch(() => { /* picker still works on backend list; just no inlining */ });
+  }, []);
 
   /**
    * The one place that knows how to fully terminate an in-flight stream:
@@ -288,8 +341,13 @@ export function CodeLabChat({ moduleId: _moduleId }: { moduleId: string }) {
       },
     };
 
+    // Inline SKILL.md when the user used `/<skill> <body>` — see
+    // `rewriteSkillPrompt` for why we bypass the LLM's tool-calling autonomy.
+    // The UI bubble above keeps the user's original input verbatim.
+    const wirePrompt = rewriteSkillPrompt(text, skillContentRef.current);
+
     try {
-      await streamPrompt(sid, text, store.workingDirectory, handlers, abortRef.current.signal);
+      await streamPrompt(sid, wirePrompt, store.workingDirectory, handlers, abortRef.current.signal);
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') return;
       handlers.onError(String(e));
